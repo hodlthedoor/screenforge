@@ -31,6 +31,18 @@ describe('RenderCache', () => {
     expect(hash1).not.toBe(hash2);
   });
 
+  it('hashOptions deep-sorts nested objects', () => {
+    const hash1 = RenderCache.hashOptions({
+      url: 'https://example.com',
+      viewport: { width: 1920, height: 1080 },
+    });
+    const hash2 = RenderCache.hashOptions({
+      viewport: { height: 1080, width: 1920 },
+      url: 'https://example.com',
+    });
+    expect(hash1).toBe(hash2);
+  });
+
   it('returns null for cache miss', async () => {
     const result = await cache.get('nonexistent-hash-val');
     expect(result).toBeNull();

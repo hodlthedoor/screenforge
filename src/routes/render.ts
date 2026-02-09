@@ -1,15 +1,14 @@
 import type { FastifyInstance } from 'fastify';
-import { screenshotOptionsSchema, pdfOptionsSchema } from '../renderer/schemas.js';
+import { screenshotOptionsSchema, pdfOptionsSchema, isPrivateUrl } from '../renderer/schemas.js';
 import { takeScreenshot } from '../renderer/screenshot.js';
 import { renderPdf } from '../renderer/pdf.js';
 import type { BrowserPool } from '../renderer/browser-pool.js';
-import type { RenderCache } from '../cache/index.js';
-import { RenderCache as RenderCacheClass } from '../cache/index.js';
+import { RenderCache } from '../cache/index.js';
+import { getConfig } from '../config/index.js';
 
 const FORMAT_EXT: Record<string, string> = {
   'image/png': 'png',
   'image/jpeg': 'jpg',
-  'image/webp': 'webp',
   'application/pdf': 'pdf',
 };
 
@@ -26,7 +25,17 @@ export async function renderRoutes(app: FastifyInstance, pool: BrowserPool, cach
     }
 
     const options = parsed.data;
-    const optionsHash = RenderCacheClass.hashOptions(options as unknown as Record<string, unknown>);
+    const config = getConfig();
+
+    if (!config.ALLOW_PRIVATE_URLS && isPrivateUrl(options.url)) {
+      return reply.status(400).send({
+        error: 'URLs targeting private networks are not allowed',
+        code: 'SSRF_BLOCKED',
+        statusCode: 400,
+      });
+    }
+
+    const optionsHash = RenderCache.hashOptions(options as unknown as Record<string, unknown>);
 
     const cached = await cache.get(optionsHash);
     if (cached) {
@@ -38,7 +47,7 @@ export async function renderRoutes(app: FastifyInstance, pool: BrowserPool, cach
         .send(buffer);
     }
 
-    const result = await takeScreenshot(pool, options);
+    const result = await takeScreenshot(pool, options, config.NAVIGATION_TIMEOUT_MS);
     const ext = FORMAT_EXT[result.contentType] ?? 'bin';
     await cache.set(optionsHash, result.buffer, result.contentType, ext);
 
@@ -61,7 +70,17 @@ export async function renderRoutes(app: FastifyInstance, pool: BrowserPool, cach
     }
 
     const options = parsed.data;
-    const optionsHash = RenderCacheClass.hashOptions(options as unknown as Record<string, unknown>);
+    const config = getConfig();
+
+    if (!config.ALLOW_PRIVATE_URLS && isPrivateUrl(options.url)) {
+      return reply.status(400).send({
+        error: 'URLs targeting private networks are not allowed',
+        code: 'SSRF_BLOCKED',
+        statusCode: 400,
+      });
+    }
+
+    const optionsHash = RenderCache.hashOptions(options as unknown as Record<string, unknown>);
 
     const cached = await cache.get(optionsHash);
     if (cached) {
@@ -73,7 +92,7 @@ export async function renderRoutes(app: FastifyInstance, pool: BrowserPool, cach
         .send(buffer);
     }
 
-    const result = await renderPdf(pool, options);
+    const result = await renderPdf(pool, options, config.NAVIGATION_TIMEOUT_MS);
     await cache.set(optionsHash, result.buffer, result.contentType, 'pdf');
 
     return reply

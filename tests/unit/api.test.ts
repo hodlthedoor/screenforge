@@ -2,26 +2,41 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { buildServer } from '../../src/index.js';
 import type { FastifyInstance } from 'fastify';
 import { resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
-import { rm } from 'node:fs/promises';
+import { rm, readFile } from 'node:fs/promises';
+import { createServer, type Server } from 'node:http';
 
-const FIXTURE_URL = pathToFileURL(resolve(__dirname, '../fixtures/test-page.html')).toString();
 const TEST_STORAGE = resolve(__dirname, '../../storage-test');
 
 describe('API endpoints', { timeout: 120_000 }, () => {
   let app: FastifyInstance;
+  let fixtureServer: Server;
+  let fixtureUrl: string;
 
   beforeAll(async () => {
+    const html = await readFile(resolve(__dirname, '../fixtures/test-page.html'), 'utf-8');
+    fixtureServer = createServer((_req, res) => {
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end(html);
+    });
+    await new Promise<void>((resolve) => fixtureServer.listen(0, '127.0.0.1', resolve));
+    const addr = fixtureServer.address();
+    if (addr && typeof addr === 'object') {
+      fixtureUrl = `http://127.0.0.1:${addr.port}`;
+    }
+
     process.env.API_KEY_SALT = 'test-salt-must-be-16-chars-long';
     process.env.NODE_ENV = 'test';
     process.env.STORAGE_PATH = TEST_STORAGE;
     process.env.REDIS_URL = 'redis://127.0.0.1:6379/15';
+    process.env.ALLOW_PRIVATE_URLS = 'true';
     app = await buildServer();
   });
 
   afterAll(async () => {
     await app.close();
+    await new Promise<void>((resolve) => fixtureServer.close(() => resolve()));
     await rm(TEST_STORAGE, { recursive: true, force: true });
+    delete process.env.ALLOW_PRIVATE_URLS;
   });
 
   describe('POST /v1/screenshot', () => {
@@ -46,11 +61,20 @@ describe('API endpoints', { timeout: 120_000 }, () => {
       expect(res.statusCode).toBe(400);
     });
 
+    it('returns 400 for file:// URL', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/screenshot',
+        payload: { url: 'file:///etc/passwd' },
+      });
+      expect(res.statusCode).toBe(400);
+    });
+
     it('renders a screenshot and returns buffer', async () => {
       const res = await app.inject({
         method: 'POST',
         url: '/v1/screenshot',
-        payload: { url: FIXTURE_URL },
+        payload: { url: fixtureUrl },
       });
       expect(res.statusCode).toBe(200);
       expect(res.headers['content-type']).toBe('image/png');
@@ -67,13 +91,13 @@ describe('API endpoints', { timeout: 120_000 }, () => {
       await app.inject({
         method: 'POST',
         url: '/v1/screenshot',
-        payload: { url: FIXTURE_URL, format: 'jpeg', quality: 70 },
+        payload: { url: fixtureUrl, format: 'jpeg', quality: 70 },
       });
       // Second request (same options)
       const res = await app.inject({
         method: 'POST',
         url: '/v1/screenshot',
-        payload: { url: FIXTURE_URL, format: 'jpeg', quality: 70 },
+        payload: { url: fixtureUrl, format: 'jpeg', quality: 70 },
       });
       expect(res.statusCode).toBe(200);
       expect(res.headers['x-cache']).toBe('HIT');
@@ -97,7 +121,7 @@ describe('API endpoints', { timeout: 120_000 }, () => {
       const res = await app.inject({
         method: 'POST',
         url: '/v1/pdf',
-        payload: { url: FIXTURE_URL },
+        payload: { url: fixtureUrl },
       });
       expect(res.statusCode).toBe(200);
       expect(res.headers['content-type']).toBe('application/pdf');
@@ -107,11 +131,48 @@ describe('API endpoints', { timeout: 120_000 }, () => {
     });
 
     it('returns cache HIT on second PDF request', async () => {
-      const payload = { url: FIXTURE_URL, format: 'letter', landscape: true };
+      const payload = { url: fixtureUrl, format: 'letter', landscape: true };
       await app.inject({ method: 'POST', url: '/v1/pdf', payload });
       const res = await app.inject({ method: 'POST', url: '/v1/pdf', payload });
       expect(res.statusCode).toBe(200);
       expect(res.headers['x-cache']).toBe('HIT');
+    });
+  });
+
+  describe('SSRF protection', () => {
+    it('blocks private IP when ALLOW_PRIVATE_URLS is false', async () => {
+      // Build a separate server with SSRF protection enabled
+      process.env.ALLOW_PRIVATE_URLS = 'false';
+      const ssrfApp = await buildServer({ skipBrowserInit: true });
+
+      const res = await ssrfApp.inject({
+        method: 'POST',
+        url: '/v1/screenshot',
+        payload: { url: 'http://192.168.1.1' },
+      });
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.body);
+      expect(body.code).toBe('SSRF_BLOCKED');
+
+      await ssrfApp.close();
+      process.env.ALLOW_PRIVATE_URLS = 'true';
+    });
+
+    it('blocks localhost when ALLOW_PRIVATE_URLS is false', async () => {
+      process.env.ALLOW_PRIVATE_URLS = 'false';
+      const ssrfApp = await buildServer({ skipBrowserInit: true });
+
+      const res = await ssrfApp.inject({
+        method: 'POST',
+        url: '/v1/pdf',
+        payload: { url: 'http://localhost:3000' },
+      });
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.body);
+      expect(body.code).toBe('SSRF_BLOCKED');
+
+      await ssrfApp.close();
+      process.env.ALLOW_PRIVATE_URLS = 'true';
     });
   });
 

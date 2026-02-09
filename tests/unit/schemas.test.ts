@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { screenshotOptionsSchema, pdfOptionsSchema } from '../../src/renderer/schemas.js';
+import { screenshotOptionsSchema, pdfOptionsSchema, isPrivateUrl } from '../../src/renderer/schemas.js';
 
 describe('screenshotOptionsSchema', () => {
   it('accepts valid minimal options', () => {
@@ -46,6 +46,21 @@ describe('screenshotOptionsSchema', () => {
 
   it('rejects invalid url', () => {
     const result = screenshotOptionsSchema.safeParse({ url: 'not-a-url' });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects file:// URLs (non-http protocol)', () => {
+    const result = screenshotOptionsSchema.safeParse({ url: 'file:///etc/passwd' });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects ftp:// URLs (non-http protocol)', () => {
+    const result = screenshotOptionsSchema.safeParse({ url: 'ftp://example.com/file' });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects webp format (unsupported by Playwright)', () => {
+    const result = screenshotOptionsSchema.safeParse({ url: 'https://example.com', format: 'webp' });
     expect(result.success).toBe(false);
   });
 
@@ -122,5 +137,42 @@ describe('pdfOptionsSchema', () => {
   it('rejects scale out of range', () => {
     const result = pdfOptionsSchema.safeParse({ url: 'https://example.com', scale: 5 });
     expect(result.success).toBe(false);
+  });
+
+  it('rejects file:// URLs (non-http protocol)', () => {
+    const result = pdfOptionsSchema.safeParse({ url: 'file:///etc/shadow' });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('isPrivateUrl', () => {
+  it('detects localhost', () => {
+    expect(isPrivateUrl('http://localhost:3000')).toBe(true);
+  });
+
+  it('detects 127.x.x.x', () => {
+    expect(isPrivateUrl('http://127.0.0.1')).toBe(true);
+  });
+
+  it('detects 10.x.x.x', () => {
+    expect(isPrivateUrl('http://10.0.0.1')).toBe(true);
+  });
+
+  it('detects 172.16-31.x.x', () => {
+    expect(isPrivateUrl('http://172.16.0.1')).toBe(true);
+    expect(isPrivateUrl('http://172.31.255.255')).toBe(true);
+  });
+
+  it('detects 192.168.x.x', () => {
+    expect(isPrivateUrl('http://192.168.1.1')).toBe(true);
+  });
+
+  it('detects 0.0.0.0', () => {
+    expect(isPrivateUrl('http://0.0.0.0')).toBe(true);
+  });
+
+  it('allows public URLs', () => {
+    expect(isPrivateUrl('https://example.com')).toBe(false);
+    expect(isPrivateUrl('https://8.8.8.8')).toBe(false);
   });
 });

@@ -23,6 +23,7 @@ export default [
         setInterval: 'readonly',
         clearInterval: 'readonly',
         performance: 'readonly',
+        URL: 'readonly',
       },
     },
     plugins: {
