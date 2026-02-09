@@ -1,0 +1,139 @@
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { BrowserPool } from '../../src/renderer/browser-pool.js';
+import { takeScreenshot } from '../../src/renderer/screenshot.js';
+import { renderPdf } from '../../src/renderer/pdf.js';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+const FIXTURE_URL = pathToFileURL(resolve(__dirname, '../fixtures/test-page.html')).toString();
+
+describe('renderer', { timeout: 60_000 }, () => {
+  let pool: BrowserPool;
+
+  beforeAll(async () => {
+    pool = new BrowserPool(1, 100);
+    await pool.init();
+  });
+
+  afterAll(async () => {
+    await pool.close();
+  });
+
+  describe('takeScreenshot', () => {
+    it('renders a PNG screenshot', async () => {
+      const result = await takeScreenshot(pool, {
+        url: FIXTURE_URL,
+        viewport: { width: 1280, height: 720 },
+        format: 'png',
+        fullPage: false,
+        darkMode: false,
+        deviceScaleFactor: 1,
+      });
+
+      expect(result.buffer).toBeInstanceOf(Buffer);
+      expect(result.buffer.length).toBeGreaterThan(0);
+      expect(result.contentType).toBe('image/png');
+      expect(result.durationMs).toBeGreaterThanOrEqual(0);
+      // PNG magic bytes
+      expect(result.buffer[0]).toBe(0x89);
+      expect(result.buffer[1]).toBe(0x50); // P
+      expect(result.buffer[2]).toBe(0x4e); // N
+      expect(result.buffer[3]).toBe(0x47); // G
+    });
+
+    it('renders a JPEG screenshot', async () => {
+      const result = await takeScreenshot(pool, {
+        url: FIXTURE_URL,
+        viewport: { width: 1280, height: 720 },
+        format: 'jpeg',
+        quality: 80,
+        fullPage: false,
+        darkMode: false,
+        deviceScaleFactor: 1,
+      });
+
+      expect(result.contentType).toBe('image/jpeg');
+      expect(result.buffer.length).toBeGreaterThan(0);
+      // JPEG magic bytes
+      expect(result.buffer[0]).toBe(0xff);
+      expect(result.buffer[1]).toBe(0xd8);
+    });
+
+    it('renders with dark mode', async () => {
+      const result = await takeScreenshot(pool, {
+        url: FIXTURE_URL,
+        viewport: { width: 1280, height: 720 },
+        format: 'png',
+        fullPage: false,
+        darkMode: true,
+        deviceScaleFactor: 1,
+      });
+
+      expect(result.buffer).toBeInstanceOf(Buffer);
+      expect(result.buffer.length).toBeGreaterThan(0);
+    });
+
+    it('renders with selector targeting', async () => {
+      const result = await takeScreenshot(pool, {
+        url: FIXTURE_URL,
+        viewport: { width: 1280, height: 720 },
+        format: 'png',
+        fullPage: false,
+        darkMode: false,
+        deviceScaleFactor: 1,
+        selector: '#target',
+      });
+
+      expect(result.buffer).toBeInstanceOf(Buffer);
+      expect(result.buffer.length).toBeGreaterThan(0);
+    });
+
+    it('renders full page', async () => {
+      const result = await takeScreenshot(pool, {
+        url: FIXTURE_URL,
+        viewport: { width: 1280, height: 720 },
+        format: 'png',
+        fullPage: true,
+        darkMode: false,
+        deviceScaleFactor: 1,
+      });
+
+      expect(result.buffer).toBeInstanceOf(Buffer);
+      expect(result.buffer.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('renderPdf', () => {
+    it('renders a PDF', async () => {
+      const result = await renderPdf(pool, {
+        url: FIXTURE_URL,
+        format: 'a4',
+        landscape: false,
+        margins: { top: '0', right: '0', bottom: '0', left: '0' },
+        printBackground: true,
+        scale: 1,
+      });
+
+      expect(result.buffer).toBeInstanceOf(Buffer);
+      expect(result.buffer.length).toBeGreaterThan(0);
+      expect(result.contentType).toBe('application/pdf');
+      expect(result.durationMs).toBeGreaterThanOrEqual(0);
+      // PDF magic bytes
+      expect(result.buffer.slice(0, 5).toString()).toBe('%PDF-');
+    });
+
+    it('renders letter landscape PDF', async () => {
+      const result = await renderPdf(pool, {
+        url: FIXTURE_URL,
+        format: 'letter',
+        landscape: true,
+        margins: { top: '1cm', right: '1cm', bottom: '1cm', left: '1cm' },
+        printBackground: true,
+        scale: 0.75,
+      });
+
+      expect(result.buffer).toBeInstanceOf(Buffer);
+      expect(result.contentType).toBe('application/pdf');
+    });
+  });
+});

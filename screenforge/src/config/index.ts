@@ -7,6 +7,9 @@ const envSchema = z.object({
   STORAGE_PATH: z.string().default('./storage'),
   API_KEY_SALT: z.string().min(16),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  BROWSER_POOL_SIZE: z.coerce.number().int().min(1).max(20).default(3),
+  MAX_RENDERS_PER_CONTEXT: z.coerce.number().int().min(1).default(100),
+  CACHE_TTL_SECONDS: z.coerce.number().int().min(0).default(3600),
 });
 
 export type Config = z.infer<typeof envSchema>;
