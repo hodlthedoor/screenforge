@@ -10,6 +10,8 @@ const envSchema = z.object({
   BROWSER_POOL_SIZE: z.coerce.number().int().min(1).max(20).default(3),
   MAX_RENDERS_PER_CONTEXT: z.coerce.number().int().min(1).default(100),
   CACHE_TTL_SECONDS: z.coerce.number().int().min(0).default(3600),
+  NAVIGATION_TIMEOUT_MS: z.coerce.number().int().min(1000).max(120_000).default(30_000),
+  ALLOW_PRIVATE_URLS: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
 });
 
 export type Config = z.infer<typeof envSchema>;

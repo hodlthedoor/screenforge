@@ -1,14 +1,32 @@
 import { z } from 'zod';
 
+const httpUrlSchema = z.string().url().refine((url) => {
+  try {
+    return ['http:', 'https:'].includes(new URL(url).protocol);
+  } catch {
+    return false;
+  }
+}, { message: 'URL must use http or https protocol' });
+
+const PRIVATE_HOSTS = /^(localhost|127\.\d+\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|192\.168\.\d+\.\d+|0\.0\.0\.0|\[::1\]|\[::ffff:)/i;
+
+export function isPrivateUrl(url: string): boolean {
+  try {
+    return PRIVATE_HOSTS.test(new URL(url).hostname);
+  } catch {
+    return true;
+  }
+}
+
 export const viewportSchema = z.object({
   width: z.number().int().min(1).max(7680).default(1920),
   height: z.number().int().min(1).max(4320).default(1080),
 });
 
 export const screenshotOptionsSchema = z.object({
-  url: z.string().url(),
+  url: httpUrlSchema,
   viewport: viewportSchema.default({ width: 1920, height: 1080 }),
-  format: z.enum(['png', 'jpeg', 'webp']).default('png'),
+  format: z.enum(['png', 'jpeg']).default('png'),
   quality: z.number().int().min(0).max(100).optional(),
   fullPage: z.boolean().default(false),
   selector: z.string().optional(),
@@ -27,7 +45,7 @@ export const marginsSchema = z.object({
 });
 
 export const pdfOptionsSchema = z.object({
-  url: z.string().url(),
+  url: httpUrlSchema,
   format: z.enum(['a4', 'letter', 'legal']).default('a4'),
   landscape: z.boolean().default(false),
   margins: marginsSchema.default({ top: '0', right: '0', bottom: '0', left: '0' }),

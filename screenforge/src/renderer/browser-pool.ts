@@ -1,4 +1,4 @@
-import { chromium, type Browser, type BrowserContext } from 'playwright';
+import { chromium, type Browser, type BrowserContext, type BrowserContextOptions } from 'playwright';
 
 interface PoolEntry {
   browser: Browser;
@@ -33,7 +33,7 @@ export class BrowserPool {
     this.initialized = true;
   }
 
-  async acquire(): Promise<BrowserContext> {
+  async acquire(contextOptions?: BrowserContextOptions): Promise<BrowserContext> {
     if (!this.initialized) {
       throw new Error('BrowserPool not initialized. Call init() first.');
     }
@@ -51,7 +51,7 @@ export class BrowserPool {
     entry.renderCount++;
     this.totalRenders++;
 
-    return entry.browser.newContext();
+    return entry.browser.newContext(contextOptions);
   }
 
   stats(): BrowserPoolStats {

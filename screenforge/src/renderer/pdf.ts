@@ -7,13 +7,13 @@ const FORMAT_SIZE: Record<string, { width: string; height: string }> = {
   legal: { width: '8.5in', height: '14in' },
 };
 
-export async function renderPdf(pool: BrowserPool, options: PdfOptions): Promise<RenderResult> {
+export async function renderPdf(pool: BrowserPool, options: PdfOptions, timeoutMs = 30_000): Promise<RenderResult> {
   const start = performance.now();
   const context = await pool.acquire();
 
   try {
     const page = await context.newPage();
-    await page.goto(options.url, { waitUntil: 'networkidle' });
+    await page.goto(options.url, { waitUntil: 'networkidle', timeout: timeoutMs });
 
     const size = FORMAT_SIZE[options.format];
 

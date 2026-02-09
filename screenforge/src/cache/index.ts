@@ -20,8 +20,16 @@ export class RenderCache {
   }
 
   static hashOptions(options: Record<string, unknown>): string {
-    const sorted = JSON.stringify(options, Object.keys(options).sort());
-    return createHash('sha256').update(sorted).digest('hex').slice(0, 16);
+    const sortDeep = (obj: unknown): unknown => {
+      if (obj === null || typeof obj !== 'object') return obj;
+      if (Array.isArray(obj)) return obj.map(sortDeep);
+      const sorted: Record<string, unknown> = {};
+      for (const key of Object.keys(obj as Record<string, unknown>).sort()) {
+        sorted[key] = sortDeep((obj as Record<string, unknown>)[key]);
+      }
+      return sorted;
+    };
+    return createHash('sha256').update(JSON.stringify(sortDeep(options))).digest('hex').slice(0, 16);
   }
 
   async get(optionsHash: string): Promise<CacheEntry | null> {
