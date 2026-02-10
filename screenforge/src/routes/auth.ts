@@ -1,16 +1,18 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { createUser, verifyUser } from '../db/users.js';
+import { escapeHtml, generateCsrfToken } from '../utils/html.js';
 
 interface AuthBody {
   email: string;
   password: string;
+  _csrf: string;
 }
 
 function validateEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
-function loginHtml(error?: string): string {
+function loginHtml(csrfToken: string, error?: string): string {
   return `<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Login — ScreenForge</title>
@@ -33,6 +35,7 @@ function loginHtml(error?: string): string {
   <h1>Log In</h1>
   ${error ? `<div class="error">${escapeHtml(error)}</div>` : ''}
   <form method="POST" action="/login">
+    <input type="hidden" name="_csrf" value="${csrfToken}">
     <label for="email">Email</label>
     <input type="email" id="email" name="email" required>
     <label for="password">Password</label>
@@ -43,7 +46,7 @@ function loginHtml(error?: string): string {
 </div></body></html>`;
 }
 
-function registerHtml(error?: string): string {
+function registerHtml(csrfToken: string, error?: string): string {
   return `<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Register — ScreenForge</title>
@@ -66,6 +69,7 @@ function registerHtml(error?: string): string {
   <h1>Create Account</h1>
   ${error ? `<div class="error">${escapeHtml(error)}</div>` : ''}
   <form method="POST" action="/register">
+    <input type="hidden" name="_csrf" value="${csrfToken}">
     <label for="email">Email</label>
     <input type="email" id="email" name="email" required>
     <label for="password">Password (min 8 characters)</label>
@@ -76,38 +80,65 @@ function registerHtml(error?: string): string {
 </div></body></html>`;
 }
 
-function escapeHtml(str: string): string {
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+function ensureCsrfToken(req: FastifyRequest): string {
+  if (!req.session.csrfToken) {
+    req.session.csrfToken = generateCsrfToken();
+  }
+  return req.session.csrfToken;
+}
+
+function verifyCsrf(req: FastifyRequest<{ Body: AuthBody }>): boolean {
+  const token = req.body?._csrf;
+  const expected = req.session.csrfToken;
+  return !!token && !!expected && token === expected;
 }
 
 export async function authRoutes(app: FastifyInstance): Promise<void> {
-  app.get('/login', async (_req, reply) => {
-    return reply.type('text/html').send(loginHtml());
+  app.get('/login', async (req, reply) => {
+    const token = ensureCsrfToken(req);
+    await req.session.save();
+    return reply.type('text/html').send(loginHtml(token));
   });
 
-  app.get('/register', async (_req, reply) => {
-    return reply.type('text/html').send(registerHtml());
+  app.get('/register', async (req, reply) => {
+    const token = ensureCsrfToken(req);
+    await req.session.save();
+    return reply.type('text/html').send(registerHtml(token));
   });
 
   app.post('/register', async (req: FastifyRequest<{ Body: AuthBody }>, reply: FastifyReply) => {
     const { email, password } = req.body ?? {};
 
+    if (!verifyCsrf(req)) {
+      const token = ensureCsrfToken(req);
+      req.session.csrfToken = generateCsrfToken();
+      await req.session.save();
+      return reply.status(403).type('text/html').send(registerHtml(token, 'Invalid form submission. Please try again.'));
+    }
+
     if (!email || !validateEmail(email)) {
-      return reply.status(400).send({ error: 'Invalid email address', statusCode: 400 });
+      const token = ensureCsrfToken(req);
+      await req.session.save();
+      return reply.status(400).type('text/html').send(registerHtml(token, 'Invalid email address'));
     }
     if (!password || password.length < 8) {
-      return reply.status(400).send({ error: 'Password must be at least 8 characters', statusCode: 400 });
+      const token = ensureCsrfToken(req);
+      await req.session.save();
+      return reply.status(400).type('text/html').send(registerHtml(token, 'Password must be at least 8 characters'));
     }
 
     try {
       const user = await createUser(email, password);
       req.session.userId = user.id;
+      req.session.csrfToken = generateCsrfToken();
       await req.session.save();
       return reply.redirect('/dashboard');
     } catch (err: unknown) {
       const pgErr = err as { code?: string };
       if (pgErr.code === '23505') {
-        return reply.status(409).send({ error: 'Email already registered', statusCode: 409 });
+        const token = ensureCsrfToken(req);
+        await req.session.save();
+        return reply.status(409).type('text/html').send(registerHtml(token, 'Email already registered'));
       }
       throw err;
     }
@@ -116,16 +147,28 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   app.post('/login', async (req: FastifyRequest<{ Body: AuthBody }>, reply: FastifyReply) => {
     const { email, password } = req.body ?? {};
 
+    if (!verifyCsrf(req)) {
+      const token = ensureCsrfToken(req);
+      req.session.csrfToken = generateCsrfToken();
+      await req.session.save();
+      return reply.status(403).type('text/html').send(loginHtml(token, 'Invalid form submission. Please try again.'));
+    }
+
     if (!email || !password) {
-      return reply.status(400).send({ error: 'Email and password required', statusCode: 400 });
+      const token = ensureCsrfToken(req);
+      await req.session.save();
+      return reply.status(400).type('text/html').send(loginHtml(token, 'Email and password required'));
     }
 
     const user = await verifyUser(email, password);
     if (!user) {
-      return reply.status(401).send({ error: 'Invalid email or password', statusCode: 401 });
+      const token = ensureCsrfToken(req);
+      await req.session.save();
+      return reply.status(401).type('text/html').send(loginHtml(token, 'Invalid email or password'));
     }
 
     req.session.userId = user.id;
+    req.session.csrfToken = generateCsrfToken();
     await req.session.save();
     return reply.redirect('/dashboard');
   });
