@@ -24,6 +24,8 @@ export default [
         clearInterval: 'readonly',
         performance: 'readonly',
         URL: 'readonly',
+        fetch: 'readonly',
+        AbortController: 'readonly',
       },
     },
     plugins: {
