@@ -3,7 +3,18 @@ import cors from '@fastify/cors';
 import { loadConfig } from './config/index.js';
 import { BrowserPool } from './renderer/browser-pool.js';
 import { RenderCache } from './cache/index.js';
+import { SlidingWindowRateLimiter } from './auth/rate-limiter.js';
 import { renderRoutes } from './routes/render.js';
+import { adminRoutes } from './routes/admin.js';
+import { usageRoutes } from './routes/usage.js';
+import { asyncRenderRoutes } from './routes/async-render.js';
+import { batchRoutes } from './routes/batch.js';
+import { ogRoutes } from './routes/og.js';
+import { requestIdHook } from './security/request-id.js';
+import { getQueueMetrics } from './queue/render-queue.js';
+import { closePool } from './db/index.js';
+import { closeQueue } from './queue/render-queue.js';
+import { registerDocs } from './docs/swagger.js';
 
 export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
   const config = loadConfig();
@@ -22,27 +33,49 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
 
   await app.register(cors, { origin: true });
 
+  // Request ID tracking
+  app.addHook('onRequest', requestIdHook);
+
   const pool = new BrowserPool(config.BROWSER_POOL_SIZE, config.MAX_RENDERS_PER_CONTEXT);
   if (!opts?.skipBrowserInit) {
     await pool.init();
   }
 
   const cache = new RenderCache(config.REDIS_URL, config.STORAGE_PATH, config.CACHE_TTL_SECONDS);
+  const rateLimiter = new SlidingWindowRateLimiter(config.REDIS_URL);
 
   const startTime = Date.now();
 
-  app.get('/v1/health', async () => ({
-    status: 'ok',
-    version: '0.1.0',
-    uptime: Math.round((Date.now() - startTime) / 1000),
-    browserPool: pool.stats(),
-    timestamp: new Date().toISOString(),
-  }));
+  app.get('/v1/health', async () => {
+    let queueMetrics = { waiting: 0, active: 0, completed: 0, failed: 0 };
+    try {
+      queueMetrics = await getQueueMetrics(config.REDIS_URL);
+    } catch {
+      // Queue may not be initialized in test mode
+    }
 
-  // Keep legacy health endpoint
+    return {
+      status: 'ok',
+      version: '0.2.0',
+      uptime: Math.round((Date.now() - startTime) / 1000),
+      browserPool: pool.stats(),
+      queue: queueMetrics,
+      timestamp: new Date().toISOString(),
+    };
+  });
+
   app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
 
-  await renderRoutes(app, pool, cache);
+  // API docs
+  await registerDocs(app);
+
+  // Register routes
+  await renderRoutes(app, pool, cache, rateLimiter);
+  await adminRoutes(app);
+  await usageRoutes(app);
+  await asyncRenderRoutes(app);
+  await batchRoutes(app);
+  await ogRoutes(app, pool, cache);
 
   app.setErrorHandler((error: { message: string; statusCode?: number; code?: string }, _req, reply) => {
     const statusCode = error.statusCode ?? 500;
@@ -56,9 +89,11 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
   app.addHook('onClose', async () => {
     await pool.close();
     await cache.close();
+    await rateLimiter.close();
+    await closeQueue();
+    await closePool();
   });
 
-  // Expose for testing
   app.decorate('browserPool', pool);
   app.decorate('renderCache', cache);
 

@@ -6,12 +6,16 @@ const envSchema = z.object({
   DATABASE_URL: z.string().default('postgresql:///screenforge?host=/var/run/postgresql'),
   STORAGE_PATH: z.string().default('./storage'),
   API_KEY_SALT: z.string().min(16),
+  ADMIN_API_KEY: z.string().min(16).optional(),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   BROWSER_POOL_SIZE: z.coerce.number().int().min(1).max(20).default(3),
   MAX_RENDERS_PER_CONTEXT: z.coerce.number().int().min(1).default(100),
   CACHE_TTL_SECONDS: z.coerce.number().int().min(0).default(3600),
   NAVIGATION_TIMEOUT_MS: z.coerce.number().int().min(1000).max(120_000).default(30_000),
   ALLOW_PRIVATE_URLS: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
+  REQUIRE_AUTH: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
+  MAX_CONTENT_SIZE_MB: z.coerce.number().int().min(1).max(100).default(50),
+  BASE_URL: z.string().default('http://localhost:3100'),
 });
 
 export type Config = z.infer<typeof envSchema>;
