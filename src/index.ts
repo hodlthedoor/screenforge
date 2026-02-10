@@ -21,6 +21,7 @@ import { registerDocs } from './docs/swagger.js';
 import { landingRoutes } from './routes/landing.js';
 import { authRoutes } from './routes/auth.js';
 import { dashboardRoutes } from './routes/dashboard.js';
+import { billingRoutes } from './routes/billing.js';
 import { takeScreenshot } from './renderer/screenshot.js';
 import { renderPdf } from './renderer/pdf.js';
 import { screenshotOptionsSchema, pdfOptionsSchema } from './renderer/schemas.js';
@@ -93,6 +94,7 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
   await landingRoutes(app);
   await authRoutes(app);
   await dashboardRoutes(app);
+  await billingRoutes(app);
 
   // API docs
   await registerDocs(app);

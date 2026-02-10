@@ -86,6 +86,7 @@ function dashboardLayout(title: string, nav: string, content: string, csrfToken:
     <a href="/dashboard" class="${nav === 'overview' ? 'active' : ''}">Overview</a>
     <a href="/dashboard/keys" class="${nav === 'keys' ? 'active' : ''}">API Keys</a>
     <a href="/dashboard/usage" class="${nav === 'usage' ? 'active' : ''}">Usage</a>
+    <a href="/dashboard/billing" class="${nav === 'billing' ? 'active' : ''}">Billing</a>
     <a href="/dashboard/settings" class="${nav === 'settings' ? 'active' : ''}">Settings</a>
     <a href="/docs">API Docs</a>
     <form method="POST" action="/logout" style="padding:10px 20px;margin-top:auto"><input type="hidden" name="_csrf" value="${csrfToken}"><button type="submit" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.95rem">Log Out</button></form>
