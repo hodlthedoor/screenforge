@@ -19,11 +19,12 @@ export const ERROR_CODES = {
 
 export type ErrorCode = keyof typeof ERROR_CODES;
 
-export function createError(code: ErrorCode, detail?: string) {
+export function createError(code: ErrorCode, detail?: string, extra?: Record<string, unknown>) {
   const def = ERROR_CODES[code];
   return {
     error: detail ?? def.message,
     code,
     statusCode: def.status,
+    ...extra,
   };
 }

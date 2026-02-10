@@ -11,10 +11,16 @@ import { asyncRenderRoutes } from './routes/async-render.js';
 import { batchRoutes } from './routes/batch.js';
 import { ogRoutes } from './routes/og.js';
 import { requestIdHook } from './security/request-id.js';
-import { getQueueMetrics } from './queue/render-queue.js';
+import { getQueueMetrics, createWorker, type RenderJobData, type RenderJobResult } from './queue/render-queue.js';
 import { closePool } from './db/index.js';
 import { closeQueue } from './queue/render-queue.js';
 import { registerDocs } from './docs/swagger.js';
+import { takeScreenshot } from './renderer/screenshot.js';
+import { renderPdf } from './renderer/pdf.js';
+import { screenshotOptionsSchema, pdfOptionsSchema } from './renderer/schemas.js';
+import { writeFile, mkdir } from 'node:fs/promises';
+import { join } from 'node:path';
+import type { Job } from 'bullmq';
 
 export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
   const config = loadConfig();
@@ -103,6 +109,31 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
 export async function start() {
   const config = loadConfig();
   const app = await buildServer();
+
+  // Start queue worker so async/batch jobs are processed
+  const browserPool = (app as unknown as { browserPool: BrowserPool }).browserPool;
+  await mkdir(config.STORAGE_PATH, { recursive: true });
+
+  createWorker(config.REDIS_URL, async (job: Job<RenderJobData, RenderJobResult>) => {
+    const { type, url, options } = job.data;
+    const start = performance.now();
+
+    if (type === 'pdf') {
+      const parsed = pdfOptionsSchema.parse({ url, ...options });
+      const result = await renderPdf(browserPool, parsed, config.NAVIGATION_TIMEOUT_MS);
+      const filePath = join(config.STORAGE_PATH, `${job.data.jobId}.pdf`);
+      await writeFile(filePath, result.buffer);
+      return { resultPath: filePath, contentType: result.contentType, durationMs: result.durationMs };
+    }
+
+    // Default: screenshot (including og type)
+    const parsed = screenshotOptionsSchema.parse({ url, ...options });
+    const result = await takeScreenshot(browserPool, parsed, config.NAVIGATION_TIMEOUT_MS);
+    const ext = parsed.format === 'jpeg' ? 'jpg' : 'png';
+    const filePath = join(config.STORAGE_PATH, `${job.data.jobId}.${ext}`);
+    await writeFile(filePath, result.buffer);
+    return { resultPath: filePath, contentType: result.contentType, durationMs: Math.round(performance.now() - start) };
+  });
 
   try {
     await app.listen({ port: config.PORT, host: '0.0.0.0' });

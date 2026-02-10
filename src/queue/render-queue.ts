@@ -4,7 +4,7 @@ import { getPool } from '../db/index.js';
 
 export interface RenderJobData {
   jobId: string;
-  apiKeyId: string;
+  apiKeyId: string | null;
   type: 'screenshot' | 'pdf' | 'og';
   url: string;
   options: Record<string, unknown>;

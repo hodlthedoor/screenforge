@@ -4,8 +4,9 @@ import { getPool } from '../db/index.js';
 import { getQueue, type RenderJobData } from '../queue/render-queue.js';
 import { authMiddleware } from '../auth/middleware.js';
 import { getConfig } from '../config/index.js';
-import { screenshotOptionsSchema, pdfOptionsSchema } from '../renderer/schemas.js';
-import { sanitizeCallbackUrl } from '../security/sanitize.js';
+import { screenshotOptionsSchema, pdfOptionsSchema, isPrivateUrl } from '../renderer/schemas.js';
+import { sanitizeCallbackUrl, SanitizeError } from '../security/sanitize.js';
+import { createError } from '../security/errors.js';
 
 const batchItemSchema = z.object({
   type: z.enum(['screenshot', 'pdf']).default('screenshot'),
@@ -24,12 +25,8 @@ export async function batchRoutes(app: FastifyInstance) {
   app.post('/v1/batch', { preHandler: [authMiddleware] }, async (req, reply) => {
     const parsed = batchRequestSchema.safeParse(req.body);
     if (!parsed.success) {
-      return reply.status(400).send({
-        error: 'Validation failed',
-        code: 'VALIDATION_ERROR',
-        statusCode: 400,
-        details: parsed.error.issues,
-      });
+      const err = createError('VALIDATION_ERROR', undefined, { details: parsed.error.issues });
+      return reply.status(err.statusCode).send(err);
     }
 
     const { items } = parsed.data;
@@ -41,20 +38,31 @@ export async function batchRoutes(app: FastifyInstance) {
       const schema = item.type === 'pdf' ? pdfOptionsSchema : screenshotOptionsSchema;
       const check = schema.safeParse(fullOptions);
       if (!check.success) {
-        return reply.status(400).send({
-          error: `Validation failed for item ${i}`,
-          code: 'VALIDATION_ERROR',
-          statusCode: 400,
-          details: check.error.issues,
-        });
+        const err = createError('VALIDATION_ERROR', `Validation failed for item ${i}`, { details: check.error.issues });
+        return reply.status(err.statusCode).send(err);
       }
+
+      // SSRF check for each item URL
+      if (!config.ALLOW_PRIVATE_URLS && isPrivateUrl(item.url)) {
+        const err = createError('SSRF_BLOCKED', `Item ${i}: URLs targeting private networks are not allowed`);
+        return reply.status(err.statusCode).send(err);
+      }
+
       if (item.callbackUrl) {
-        sanitizeCallbackUrl(item.callbackUrl);
+        try {
+          sanitizeCallbackUrl(item.callbackUrl);
+        } catch (e) {
+          if (e instanceof SanitizeError) {
+            const err = createError('VALIDATION_ERROR', `Item ${i}: ${e.message}`);
+            return reply.status(err.statusCode).send(err);
+          }
+          throw e;
+        }
       }
     }
 
     const pool = getPool();
-    const apiKeyId = req.apiKey?.id ?? '00000000-0000-0000-0000-000000000000';
+    const apiKeyId = req.apiKey?.id ?? null;
 
     // Create batch record
     const batchResult = await pool.query(
@@ -111,11 +119,8 @@ export async function batchRoutes(app: FastifyInstance) {
     );
 
     if (batchResult.rows.length === 0) {
-      return reply.status(404).send({
-        error: 'Batch not found',
-        code: 'BATCH_NOT_FOUND',
-        statusCode: 404,
-      });
+      const err = createError('BATCH_NOT_FOUND');
+      return reply.status(err.statusCode).send(err);
     }
 
     const batch = batchResult.rows[0];
