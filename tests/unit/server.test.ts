@@ -32,7 +32,7 @@ describe('server', () => {
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
     expect(body.status).toBe('ok');
-    expect(body.version).toBe('0.2.0');
+    expect(body.version).toBe('1.0.0');
     expect(body.uptime).toBeTypeOf('number');
     expect(body.browserPool).toBeDefined();
     expect(body.browserPool.poolSize).toBe(3);

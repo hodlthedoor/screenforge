@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+
+  unit-tests:
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: [6379:6379]
+        options: --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 3
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: screenforge
+          POSTGRES_USER: screenforge
+          POSTGRES_PASSWORD: screenforge
+        ports: [5432:5432]
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 3
+    env:
+      REDIS_URL: redis://127.0.0.1:6379/15
+      DATABASE_URL: postgresql://screenforge:screenforge@127.0.0.1:5432/screenforge
+      API_KEY_SALT: ci-test-salt-must-be-16-chars-long
+      SESSION_SECRET: ci-test-session-secret-must-be-32-chars-long!!
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: psql "$DATABASE_URL" -f sql/002_auth_queue.sql
+      - run: psql "$DATABASE_URL" -f sql/003_users.sql
+      - run: npx playwright install chromium --with-deps
+      - run: npm test
+
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

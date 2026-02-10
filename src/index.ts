@@ -1,5 +1,8 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import cookie from '@fastify/cookie';
+import formbody from '@fastify/formbody';
+import session from '@fastify/session';
 import { loadConfig } from './config/index.js';
 import { BrowserPool } from './renderer/browser-pool.js';
 import { RenderCache } from './cache/index.js';
@@ -15,6 +18,9 @@ import { getQueueMetrics, createWorker, type RenderJobData, type RenderJobResult
 import { closePool } from './db/index.js';
 import { closeQueue } from './queue/render-queue.js';
 import { registerDocs } from './docs/swagger.js';
+import { landingRoutes } from './routes/landing.js';
+import { authRoutes } from './routes/auth.js';
+import { dashboardRoutes } from './routes/dashboard.js';
 import { takeScreenshot } from './renderer/screenshot.js';
 import { renderPdf } from './renderer/pdf.js';
 import { screenshotOptionsSchema, pdfOptionsSchema } from './renderer/schemas.js';
@@ -38,6 +44,17 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
   });
 
   await app.register(cors, { origin: true });
+  await app.register(formbody);
+  await app.register(cookie);
+  await app.register(session, {
+    secret: config.SESSION_SECRET,
+    cookie: {
+      secure: config.NODE_ENV === 'production',
+      httpOnly: true,
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    },
+    saveUninitialized: false,
+  });
 
   // Request ID tracking
   app.addHook('onRequest', requestIdHook);
@@ -62,7 +79,7 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
 
     return {
       status: 'ok',
-      version: '0.2.0',
+      version: '1.0.0',
       uptime: Math.round((Date.now() - startTime) / 1000),
       browserPool: pool.stats(),
       queue: queueMetrics,
@@ -72,10 +89,15 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
 
   app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
 
+  // Landing page & auth
+  await landingRoutes(app);
+  await authRoutes(app);
+  await dashboardRoutes(app);
+
   // API docs
   await registerDocs(app);
 
-  // Register routes
+  // Register API routes
   await renderRoutes(app, pool, cache, rateLimiter);
   await adminRoutes(app);
   await usageRoutes(app);
