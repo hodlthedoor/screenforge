@@ -17,6 +17,9 @@ const envSchema = z.object({
   MAX_CONTENT_SIZE_MB: z.coerce.number().int().min(1).max(100).default(50),
   BASE_URL: z.string().default('http://localhost:3100'),
   SESSION_SECRET: z.string().min(32).default('change-me-in-production-this-is-32-chars!'),
+  STRIPE_SECRET_KEY: z.string().optional(),
+  STRIPE_PUBLISHABLE_KEY: z.string().optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().optional(),
 });
 
 export type Config = z.infer<typeof envSchema>;
