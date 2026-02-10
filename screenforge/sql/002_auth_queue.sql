@@ -38,7 +38,7 @@ CREATE INDEX idx_usage_daily_date ON usage_daily(date);
 -- Render jobs (for async queue)
 CREATE TABLE render_jobs (
     id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    api_key_id  uuid NOT NULL REFERENCES api_keys(id) ON DELETE CASCADE,
+    api_key_id  uuid REFERENCES api_keys(id) ON DELETE CASCADE,
     type        text NOT NULL CHECK (type IN ('screenshot', 'pdf', 'og')),
     url         text NOT NULL,
     options     jsonb NOT NULL DEFAULT '{}',
@@ -61,7 +61,7 @@ CREATE INDEX idx_render_jobs_created_at ON render_jobs(created_at);
 -- Batch jobs
 CREATE TABLE batch_jobs (
     id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    api_key_id  uuid NOT NULL REFERENCES api_keys(id) ON DELETE CASCADE,
+    api_key_id  uuid REFERENCES api_keys(id) ON DELETE CASCADE,
     total       integer NOT NULL,
     completed   integer NOT NULL DEFAULT 0,
     failed      integer NOT NULL DEFAULT 0,

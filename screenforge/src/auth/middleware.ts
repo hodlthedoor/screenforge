@@ -1,6 +1,8 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
+import { timingSafeEqual } from 'node:crypto';
 import { lookupApiKey, type ApiKey } from '../db/api-keys.js';
 import { getConfig } from '../config/index.js';
+import { createError } from '../security/errors.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -24,31 +26,33 @@ export async function authMiddleware(req: FastifyRequest, reply: FastifyReply): 
 
   const rawKey = extractKey(req);
   if (!rawKey) {
-    return reply.status(401).send({
-      error: 'API key required. Provide via Authorization: Bearer <key> or x-api-key header.',
-      code: 'AUTH_REQUIRED',
-      statusCode: 401,
-    });
+    const err = createError('AUTH_REQUIRED', 'API key required. Provide via Authorization: Bearer <key> or x-api-key header.');
+    return reply.status(err.statusCode).send(err);
   }
 
   const apiKey = await lookupApiKey(rawKey);
   if (!apiKey) {
-    return reply.status(401).send({
-      error: 'Invalid API key',
-      code: 'INVALID_API_KEY',
-      statusCode: 401,
-    });
+    const err = createError('INVALID_API_KEY');
+    return reply.status(err.statusCode).send(err);
   }
 
   if (!apiKey.active) {
-    return reply.status(403).send({
-      error: 'API key is disabled',
-      code: 'API_KEY_DISABLED',
-      statusCode: 403,
-    });
+    const err = createError('API_KEY_DISABLED');
+    return reply.status(err.statusCode).send(err);
   }
 
   req.apiKey = apiKey;
+}
+
+function timingSafeCompare(a: string, b: string): boolean {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) {
+    // Compare against self to keep constant time, then return false
+    timingSafeEqual(bufA, bufA);
+    return false;
+  }
+  return timingSafeEqual(bufA, bufB);
 }
 
 export async function adminAuthMiddleware(req: FastifyRequest, reply: FastifyReply): Promise<void> {
@@ -56,18 +60,12 @@ export async function adminAuthMiddleware(req: FastifyRequest, reply: FastifyRep
   const rawKey = extractKey(req);
 
   if (!config.ADMIN_API_KEY) {
-    return reply.status(503).send({
-      error: 'Admin API not configured',
-      code: 'ADMIN_NOT_CONFIGURED',
-      statusCode: 503,
-    });
+    const err = createError('ADMIN_NOT_CONFIGURED');
+    return reply.status(err.statusCode).send(err);
   }
 
-  if (!rawKey || rawKey !== config.ADMIN_API_KEY) {
-    return reply.status(401).send({
-      error: 'Invalid admin API key',
-      code: 'INVALID_ADMIN_KEY',
-      statusCode: 401,
-    });
+  if (!rawKey || !timingSafeCompare(rawKey, config.ADMIN_API_KEY)) {
+    const err = createError('INVALID_ADMIN_KEY');
+    return reply.status(err.statusCode).send(err);
   }
 }

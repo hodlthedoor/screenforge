@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { adminAuthMiddleware } from '../auth/middleware.js';
 import { createApiKey, listApiKeys } from '../db/api-keys.js';
+import { createError } from '../security/errors.js';
 
 const createKeySchema = z.object({
   name: z.string().min(1).max(100),
@@ -12,12 +13,8 @@ export async function adminRoutes(app: FastifyInstance) {
   app.post('/v1/keys', { preHandler: [adminAuthMiddleware] }, async (req, reply) => {
     const parsed = createKeySchema.safeParse(req.body);
     if (!parsed.success) {
-      return reply.status(400).send({
-        error: 'Validation failed',
-        code: 'VALIDATION_ERROR',
-        statusCode: 400,
-        details: parsed.error.issues,
-      });
+      const err = createError('VALIDATION_ERROR', undefined, { details: parsed.error.issues });
+      return reply.status(err.statusCode).send(err);
     }
 
     const result = await createApiKey(parsed.data.name, parsed.data.tier);

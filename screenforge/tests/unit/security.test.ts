@@ -155,6 +155,14 @@ describe('security', () => {
       expect(err.statusCode).toBe(400);
     });
 
+    it('creates error with extra fields', () => {
+      const err = createError('VALIDATION_ERROR', undefined, { details: [{ path: ['url'], message: 'Required' }] });
+      expect(err.error).toBe('Validation failed');
+      expect(err.code).toBe('VALIDATION_ERROR');
+      expect(err.statusCode).toBe(400);
+      expect((err as Record<string, unknown>).details).toEqual([{ path: ['url'], message: 'Required' }]);
+    });
+
     it('maps all error codes to correct HTTP status', () => {
       const expectedStatuses: Record<string, number> = {
         VALIDATION_ERROR: 400,

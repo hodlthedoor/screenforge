@@ -11,6 +11,7 @@ import type { SlidingWindowRateLimiter } from '../auth/rate-limiter.js';
 import { getQueue, type RenderJobData } from '../queue/render-queue.js';
 import { getPool } from '../db/index.js';
 import { sanitizeUrl, sanitizeSelector, sanitizeWaitFor, sanitizeTemplate, sanitizeCallbackUrl, SanitizeError } from '../security/sanitize.js';
+import { createError } from '../security/errors.js';
 
 const FORMAT_EXT: Record<string, string> = {
   'image/png': 'png',
@@ -35,22 +36,17 @@ export async function renderRoutes(
     reply.header('X-RateLimit-Reset', String(Math.ceil(result.resetAt / 1000)));
 
     if (!result.allowed) {
-      reply.status(429).send({
-        error: 'Rate limit exceeded',
-        code: 'RATE_LIMITED',
-        statusCode: 429,
+      const err = createError('RATE_LIMITED', undefined, {
         retryAfter: Math.ceil((result.resetAt - Date.now()) / 1000),
       });
+      reply.status(err.statusCode).send(err);
       return true;
     }
 
     const usage = await getUsageStats(req.apiKey.id);
     if (usage.thisMonth >= req.apiKey.monthlyQuota) {
-      reply.status(429).send({
-        error: 'Monthly quota exceeded',
-        code: 'QUOTA_EXCEEDED',
-        statusCode: 429,
-      });
+      const err = createError('QUOTA_EXCEEDED');
+      reply.status(err.statusCode).send(err);
       return true;
     }
 
@@ -65,7 +61,7 @@ export async function renderRoutes(
     url: string,
     options: Record<string, unknown>,
   ) {
-    const apiKeyId = req.apiKey?.id ?? '00000000-0000-0000-0000-000000000000';
+    const apiKeyId = req.apiKey?.id ?? null;
     const body = req.body as Record<string, unknown>;
     const callbackUrl = typeof body.callback_url === 'string' ? body.callback_url : undefined;
 
@@ -73,11 +69,8 @@ export async function renderRoutes(
       sanitizeCallbackUrl(callbackUrl);
     } catch (e) {
       if (e instanceof SanitizeError) {
-        return reply.status(400).send({
-          error: e.message,
-          code: 'VALIDATION_ERROR',
-          statusCode: 400,
-        });
+        const err = createError('VALIDATION_ERROR', e.message);
+        return reply.status(err.statusCode).send(err);
       }
     }
 
@@ -101,12 +94,8 @@ export async function renderRoutes(
   app.post('/v1/screenshot', { preHandler: [authMiddleware] }, async (req, reply) => {
     const parsed = screenshotOptionsSchema.safeParse(req.body);
     if (!parsed.success) {
-      return reply.status(400).send({
-        error: 'Validation failed',
-        code: 'VALIDATION_ERROR',
-        statusCode: 400,
-        details: parsed.error.issues,
-      });
+      const err = createError('VALIDATION_ERROR', undefined, { details: parsed.error.issues });
+      return reply.status(err.statusCode).send(err);
     }
 
     const options = parsed.data;
@@ -117,17 +106,15 @@ export async function renderRoutes(
       sanitizeWaitFor(options.waitFor);
     } catch (e) {
       if (e instanceof SanitizeError) {
-        return reply.status(400).send({ error: e.message, code: 'VALIDATION_ERROR', statusCode: 400 });
+        const err = createError('VALIDATION_ERROR', e.message);
+        return reply.status(err.statusCode).send(err);
       }
       throw e;
     }
 
     if (!config.ALLOW_PRIVATE_URLS && isPrivateUrl(options.url)) {
-      return reply.status(400).send({
-        error: 'URLs targeting private networks are not allowed',
-        code: 'SSRF_BLOCKED',
-        statusCode: 400,
-      });
+      const err = createError('SSRF_BLOCKED');
+      return reply.status(err.statusCode).send(err);
     }
 
     const blocked = await checkRateAndQuota(req, reply);
@@ -164,12 +151,8 @@ export async function renderRoutes(
   app.post('/v1/pdf', { preHandler: [authMiddleware] }, async (req, reply) => {
     const parsed = pdfOptionsSchema.safeParse(req.body);
     if (!parsed.success) {
-      return reply.status(400).send({
-        error: 'Validation failed',
-        code: 'VALIDATION_ERROR',
-        statusCode: 400,
-        details: parsed.error.issues,
-      });
+      const err = createError('VALIDATION_ERROR', undefined, { details: parsed.error.issues });
+      return reply.status(err.statusCode).send(err);
     }
 
     const options = parsed.data;
@@ -180,17 +163,15 @@ export async function renderRoutes(
       sanitizeTemplate(options.footerTemplate);
     } catch (e) {
       if (e instanceof SanitizeError) {
-        return reply.status(400).send({ error: e.message, code: 'VALIDATION_ERROR', statusCode: 400 });
+        const err = createError('VALIDATION_ERROR', e.message);
+        return reply.status(err.statusCode).send(err);
       }
       throw e;
     }
 
     if (!config.ALLOW_PRIVATE_URLS && isPrivateUrl(options.url)) {
-      return reply.status(400).send({
-        error: 'URLs targeting private networks are not allowed',
-        code: 'SSRF_BLOCKED',
-        statusCode: 400,
-      });
+      const err = createError('SSRF_BLOCKED');
+      return reply.status(err.statusCode).send(err);
     }
 
     const blocked = await checkRateAndQuota(req, reply);

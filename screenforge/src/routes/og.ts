@@ -5,6 +5,7 @@ import type { BrowserPool } from '../renderer/browser-pool.js';
 import { RenderCache } from '../cache/index.js';
 import { getConfig } from '../config/index.js';
 import { isPrivateUrl } from '../renderer/schemas.js';
+import { createError } from '../security/errors.js';
 
 const ogRequestSchema = z.object({
   url: z.string().url().optional(),
@@ -102,12 +103,8 @@ export async function ogRoutes(app: FastifyInstance, pool: BrowserPool, cache: R
   app.post('/v1/og', { preHandler: [authMiddleware] }, async (req, reply) => {
     const parsed = ogRequestSchema.safeParse(req.body);
     if (!parsed.success) {
-      return reply.status(400).send({
-        error: 'Validation failed',
-        code: 'VALIDATION_ERROR',
-        statusCode: 400,
-        details: parsed.error.issues,
-      });
+      const err = createError('VALIDATION_ERROR', undefined, { details: parsed.error.issues });
+      return reply.status(err.statusCode).send(err);
     }
 
     const data = parsed.data;
@@ -117,21 +114,15 @@ export async function ogRoutes(app: FastifyInstance, pool: BrowserPool, cache: R
     let fetchedMeta: { title?: string; description?: string; siteName?: string; image?: string } | undefined;
     if (data.url) {
       if (!config.ALLOW_PRIVATE_URLS && isPrivateUrl(data.url)) {
-        return reply.status(400).send({
-          error: 'URLs targeting private networks are not allowed',
-          code: 'SSRF_BLOCKED',
-          statusCode: 400,
-        });
+        const err = createError('SSRF_BLOCKED');
+        return reply.status(err.statusCode).send(err);
       }
       fetchedMeta = await fetchOgMeta(data.url, pool, config.NAVIGATION_TIMEOUT_MS);
     }
 
     if (!data.title && !data.url) {
-      return reply.status(400).send({
-        error: 'Either url or title must be provided',
-        code: 'VALIDATION_ERROR',
-        statusCode: 400,
-      });
+      const err = createError('VALIDATION_ERROR', 'Either url or title must be provided');
+      return reply.status(err.statusCode).send(err);
     }
 
     // Generate OG card HTML
