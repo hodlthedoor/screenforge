@@ -1,6 +1,8 @@
 import { Queue, Worker, type Job } from 'bullmq';
 import { Redis } from 'ioredis';
 import { getPool } from '../db/index.js';
+import { isPrivateUrl } from '../renderer/schemas.js';
+import { getConfig } from '../config/index.js';
 
 export interface RenderJobData {
   jobId: string;
@@ -109,6 +111,11 @@ async function checkBatchCompletion(batchId: string): Promise<void> {
 }
 
 async function fireWebhook(url: string, jobId: string, status: string, data: unknown): Promise<void> {
+  const config = getConfig();
+  if (!config.ALLOW_PRIVATE_URLS && isPrivateUrl(url)) {
+    return; // Silently skip SSRF-risky webhook targets
+  }
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10_000);
   try {

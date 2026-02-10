@@ -1,3 +1,5 @@
+import { isPrivateUrl } from '../renderer/schemas.js';
+
 const MAX_SELECTOR_LENGTH = 500;
 const MAX_WAIT_FOR_LENGTH = 500;
 const MAX_TEMPLATE_LENGTH = 10_000;
@@ -47,7 +49,7 @@ export function sanitizeUrl(input: string): string {
   return input;
 }
 
-export function sanitizeCallbackUrl(input: string | undefined): string | undefined {
+export function sanitizeCallbackUrl(input: string | undefined, allowPrivate = false): string | undefined {
   if (!input) return undefined;
   if (input.length > MAX_CALLBACK_URL_LENGTH) {
     throw new SanitizeError('Callback URL exceeds maximum length');
@@ -60,6 +62,9 @@ export function sanitizeCallbackUrl(input: string | undefined): string | undefin
   } catch (e) {
     if (e instanceof SanitizeError) throw e;
     throw new SanitizeError('Invalid callback URL');
+  }
+  if (!allowPrivate && isPrivateUrl(input)) {
+    throw new SanitizeError('Callback URL must not target private/internal networks');
   }
   return input;
 }
