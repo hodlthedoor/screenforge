@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { getUserById, getUserApiKeys, linkApiKeyToUser, revokeUserApiKey } from '../db/users.js';
 import { createApiKey, getUsageStats } from '../db/api-keys.js';
 import { getPool } from '../db/index.js';
+import { escapeHtml, generateCsrfToken } from '../utils/html.js';
 
 // Session auth guard
 async function requireAuth(req: FastifyRequest, reply: FastifyReply): Promise<void> {
@@ -17,11 +18,29 @@ async function requireAuth(req: FastifyRequest, reply: FastifyReply): Promise<vo
   req.dashboardUser = user;
 }
 
-function escapeHtml(str: string): string {
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+function ensureCsrfToken(req: FastifyRequest): string {
+  if (!req.session.csrfToken) {
+    req.session.csrfToken = generateCsrfToken();
+  }
+  return req.session.csrfToken;
 }
 
-function dashboardLayout(title: string, nav: string, content: string): string {
+function verifyCsrf(req: FastifyRequest): boolean {
+  const body = req.body as Record<string, string> | undefined;
+  const token = body?._csrf;
+  const expected = req.session.csrfToken;
+  return !!token && !!expected && token === expected;
+}
+
+function consumeFlash(req: FastifyRequest, key: string): string | undefined {
+  const value = req.session.flash?.[key];
+  if (value && req.session.flash) {
+    delete req.session.flash[key];
+  }
+  return value;
+}
+
+function dashboardLayout(title: string, nav: string, content: string, csrfToken: string): string {
   return `<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>${escapeHtml(title)} — ScreenForge</title>
@@ -69,7 +88,7 @@ function dashboardLayout(title: string, nav: string, content: string): string {
     <a href="/dashboard/usage" class="${nav === 'usage' ? 'active' : ''}">Usage</a>
     <a href="/dashboard/settings" class="${nav === 'settings' ? 'active' : ''}">Settings</a>
     <a href="/docs">API Docs</a>
-    <form method="POST" action="/logout" style="padding:10px 20px;margin-top:auto"><button type="submit" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.95rem">Log Out</button></form>
+    <form method="POST" action="/logout" style="padding:10px 20px;margin-top:auto"><input type="hidden" name="_csrf" value="${csrfToken}"><button type="submit" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.95rem">Log Out</button></form>
   </nav>
   <main class="main">${content}</main>
 </div></body></html>`;
@@ -80,6 +99,7 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
   app.get('/dashboard', { preHandler: requireAuth }, async (req, reply) => {
     const user = req.dashboardUser!;
     const keys = await getUserApiKeys(user.id);
+    const csrfToken = ensureCsrfToken(req);
 
     let totalToday = 0;
     let totalMonth = 0;
@@ -118,14 +138,16 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
         ${recentResult.rows.length > 0 ? `<table><thead><tr><th>Type</th><th>URL</th><th>Status</th><th>Duration</th></tr></thead><tbody>${recentRows}</tbody></table>` : '<p style="color:var(--muted)">No renders yet. Create an API key and start making requests.</p>'}
       </div>`;
 
-    return reply.type('text/html').send(dashboardLayout('Dashboard', 'overview', html));
+    await req.session.save();
+    return reply.type('text/html').send(dashboardLayout('Dashboard', 'overview', html, csrfToken));
   });
 
   // API Keys
   app.get('/dashboard/keys', { preHandler: requireAuth }, async (req, reply) => {
     const user = req.dashboardUser!;
     const keys = await getUserApiKeys(user.id);
-    const newKey = (req.query as Record<string, string>).newKey;
+    const csrfToken = ensureCsrfToken(req);
+    const newKey = consumeFlash(req, 'newKey');
 
     const keyRows = keys.map((k) =>
       `<tr>
@@ -133,7 +155,7 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
         <td><code>${escapeHtml(k.prefix)}...</code></td>
         <td>${k.tier}</td>
         <td><span class="badge ${k.active ? 'badge-active' : 'badge-revoked'}">${k.active ? 'Active' : 'Revoked'}</span></td>
-        <td>${k.active ? `<form method="POST" action="/dashboard/keys/${k.id}/revoke" style="display:inline"><button type="submit" class="btn btn-danger btn-sm">Revoke</button></form>` : '—'}</td>
+        <td>${k.active ? `<form method="POST" action="/dashboard/keys/${k.id}/revoke" style="display:inline"><input type="hidden" name="_csrf" value="${csrfToken}"><button type="submit" class="btn btn-danger btn-sm">Revoke</button></form>` : '—'}</td>
       </tr>`
     ).join('');
 
@@ -143,6 +165,7 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
       <div class="card">
         <h2 style="margin-bottom:16px">Create New Key</h2>
         <form method="POST" action="/dashboard/keys">
+          <input type="hidden" name="_csrf" value="${csrfToken}">
           <div class="form-row">
             <div class="form-group"><label>Name</label><input type="text" name="name" placeholder="My API Key" required></div>
             <div class="form-group"><label>Tier</label><select name="tier"><option value="free">Free</option><option value="starter">Starter</option><option value="pro">Pro</option><option value="business">Business</option></select></div>
@@ -155,26 +178,43 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
         ${keys.length > 0 ? `<table><thead><tr><th>Name</th><th>Prefix</th><th>Tier</th><th>Status</th><th>Actions</th></tr></thead><tbody>${keyRows}</tbody></table>` : '<p style="color:var(--muted)">No API keys yet.</p>'}
       </div>`;
 
-    return reply.type('text/html').send(dashboardLayout('API Keys', 'keys', html));
+    await req.session.save();
+    return reply.type('text/html').send(dashboardLayout('API Keys', 'keys', html, csrfToken));
   });
 
   // Create key
   app.post('/dashboard/keys', { preHandler: requireAuth }, async (req, reply) => {
+    if (!verifyCsrf(req)) {
+      return reply.status(403).redirect('/dashboard/keys');
+    }
+
     const user = req.dashboardUser!;
-    const { name, tier } = req.body as { name: string; tier: string };
+    const { name, tier } = req.body as { name: string; tier: string; _csrf: string };
     const validTier = ['free', 'starter', 'pro', 'business'].includes(tier) ? tier as 'free' | 'starter' | 'pro' | 'business' : 'free';
 
     const result = await createApiKey(name || 'Unnamed Key', validTier);
     await linkApiKeyToUser(user.id, result.key.id);
 
-    return reply.redirect(`/dashboard/keys?newKey=${encodeURIComponent(result.rawKey)}`);
+    // Store key in flash session instead of URL param
+    if (!req.session.flash) req.session.flash = {};
+    req.session.flash.newKey = result.rawKey;
+    req.session.csrfToken = generateCsrfToken();
+    await req.session.save();
+
+    return reply.redirect('/dashboard/keys');
   });
 
   // Revoke key
   app.post('/dashboard/keys/:id/revoke', { preHandler: requireAuth }, async (req, reply) => {
+    if (!verifyCsrf(req)) {
+      return reply.status(403).redirect('/dashboard/keys');
+    }
+
     const user = req.dashboardUser!;
     const { id } = req.params as { id: string };
     await revokeUserApiKey(user.id, id);
+    req.session.csrfToken = generateCsrfToken();
+    await req.session.save();
     return reply.redirect('/dashboard/keys');
   });
 
@@ -182,6 +222,7 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
   app.get('/dashboard/usage', { preHandler: requireAuth }, async (req, reply) => {
     const user = req.dashboardUser!;
     const keys = await getUserApiKeys(user.id);
+    const csrfToken = ensureCsrfToken(req);
 
     // Daily usage for the last 30 days
     const dailyResult = await getPool().query(
@@ -250,12 +291,14 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
         drawBarChart('typeChart', typeData, 'type', 'count');
       </script>`;
 
-    return reply.type('text/html').send(dashboardLayout('Usage', 'usage', html));
+    await req.session.save();
+    return reply.type('text/html').send(dashboardLayout('Usage', 'usage', html, csrfToken));
   });
 
   // Settings
   app.get('/dashboard/settings', { preHandler: requireAuth }, async (req, reply) => {
     const user = req.dashboardUser!;
+    const csrfToken = ensureCsrfToken(req);
 
     const html = `
       <h1>Settings</h1>
@@ -270,9 +313,10 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
         <h2 style="margin-bottom:16px">Danger Zone</h2>
         <p style="color:var(--muted);margin-bottom:16px">Deleting your account will revoke all API keys and remove all data.</p>
         <button class="btn btn-danger" onclick="if(confirm('Are you sure?'))document.getElementById('deleteForm').submit()">Delete Account</button>
-        <form id="deleteForm" method="POST" action="/dashboard/settings/delete" style="display:none"></form>
+        <form id="deleteForm" method="POST" action="/dashboard/settings/delete" style="display:none"><input type="hidden" name="_csrf" value="${csrfToken}"></form>
       </div>`;
 
-    return reply.type('text/html').send(dashboardLayout('Settings', 'settings', html));
+    await req.session.save();
+    return reply.type('text/html').send(dashboardLayout('Settings', 'settings', html, csrfToken));
   });
 }

@@ -1,6 +1,9 @@
 import type { FastifyInstance } from 'fastify';
+import { getConfig } from '../config/index.js';
+import { escapeHtml } from '../utils/html.js';
 
-function landingHtml(): string {
+function landingHtml(baseUrl: string): string {
+  const safeBaseUrl = escapeHtml(baseUrl);
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -128,13 +131,13 @@ function landingHtml(): string {
     <div class="container">
       <h2>Simple API</h2>
       <pre><code><span class="comment"># Take a screenshot</span>
-curl -X POST http://localhost:3100/v1/screenshot \\
+curl -X POST ${safeBaseUrl}/v1/screenshot \\
   -H "Content-Type: application/json" \\
   -d '{"url": "<span class="string">https://example.com</span>", "format": "png"}' \\
   --output screenshot.png
 
 <span class="comment"># Generate a PDF</span>
-curl -X POST http://localhost:3100/v1/pdf \\
+curl -X POST ${safeBaseUrl}/v1/pdf \\
   -H "Content-Type: application/json" \\
   -d '{"url": "<span class="string">https://example.com</span>", "format": "A4"}'  \\
   --output page.pdf</code></pre>
@@ -204,6 +207,7 @@ curl -X POST http://localhost:3100/v1/pdf \\
 
 export async function landingRoutes(app: FastifyInstance): Promise<void> {
   app.get('/', async (_req, reply) => {
-    return reply.type('text/html').send(landingHtml());
+    const config = getConfig();
+    return reply.type('text/html').send(landingHtml(config.BASE_URL));
   });
 }
