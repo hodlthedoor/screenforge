@@ -5,6 +5,12 @@ import { renderPdf } from '../renderer/pdf.js';
 import type { BrowserPool } from '../renderer/browser-pool.js';
 import { RenderCache } from '../cache/index.js';
 import { getConfig } from '../config/index.js';
+import { authMiddleware } from '../auth/middleware.js';
+import { incrementUsage, getUsageStats } from '../db/api-keys.js';
+import type { SlidingWindowRateLimiter } from '../auth/rate-limiter.js';
+import { getQueue, type RenderJobData } from '../queue/render-queue.js';
+import { getPool } from '../db/index.js';
+import { sanitizeUrl, sanitizeSelector, sanitizeWaitFor, sanitizeTemplate, sanitizeCallbackUrl, SanitizeError } from '../security/sanitize.js';
 
 const FORMAT_EXT: Record<string, string> = {
   'image/png': 'png',
@@ -12,8 +18,87 @@ const FORMAT_EXT: Record<string, string> = {
   'application/pdf': 'pdf',
 };
 
-export async function renderRoutes(app: FastifyInstance, pool: BrowserPool, cache: RenderCache) {
-  app.post('/v1/screenshot', async (req, reply) => {
+export async function renderRoutes(
+  app: FastifyInstance,
+  pool: BrowserPool,
+  cache: RenderCache,
+  rateLimiter?: SlidingWindowRateLimiter,
+) {
+  const config = getConfig();
+
+  async function checkRateAndQuota(req: import('fastify').FastifyRequest, reply: import('fastify').FastifyReply): Promise<boolean> {
+    if (!config.REQUIRE_AUTH || !req.apiKey || !rateLimiter) return false;
+
+    const result = await rateLimiter.check(req.apiKey.id, req.apiKey.rateLimit);
+    reply.header('X-RateLimit-Limit', String(result.limit));
+    reply.header('X-RateLimit-Remaining', String(result.remaining));
+    reply.header('X-RateLimit-Reset', String(Math.ceil(result.resetAt / 1000)));
+
+    if (!result.allowed) {
+      reply.status(429).send({
+        error: 'Rate limit exceeded',
+        code: 'RATE_LIMITED',
+        statusCode: 429,
+        retryAfter: Math.ceil((result.resetAt - Date.now()) / 1000),
+      });
+      return true;
+    }
+
+    const usage = await getUsageStats(req.apiKey.id);
+    if (usage.thisMonth >= req.apiKey.monthlyQuota) {
+      reply.status(429).send({
+        error: 'Monthly quota exceeded',
+        code: 'QUOTA_EXCEEDED',
+        statusCode: 429,
+      });
+      return true;
+    }
+
+    await incrementUsage(req.apiKey.id);
+    return false;
+  }
+
+  async function enqueueRender(
+    req: import('fastify').FastifyRequest,
+    reply: import('fastify').FastifyReply,
+    type: 'screenshot' | 'pdf',
+    url: string,
+    options: Record<string, unknown>,
+  ) {
+    const apiKeyId = req.apiKey?.id ?? '00000000-0000-0000-0000-000000000000';
+    const body = req.body as Record<string, unknown>;
+    const callbackUrl = typeof body.callback_url === 'string' ? body.callback_url : undefined;
+
+    try {
+      sanitizeCallbackUrl(callbackUrl);
+    } catch (e) {
+      if (e instanceof SanitizeError) {
+        return reply.status(400).send({
+          error: e.message,
+          code: 'VALIDATION_ERROR',
+          statusCode: 400,
+        });
+      }
+    }
+
+    const jobResult = await getPool().query(
+      `INSERT INTO render_jobs (api_key_id, type, url, options, callback_url) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+      [apiKeyId, type, url, JSON.stringify(options), callbackUrl ?? null],
+    );
+    const jobId = jobResult.rows[0].id;
+
+    const q = getQueue(config.REDIS_URL);
+    const jobData: RenderJobData = { jobId, apiKeyId, type, url, options, callbackUrl };
+    await q.add(`render-${jobId}`, jobData);
+
+    return reply.status(202).send({
+      id: jobId,
+      status: 'pending',
+      pollUrl: `${config.BASE_URL}/v1/render/${jobId}`,
+    });
+  }
+
+  app.post('/v1/screenshot', { preHandler: [authMiddleware] }, async (req, reply) => {
     const parsed = screenshotOptionsSchema.safeParse(req.body);
     if (!parsed.success) {
       return reply.status(400).send({
@@ -25,7 +110,17 @@ export async function renderRoutes(app: FastifyInstance, pool: BrowserPool, cach
     }
 
     const options = parsed.data;
-    const config = getConfig();
+
+    try {
+      sanitizeUrl(options.url);
+      sanitizeSelector(options.selector);
+      sanitizeWaitFor(options.waitFor);
+    } catch (e) {
+      if (e instanceof SanitizeError) {
+        return reply.status(400).send({ error: e.message, code: 'VALIDATION_ERROR', statusCode: 400 });
+      }
+      throw e;
+    }
 
     if (!config.ALLOW_PRIVATE_URLS && isPrivateUrl(options.url)) {
       return reply.status(400).send({
@@ -33,6 +128,14 @@ export async function renderRoutes(app: FastifyInstance, pool: BrowserPool, cach
         code: 'SSRF_BLOCKED',
         statusCode: 400,
       });
+    }
+
+    const blocked = await checkRateAndQuota(req, reply);
+    if (blocked) return;
+
+    const query = req.query as { async?: string };
+    if (query.async === 'true') {
+      return enqueueRender(req, reply, 'screenshot', options.url, options as unknown as Record<string, unknown>);
     }
 
     const optionsHash = RenderCache.hashOptions(options as unknown as Record<string, unknown>);
@@ -58,7 +161,7 @@ export async function renderRoutes(app: FastifyInstance, pool: BrowserPool, cach
       .send(result.buffer);
   });
 
-  app.post('/v1/pdf', async (req, reply) => {
+  app.post('/v1/pdf', { preHandler: [authMiddleware] }, async (req, reply) => {
     const parsed = pdfOptionsSchema.safeParse(req.body);
     if (!parsed.success) {
       return reply.status(400).send({
@@ -70,7 +173,17 @@ export async function renderRoutes(app: FastifyInstance, pool: BrowserPool, cach
     }
 
     const options = parsed.data;
-    const config = getConfig();
+
+    try {
+      sanitizeUrl(options.url);
+      sanitizeTemplate(options.headerTemplate);
+      sanitizeTemplate(options.footerTemplate);
+    } catch (e) {
+      if (e instanceof SanitizeError) {
+        return reply.status(400).send({ error: e.message, code: 'VALIDATION_ERROR', statusCode: 400 });
+      }
+      throw e;
+    }
 
     if (!config.ALLOW_PRIVATE_URLS && isPrivateUrl(options.url)) {
       return reply.status(400).send({
@@ -78,6 +191,14 @@ export async function renderRoutes(app: FastifyInstance, pool: BrowserPool, cach
         code: 'SSRF_BLOCKED',
         statusCode: 400,
       });
+    }
+
+    const blocked = await checkRateAndQuota(req, reply);
+    if (blocked) return;
+
+    const query = req.query as { async?: string };
+    if (query.async === 'true') {
+      return enqueueRender(req, reply, 'pdf', options.url, options as unknown as Record<string, unknown>);
     }
 
     const optionsHash = RenderCache.hashOptions(options as unknown as Record<string, unknown>);
