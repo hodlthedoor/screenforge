@@ -1,0 +1,70 @@
+version: "3.9"
+
+services:
+  screenforge:
+    build: .
+    ports:
+      - "3100:3100"
+    environment:
+      - PORT=3100
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql://screenforge:screenforge@postgres:5432/screenforge
+      - STORAGE_PATH=/app/storage
+      - API_KEY_SALT=${API_KEY_SALT:?Set API_KEY_SALT in .env (min 16 chars)}
+      - SESSION_SECRET=${SESSION_SECRET:?Set SESSION_SECRET in .env (min 32 chars)}
+      - ADMIN_API_KEY=${ADMIN_API_KEY:-}
+      - NODE_ENV=production
+      - BROWSER_POOL_SIZE=${BROWSER_POOL_SIZE:-3}
+      - MAX_RENDERS_PER_CONTEXT=${MAX_RENDERS_PER_CONTEXT:-100}
+      - CACHE_TTL_SECONDS=${CACHE_TTL_SECONDS:-3600}
+      - NAVIGATION_TIMEOUT_MS=${NAVIGATION_TIMEOUT_MS:-30000}
+      - ALLOW_PRIVATE_URLS=${ALLOW_PRIVATE_URLS:-false}
+      - REQUIRE_AUTH=${REQUIRE_AUTH:-false}
+      - MAX_CONTENT_SIZE_MB=${MAX_CONTENT_SIZE_MB:-50}
+      - BASE_URL=${BASE_URL:-http://localhost:3100}
+    volumes:
+      - storage_data:/app/storage
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3100/health').then(r=>{if(!r.ok)process.exit(1)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_DB=screenforge
+      - POSTGRES_USER=screenforge
+      - POSTGRES_PASSWORD=screenforge
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql:/docker-entrypoint-initdb.d
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U screenforge"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  storage_data:
+  redis_data:
+  postgres_data:
