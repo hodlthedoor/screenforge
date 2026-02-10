@@ -24,7 +24,7 @@ let worker: Worker<RenderJobData, RenderJobResult> | undefined;
 export function getQueue(redisUrl: string): Queue<RenderJobData, RenderJobResult> {
   if (!queue) {
     const connection = new Redis(redisUrl, { maxRetriesPerRequest: null });
-    queue = new Queue('screenforge:renders', { connection });
+    queue = new Queue('screenforge-renders', { connection });
   }
   return queue;
 }
@@ -36,7 +36,7 @@ export function createWorker(
   if (worker) return worker;
 
   const connection = new Redis(redisUrl, { maxRetriesPerRequest: null });
-  worker = new Worker('screenforge:renders', processor, {
+  worker = new Worker('screenforge-renders', processor, {
     connection,
     concurrency: 3,
   });

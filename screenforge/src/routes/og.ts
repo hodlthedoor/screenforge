@@ -76,7 +76,6 @@ async function fetchOgMeta(url: string, pool: BrowserPool, timeoutMs: number): P
     const page = await context.newPage();
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const meta: { title?: string; description?: string; siteName?: string; image?: string } = await page.evaluate(`
       (() => {
         const getMeta = (name) => {
