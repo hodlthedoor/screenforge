@@ -1,21 +1,34 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { buildServer } from '../../src/index.js';
 import type { FastifyInstance } from 'fastify';
+import { createApiKey } from '../../src/db/api-keys.js';
+import { getPool, closePool, resetPool } from '../../src/db/index.js';
 
 describe('structured logging', () => {
   let app: FastifyInstance;
+  let apiKey: string;
+  let apiKeyId: string;
 
   beforeAll(async () => {
     process.env.API_KEY_SALT = 'test-salt-must-be-16-chars-long';
-    process.env.NODE_ENV = 'development';
+    process.env.NODE_ENV = 'test';
     process.env.LOG_LEVEL = 'info';
+    process.env.REQUIRE_AUTH = 'true';
 
-    // Build server with custom logger for testing
     app = await buildServer({ skipBrowserInit: true });
+    const created = await createApiKey('Logging Test Key', 'starter');
+    apiKey = created.rawKey;
+    apiKeyId = created.key.id;
   });
 
   afterAll(async () => {
     await app.close();
+    const pool = getPool();
+    await pool.query('DELETE FROM usage_daily WHERE api_key_id = $1', [apiKeyId]);
+    await pool.query('DELETE FROM api_keys WHERE id = $1', [apiKeyId]);
+    await closePool();
+    resetPool();
+    delete process.env.REQUIRE_AUTH;
   });
 
   describe('module child loggers', () => {
@@ -37,47 +50,36 @@ describe('structured logging', () => {
   });
 
   describe('request logging', () => {
-    it('should log API requests with method, url, status, duration_ms', async () => {
+    it('should log API requests with method, url, status, duration_ms, request_id, api_key_prefix', async () => {
       const infoSpy = vi.spyOn(app.log, 'info');
 
       const response = await app.inject({
-        method: 'GET',
-        url: '/v1/health',
+        method: 'POST',
+        url: '/v1/screenshot',
+        headers: { 'x-api-key': apiKey, 'content-type': 'application/json' },
+        payload: { url: 'not-a-valid-url' },
       });
 
-      expect(response.statusCode).toBe(200);
+      expect(response.statusCode).toBe(400);
 
       const requestLogCall = infoSpy.mock.calls.find((call) => {
         const payload = call[0] as Record<string, unknown> | undefined;
-        return payload?.method === 'GET' && payload?.url === '/v1/health';
+        return payload?.method === 'POST' && payload?.url === '/v1/screenshot';
       });
       const requestLog = requestLogCall?.[0] as Record<string, unknown> | undefined;
 
       expect(requestLog).toBeDefined();
       expect(requestLog).toMatchObject({
-        method: 'GET',
-        url: '/v1/health',
-        status: 200,
+        method: 'POST',
+        url: '/v1/screenshot',
+        status: 400,
+        api_key_prefix: 'sf_test',
       });
       expect(requestLog).toHaveProperty('duration_ms');
       expect(requestLog).toHaveProperty('request_id');
       expect(typeof requestLog?.duration_ms).toBe('number');
 
       infoSpy.mockRestore();
-    });
-
-    it('should log api_key_prefix when auth is present', async () => {
-      // This test will need a real API key setup once auth middleware is integrated
-      // For now, we just verify the structure
-      expect(true).toBe(true);
-    });
-  });
-
-  describe('render job logging', () => {
-    it('should emit structured logs for render jobs', async () => {
-      // This will be tested once queue processor logging is implemented
-      // Expected fields: url, type, duration_ms, cache_hit, format, job_id, status
-      expect(true).toBe(true);
     });
   });
 });

@@ -2,7 +2,7 @@ import type { FastifyRequest, FastifyReply } from 'fastify';
 import { timingSafeEqual } from 'node:crypto';
 import { lookupApiKey, type ApiKey } from '../db/api-keys.js';
 import { getConfig } from '../config/index.js';
-import { createError } from '../security/errors.js';
+import { sendError } from '../security/errors.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -26,19 +26,18 @@ export async function authMiddleware(req: FastifyRequest, reply: FastifyReply): 
 
   const rawKey = extractKey(req);
   if (!rawKey) {
-    const err = createError('AUTH_REQUIRED', 'API key required. Provide via Authorization: Bearer <key> or x-api-key header.');
-    return reply.status(err.statusCode).send(err);
+    return sendError(reply, req, 'AUTH_REQUIRED', {
+      message: 'API key required. Provide via Authorization: Bearer <key> or x-api-key header.',
+    });
   }
 
   const apiKey = await lookupApiKey(rawKey);
   if (!apiKey) {
-    const err = createError('INVALID_API_KEY');
-    return reply.status(err.statusCode).send(err);
+    return sendError(reply, req, 'INVALID_API_KEY');
   }
 
   if (!apiKey.active) {
-    const err = createError('API_KEY_DISABLED');
-    return reply.status(err.statusCode).send(err);
+    return sendError(reply, req, 'API_KEY_DISABLED');
   }
 
   req.apiKey = apiKey;
@@ -60,12 +59,10 @@ export async function adminAuthMiddleware(req: FastifyRequest, reply: FastifyRep
   const rawKey = extractKey(req);
 
   if (!config.ADMIN_API_KEY) {
-    const err = createError('ADMIN_NOT_CONFIGURED');
-    return reply.status(err.statusCode).send(err);
+    return sendError(reply, req, 'ADMIN_NOT_CONFIGURED');
   }
 
   if (!rawKey || !timingSafeCompare(rawKey, config.ADMIN_API_KEY)) {
-    const err = createError('INVALID_ADMIN_KEY');
-    return reply.status(err.statusCode).send(err);
+    return sendError(reply, req, 'INVALID_ADMIN_KEY');
   }
 }
