@@ -16,10 +16,18 @@ describe('auth', () => {
 
   afterAll(async () => {
     const pool = getPool();
-    await pool.query('DELETE FROM usage_daily');
-    await pool.query('DELETE FROM render_jobs');
-    await pool.query('DELETE FROM batch_jobs');
-    await pool.query('DELETE FROM api_keys');
+    const authTestKeyNames = ['Test Key', 'Pro Key', 'Lookup Test', 'Usage Test', 'Stats Test', 'Header Test', 'Bearer Test'];
+    const keyResult = await pool.query(
+      'SELECT id FROM api_keys WHERE name = ANY($1)',
+      [authTestKeyNames],
+    );
+    const keyIds = keyResult.rows.map((r: { id: string }) => r.id);
+    if (keyIds.length > 0) {
+      await pool.query('DELETE FROM usage_daily WHERE api_key_id = ANY($1)', [keyIds]);
+      await pool.query('DELETE FROM render_jobs WHERE api_key_id = ANY($1)', [keyIds]);
+      await pool.query('DELETE FROM batch_jobs WHERE api_key_id = ANY($1)', [keyIds]);
+      await pool.query('DELETE FROM api_keys WHERE id = ANY($1)', [keyIds]);
+    }
     await closePool();
     resetPool();
   });

@@ -50,9 +50,9 @@ describe('OG card generation', { timeout: 120_000 }, () => {
     await new Promise<void>((r) => ogServer.close(() => r()));
     await rm(TEST_STORAGE, { recursive: true, force: true });
     const pool = getPool();
-    await pool.query('DELETE FROM usage_daily');
-    await pool.query('DELETE FROM render_jobs');
-    await pool.query('DELETE FROM batch_jobs');
+    await pool.query('DELETE FROM usage_daily WHERE api_key_id IS NULL');
+    await pool.query('DELETE FROM render_jobs WHERE api_key_id IS NULL');
+    await pool.query('DELETE FROM batch_jobs WHERE api_key_id IS NULL');
     // No API keys created in this test file
     await closePool();
     resetPool();
