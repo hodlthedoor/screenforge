@@ -124,7 +124,16 @@ export async function listApiKeys(): Promise<ApiKey[]> {
      FROM api_keys ORDER BY created_at DESC`,
   );
 
-  return result.rows.map((row) => ({
+  return result.rows.map((row: {
+    id: string;
+    prefix: string;
+    name: string;
+    tier: ApiKey['tier'];
+    rate_limit: number;
+    monthly_quota: number;
+    active: boolean;
+    created_at: Date;
+  }) => ({
     id: row.id,
     prefix: row.prefix,
     name: row.name,
