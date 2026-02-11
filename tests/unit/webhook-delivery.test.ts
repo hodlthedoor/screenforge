@@ -60,19 +60,19 @@ describe('webhook delivery', () => {
     await new Promise((resolve) => setTimeout(resolve, 100));
     requests = [];
     responseStatus = 200;
-    await getPool().query('DELETE FROM webhook_deliveries');
-    await getPool().query('DELETE FROM render_jobs');
+    await getPool().query('DELETE FROM webhook_deliveries WHERE api_key_id = $1', [apiKeyId]);
+    await getPool().query('DELETE FROM render_jobs WHERE api_key_id = $1', [apiKeyId]);
   });
 
   afterAll(async () => {
     webhookServer.close();
     await closeWebhookQueue();
     const pool = getPool();
-    await pool.query('DELETE FROM webhook_deliveries');
-    await pool.query('DELETE FROM render_jobs');
-    await pool.query('DELETE FROM usage_daily');
-    await pool.query('DELETE FROM user_api_keys');
-    await pool.query('DELETE FROM api_keys');
+    await pool.query('DELETE FROM webhook_deliveries WHERE api_key_id = $1', [apiKeyId]);
+    await pool.query('DELETE FROM render_jobs WHERE api_key_id = $1', [apiKeyId]);
+    await pool.query('DELETE FROM usage_daily WHERE api_key_id = $1', [apiKeyId]);
+    await pool.query('DELETE FROM user_api_keys WHERE api_key_id = $1', [apiKeyId]);
+    await pool.query('DELETE FROM api_keys WHERE id = $1', [apiKeyId]);
     await closePool();
   });
 
