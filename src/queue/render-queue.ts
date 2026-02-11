@@ -1,8 +1,8 @@
 import { Queue, Worker, type Job } from 'bullmq';
 import { Redis } from 'ioredis';
 import { getPool } from '../db/index.js';
-import { isPrivateUrl } from '../renderer/schemas.js';
-import { getConfig } from '../config/index.js';
+import { enqueueWebhook } from '../webhooks/delivery.js';
+import { getWebhookConfig } from '../db/api-keys.js';
 
 export interface RenderJobData {
   jobId: string;
@@ -64,8 +64,8 @@ export function createWorker(
     }
 
     // Fire webhook if configured
-    if (job.data.callbackUrl) {
-      fireWebhook(job.data.callbackUrl, job.data.jobId, 'completed', result).catch(() => {});
+    if (job.data.callbackUrl && job.data.apiKeyId) {
+      sendWebhook(job.data.apiKeyId, job.data.jobId, job.data.callbackUrl, 'completed', result).catch(() => {});
     }
   });
 
@@ -86,8 +86,8 @@ export function createWorker(
       await checkBatchCompletion(job.data.batchId);
     }
 
-    if (job.data.callbackUrl) {
-      fireWebhook(job.data.callbackUrl, job.data.jobId, 'failed', { error: error.message }).catch(() => {});
+    if (job.data.callbackUrl && job.data.apiKeyId) {
+      sendWebhook(job.data.apiKeyId, job.data.jobId, job.data.callbackUrl, 'failed', { error: error.message }).catch(() => {});
     }
   });
 
@@ -110,24 +110,33 @@ async function checkBatchCompletion(batchId: string): Promise<void> {
   }
 }
 
-async function fireWebhook(url: string, jobId: string, status: string, data: unknown): Promise<void> {
-  const config = getConfig();
-  if (!config.ALLOW_PRIVATE_URLS && isPrivateUrl(url)) {
-    return; // Silently skip SSRF-risky webhook targets
+async function sendWebhook(
+  apiKeyId: string,
+  jobId: string,
+  callbackUrl: string,
+  status: string,
+  data: unknown,
+): Promise<void> {
+  // Get webhook config for the API key
+  const webhookConfig = await getWebhookConfig(apiKeyId);
+
+  // Use callback URL from job data (takes precedence) or configured webhook URL
+  const targetUrl = callbackUrl;
+
+  // Skip if no secret configured (cannot sign webhooks)
+  if (!webhookConfig.secret) {
+    return;
   }
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10_000);
-  try {
-    await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jobId, status, data, timestamp: new Date().toISOString() }),
-      signal: controller.signal,
-    });
-  } finally {
-    clearTimeout(timeout);
-  }
+  const payload = {
+    jobId,
+    status,
+    data,
+    timestamp: new Date().toISOString(),
+  };
+
+  // Enqueue webhook with signing and retry logic
+  await enqueueWebhook(apiKeyId, jobId, targetUrl, payload, webhookConfig.secret);
 }
 
 export async function getQueueMetrics(redisUrl: string): Promise<{

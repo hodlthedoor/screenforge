@@ -17,11 +17,13 @@ import { requestIdHook } from './security/request-id.js';
 import { getQueueMetrics, createWorker, type RenderJobData, type RenderJobResult } from './queue/render-queue.js';
 import { closePool } from './db/index.js';
 import { closeQueue } from './queue/render-queue.js';
+import { createWebhookWorker, closeWebhookQueue } from './webhooks/delivery.js';
 import { registerDocs } from './docs/swagger.js';
 import { landingRoutes } from './routes/landing.js';
 import { authRoutes } from './routes/auth.js';
 import { dashboardRoutes } from './routes/dashboard.js';
 import { billingRoutes } from './routes/billing.js';
+import { webhooksRoutes } from './routes/webhooks.js';
 import { takeScreenshot } from './renderer/screenshot.js';
 import { renderPdf } from './renderer/pdf.js';
 import { screenshotOptionsSchema, pdfOptionsSchema } from './renderer/schemas.js';
@@ -106,6 +108,7 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
   await asyncRenderRoutes(app);
   await batchRoutes(app);
   await ogRoutes(app, pool, cache);
+  await webhooksRoutes(app);
 
   app.setErrorHandler((error: { message: string; statusCode?: number; code?: string }, _req, reply) => {
     const statusCode = error.statusCode ?? 500;
@@ -121,6 +124,7 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
     await cache.close();
     await rateLimiter.close();
     await closeQueue();
+    await closeWebhookQueue();
     await closePool();
   });
 
@@ -138,6 +142,7 @@ export async function start() {
   const browserPool = (app as unknown as { browserPool: BrowserPool }).browserPool;
   await mkdir(config.STORAGE_PATH, { recursive: true });
 
+  // Start render worker
   createWorker(config.REDIS_URL, async (job: Job<RenderJobData, RenderJobResult>) => {
     const { type, url, options } = job.data;
     const start = performance.now();
@@ -158,6 +163,9 @@ export async function start() {
     await writeFile(filePath, result.buffer);
     return { resultPath: filePath, contentType: result.contentType, durationMs: Math.round(performance.now() - start) };
   });
+
+  // Start webhook worker
+  createWebhookWorker(config.REDIS_URL);
 
   try {
     await app.listen({ port: config.PORT, host: '0.0.0.0' });

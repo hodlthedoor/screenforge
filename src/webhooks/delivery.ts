@@ -254,6 +254,98 @@ export async function getDeliveryStatus(deliveryId: string): Promise<DeliverySta
   };
 }
 
+export interface ListDeliveriesOptions {
+  apiKeyId: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface ListDeliveriesResult {
+  deliveries: DeliveryStatus[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export async function listDeliveries(options: ListDeliveriesOptions): Promise<ListDeliveriesResult> {
+  const { apiKeyId, page = 1, limit = 50 } = options;
+  const pool = getPool();
+
+  // Validate pagination params
+  const validatedPage = Math.max(1, page);
+  const validatedLimit = Math.min(Math.max(1, limit), 100);
+  const offset = (validatedPage - 1) * validatedLimit;
+
+  // Get total count
+  const countResult = await pool.query(
+    `SELECT COUNT(*) FROM webhook_deliveries WHERE api_key_id = $1`,
+    [apiKeyId],
+  );
+  const total = parseInt(countResult.rows[0].count, 10);
+
+  // Get paginated deliveries
+  const result = await pool.query(
+    `SELECT id, api_key_id, job_id, url, payload, status, attempts,
+            last_status_code, last_error, created_at, delivered_at
+     FROM webhook_deliveries
+     WHERE api_key_id = $1
+     ORDER BY created_at DESC
+     LIMIT $2 OFFSET $3`,
+    [apiKeyId, validatedLimit, offset],
+  );
+
+  const deliveries = result.rows.map((row) => ({
+    id: row.id,
+    apiKeyId: row.api_key_id,
+    jobId: row.job_id,
+    url: row.url,
+    payload: row.payload,
+    status: row.status,
+    attempts: row.attempts,
+    lastStatusCode: row.last_status_code,
+    lastError: row.last_error,
+    createdAt: row.created_at,
+    deliveredAt: row.delivered_at,
+  }));
+
+  return {
+    deliveries,
+    total,
+    page: validatedPage,
+    limit: validatedLimit,
+  };
+}
+
+export async function getDeliveryById(deliveryId: string, apiKeyId: string): Promise<DeliveryStatus | null> {
+  const pool = getPool();
+  const result = await pool.query(
+    `SELECT id, api_key_id, job_id, url, payload, status, attempts,
+            last_status_code, last_error, created_at, delivered_at
+     FROM webhook_deliveries
+     WHERE id = $1 AND api_key_id = $2`,
+    [deliveryId, apiKeyId],
+  );
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  const row = result.rows[0];
+  return {
+    id: row.id,
+    apiKeyId: row.api_key_id,
+    jobId: row.job_id,
+    url: row.url,
+    payload: row.payload,
+    status: row.status,
+    attempts: row.attempts,
+    lastStatusCode: row.last_status_code,
+    lastError: row.last_error,
+    createdAt: row.created_at,
+    deliveredAt: row.delivered_at,
+  };
+}
+
 export async function closeWebhookQueue(): Promise<void> {
   if (worker) {
     await worker.close();

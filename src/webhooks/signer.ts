@@ -50,8 +50,16 @@ export function verifyWebhookSignature(
   // Check timestamp tolerance (only if specified)
   if (toleranceSeconds !== undefined) {
     const now = Math.floor(Date.now() / 1000);
-    if (now - timestamp > toleranceSeconds) {
+    const diff = now - timestamp;
+
+    // Reject signatures that are too old
+    if (diff > toleranceSeconds) {
       return { valid: false, timestamp, error: 'signature expired' };
+    }
+
+    // Reject signatures from the future (clock skew protection)
+    if (diff < -toleranceSeconds) {
+      return { valid: false, timestamp, error: 'signature from future' };
     }
   }
 

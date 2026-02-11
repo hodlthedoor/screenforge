@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
-import { getPool, closePool, resetPool } from '../../src/db/index.js';
+import { getPool, closePool } from '../../src/db/index.js';
 import { createApiKey } from '../../src/db/api-keys.js';
 import { loadConfig } from '../../src/config/index.js';
 import { enqueueWebhook, getDeliveryStatus, RETRY_DELAYS, createWebhookWorker, closeWebhookQueue } from '../../src/webhooks/delivery.js';
@@ -124,7 +124,7 @@ describe('webhook delivery', () => {
       );
       const jobId = jobResult.rows[0].id;
 
-      const deliveryId = await enqueueWebhook(
+      await enqueueWebhook(
         apiKeyId,
         jobId,
         webhookUrl,
