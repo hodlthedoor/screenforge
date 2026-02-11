@@ -183,7 +183,7 @@ export async function rotateApiKey(keyId: string): Promise<string> {
     throw new Error('API key not found');
   }
 
-  const { tier, name } = result.rows[0];
+  const { tier } = result.rows[0];
 
   // Generate new raw key with same tier
   const prefix = tier === 'free' ? 'sf_test_' : 'sf_live_';

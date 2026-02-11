@@ -358,7 +358,7 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
       <div class="card">
         <h2 style="margin-bottom:16px">Danger Zone</h2>
         <p style="color:var(--muted);margin-bottom:16px">Deleting your account will revoke all API keys and remove all data.</p>
-        <form method="POST" action="/dashboard/account" onsubmit="return confirm('Are you sure you want to delete your account? This cannot be undone.')">
+        <form id="delete-account-form" method="POST" action="/dashboard/account" onsubmit="return confirm('Are you sure you want to delete your account? This cannot be undone.')">
           <input type="hidden" name="_csrf" value="${csrfToken}">
           <div class="form-group" style="margin-bottom:16px">
             <label>Confirm your password to delete account</label>
@@ -366,14 +366,39 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
           </div>
           <button type="submit" class="btn btn-danger">Delete Account</button>
         </form>
-      </div>`;
+      </div>
+      <script>
+        const form = document.getElementById('delete-account-form');
+        if (form) {
+          form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const formData = new FormData(form);
+            const password = String(formData.get('password') || '');
+            const _csrf = String(formData.get('_csrf') || '');
+            const res = await fetch('/dashboard/account', {
+              method: 'DELETE',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ password, _csrf }),
+            });
+            if (res.redirected) {
+              window.location.href = res.url;
+              return;
+            }
+            if (res.ok) {
+              window.location.href = '/login';
+              return;
+            }
+            window.alert(await res.text());
+          });
+        }
+      </script>`;
 
     await req.session.save();
     return reply.type('text/html').send(dashboardLayout('Settings', 'settings', html, csrfToken));
   });
 
   // Delete account
-  app.post('/dashboard/account', { preHandler: requireAuth }, async (req, reply) => {
+  const handleDeleteAccount = async (req: FastifyRequest, reply: FastifyReply) => {
     if (!verifyCsrf(req)) {
       return reply.status(403).send('Invalid CSRF token');
     }
@@ -398,5 +423,9 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
     req.session.destroy();
 
     return reply.redirect('/login');
-  });
+  };
+
+  app.delete('/dashboard/account', { preHandler: requireAuth }, handleDeleteAccount);
+  // Backward-compatible endpoint for non-JS form submissions.
+  app.post('/dashboard/account', { preHandler: requireAuth }, handleDeleteAccount);
 }

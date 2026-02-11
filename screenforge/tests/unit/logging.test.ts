@@ -1,30 +1,14 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { buildServer } from '../../src/index.js';
 import type { FastifyInstance } from 'fastify';
-import pino from 'pino';
-import { Writable } from 'node:stream';
 
 describe('structured logging', () => {
   let app: FastifyInstance;
-  const logs: unknown[] = [];
-  let logStream: Writable;
 
   beforeAll(async () => {
     process.env.API_KEY_SALT = 'test-salt-must-be-16-chars-long';
     process.env.NODE_ENV = 'development';
     process.env.LOG_LEVEL = 'info';
-
-    // Create a custom stream to capture logs
-    logStream = new Writable({
-      write(chunk, _encoding, callback) {
-        try {
-          logs.push(JSON.parse(chunk.toString()));
-        } catch {
-          // Ignore non-JSON logs (pino-pretty output)
-        }
-        callback();
-      },
-    });
 
     // Build server with custom logger for testing
     app = await buildServer({ skipBrowserInit: true });
@@ -54,7 +38,7 @@ describe('structured logging', () => {
 
   describe('request logging', () => {
     it('should log API requests with method, url, status, duration_ms', async () => {
-      logs.length = 0;
+      const infoSpy = vi.spyOn(app.log, 'info');
 
       const response = await app.inject({
         method: 'GET',
@@ -63,10 +47,11 @@ describe('structured logging', () => {
 
       expect(response.statusCode).toBe(200);
 
-      // Find the request log (might be mixed with other logs)
-      const requestLog = logs.find((log: Record<string, unknown>) =>
-        log.method === 'GET' && log.url === '/v1/health'
-      );
+      const requestLogCall = infoSpy.mock.calls.find((call) => {
+        const payload = call[0] as Record<string, unknown> | undefined;
+        return payload?.method === 'GET' && payload?.url === '/v1/health';
+      });
+      const requestLog = requestLogCall?.[0] as Record<string, unknown> | undefined;
 
       expect(requestLog).toBeDefined();
       expect(requestLog).toMatchObject({
@@ -76,7 +61,9 @@ describe('structured logging', () => {
       });
       expect(requestLog).toHaveProperty('duration_ms');
       expect(requestLog).toHaveProperty('request_id');
-      expect(typeof (requestLog as Record<string, unknown>).duration_ms).toBe('number');
+      expect(typeof requestLog?.duration_ms).toBe('number');
+
+      infoSpy.mockRestore();
     });
 
     it('should log api_key_prefix when auth is present', async () => {

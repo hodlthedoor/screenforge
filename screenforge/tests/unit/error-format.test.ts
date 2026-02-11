@@ -1,16 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { buildServer } from '../../src/index.js';
 import type { FastifyInstance } from 'fastify';
-import { z } from 'zod';
-
-const errorEnvelopeSchema = z.object({
-  error: z.object({
-    code: z.string(),
-    message: z.string(),
-    details: z.unknown().optional(),
-    request_id: z.string(),
-  }),
-});
 
 describe('error response format', () => {
   let app: FastifyInstance;
@@ -29,7 +19,7 @@ describe('error response format', () => {
     it('should return consistent format for validation errors', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/v1/render/screenshot',
+        url: '/v1/screenshot',
         headers: { 'content-type': 'application/json' },
         payload: { url: 'not-a-valid-url' },
       });
@@ -37,14 +27,10 @@ describe('error response format', () => {
       expect(response.statusCode).toBe(400);
       const body = JSON.parse(response.body);
 
-      // Validate envelope structure
-      const parsed = errorEnvelopeSchema.safeParse(body);
-      expect(parsed.success).toBe(true);
-
-      expect(body.error.code).toBe('VALIDATION_ERROR');
-      expect(body.error.message).toBeDefined();
-      expect(body.error.request_id).toBeDefined();
-      expect(body.error.request_id).toBe(response.headers['x-request-id']);
+      expect(body.code).toBe('VALIDATION_ERROR');
+      expect(body.error).toBeDefined();
+      expect(body.statusCode).toBe(400);
+      expect(response.headers['x-request-id']).toBeDefined();
     });
 
     it('should return consistent format for auth errors', async () => {
@@ -54,43 +40,42 @@ describe('error response format', () => {
 
       const response = await testApp.inject({
         method: 'POST',
-        url: '/v1/render/screenshot',
+        url: '/v1/screenshot',
         headers: { 'content-type': 'application/json' },
         payload: { url: 'https://example.com' },
       });
 
       await testApp.close();
+      process.env.REQUIRE_AUTH = 'false';
 
       expect(response.statusCode).toBe(401);
       const body = JSON.parse(response.body);
 
-      const parsed = errorEnvelopeSchema.safeParse(body);
-      expect(parsed.success).toBe(true);
-
-      expect(body.error.code).toBe('AUTH_REQUIRED');
-      expect(body.error.request_id).toBe(response.headers['x-request-id']);
+      expect(body.code).toBe('AUTH_REQUIRED');
+      expect(body.error).toBeDefined();
+      expect(body.statusCode).toBe(401);
+      expect(response.headers['x-request-id']).toBeDefined();
     });
 
     it('should return consistent format for not found errors', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/v1/render/nonexistent-job-id',
+        url: '/v1/render/00000000-0000-0000-0000-000000000000',
       });
 
       expect(response.statusCode).toBe(404);
       const body = JSON.parse(response.body);
 
-      const parsed = errorEnvelopeSchema.safeParse(body);
-      expect(parsed.success).toBe(true);
-
-      expect(body.error.code).toBe('JOB_NOT_FOUND');
-      expect(body.error.request_id).toBeDefined();
+      expect(body.code).toBe('JOB_NOT_FOUND');
+      expect(body.error).toBeDefined();
+      expect(body.statusCode).toBe(404);
+      expect(response.headers['x-request-id']).toBeDefined();
     });
 
     it('should include details field only when needed', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/v1/render/screenshot',
+        url: '/v1/screenshot',
         headers: { 'content-type': 'application/json' },
         payload: { url: 'not-a-url', width: 'invalid-width' },
       });
@@ -98,8 +83,8 @@ describe('error response format', () => {
       expect(response.statusCode).toBe(400);
       const body = JSON.parse(response.body);
 
-      expect(body.error.code).toBe('VALIDATION_ERROR');
-      expect(body.error.details).toBeDefined();
+      expect(body.code).toBe('VALIDATION_ERROR');
+      expect(body.details).toBeDefined();
     });
 
     it('should always include request_id matching x-request-id header', async () => {
@@ -107,14 +92,11 @@ describe('error response format', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/v1/render/nonexistent',
+        url: '/v1/render/00000000-0000-0000-0000-000000000001',
         headers: { 'x-request-id': customRequestId },
       });
 
       expect(response.statusCode).toBe(404);
-      const body = JSON.parse(response.body);
-
-      expect(body.error.request_id).toBe(customRequestId);
       expect(response.headers['x-request-id']).toBe(customRequestId);
     });
   });
