@@ -6,6 +6,21 @@ import type { FastifyInstance } from 'fastify';
 describe('error response format', () => {
   let app: FastifyInstance;
 
+  function expectCanonicalEnvelope(
+    body: Record<string, unknown>,
+    code: string,
+    message: string,
+    requestId: string,
+  ) {
+    expect(body).toMatchObject({
+      error: {
+        code,
+        message,
+        request_id: requestId,
+      },
+    });
+  }
+
   beforeAll(async () => {
     process.env.API_KEY_SALT = 'test-salt-must-be-16-chars-long';
     process.env.NODE_ENV = 'test';
@@ -28,11 +43,10 @@ describe('error response format', () => {
 
       expect(response.statusCode).toBe(400);
       const body = JSON.parse(response.body);
+      const requestId = String(response.headers['x-request-id']);
 
-      expect(body.code).toBe('VALIDATION_ERROR');
-      expect(body.error).toBeDefined();
-      expect(body.statusCode).toBe(400);
-      expect(response.headers['x-request-id']).toBeDefined();
+      expectCanonicalEnvelope(body, 'VALIDATION_ERROR', 'Validation failed', requestId);
+      expect(body.error.details).toBeDefined();
     });
 
     it('should return consistent format for auth errors', async () => {
@@ -53,11 +67,9 @@ describe('error response format', () => {
 
       expect(response.statusCode).toBe(401);
       const body = JSON.parse(response.body);
+      const requestId = String(response.headers['x-request-id']);
 
-      expect(body.code).toBe('AUTH_REQUIRED');
-      expect(body.error).toBeDefined();
-      expect(body.statusCode).toBe(401);
-      expect(response.headers['x-request-id']).toBeDefined();
+      expectCanonicalEnvelope(body, 'AUTH_REQUIRED', 'API key required. Provide via Authorization: Bearer <key> or x-api-key header.', requestId);
     });
 
     it('should return consistent format for not found errors', async () => {
@@ -68,11 +80,9 @@ describe('error response format', () => {
 
       expect(response.statusCode).toBe(404);
       const body = JSON.parse(response.body);
+      const requestId = String(response.headers['x-request-id']);
 
-      expect(body.code).toBe('JOB_NOT_FOUND');
-      expect(body.error).toBeDefined();
-      expect(body.statusCode).toBe(404);
-      expect(response.headers['x-request-id']).toBeDefined();
+      expectCanonicalEnvelope(body, 'JOB_NOT_FOUND', 'Job not found', requestId);
     });
 
     it('should include details field only when needed', async () => {
@@ -86,8 +96,7 @@ describe('error response format', () => {
       expect(response.statusCode).toBe(400);
       const body = JSON.parse(response.body);
 
-      expect(body.code).toBe('VALIDATION_ERROR');
-      expect(body.details).toBeDefined();
+      expect(body.error.details).toBeDefined();
     });
 
     it('should always include request_id matching x-request-id header', async () => {
@@ -101,6 +110,8 @@ describe('error response format', () => {
 
       expect(response.statusCode).toBe(404);
       expect(response.headers['x-request-id']).toBe(customRequestId);
+      const body = JSON.parse(response.body);
+      expect(body.error.request_id).toBe(customRequestId);
     });
   });
 
@@ -151,6 +162,7 @@ describe('error response format', () => {
         'BATCH_TOO_LARGE',
         'ADMIN_NOT_CONFIGURED',
         'INTERNAL_ERROR',
+        'NOT_FOUND',
       ];
 
       for (const code of expectedCodes) {
