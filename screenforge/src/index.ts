@@ -19,11 +19,14 @@ import { closePool } from './db/index.js';
 import { closeQueue } from './queue/render-queue.js';
 import { createWebhookWorker, closeWebhookQueue } from './webhooks/delivery.js';
 import { registerDocs } from './docs/swagger.js';
+import { errorCodesRoutes } from './docs/error-codes.js';
 import { landingRoutes } from './routes/landing.js';
 import { authRoutes } from './routes/auth.js';
 import { dashboardRoutes } from './routes/dashboard.js';
 import { billingRoutes } from './routes/billing.js';
 import { webhooksRoutes } from './routes/webhooks.js';
+import { registerLoggers } from './logging/index.js';
+import { buildErrorResponse } from './security/errors.js';
 import { takeScreenshot } from './renderer/screenshot.js';
 import { renderPdf } from './renderer/pdf.js';
 import { screenshotOptionsSchema, pdfOptionsSchema } from './renderer/schemas.js';
@@ -38,7 +41,7 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
     logger: config.NODE_ENV === 'test'
       ? false
       : {
-          level: 'info',
+          level: config.LOG_LEVEL,
           transport:
             config.NODE_ENV === 'development'
               ? { target: 'pino-pretty', options: { colorize: true } }
@@ -61,6 +64,27 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
 
   // Request ID tracking
   app.addHook('onRequest', requestIdHook);
+
+  // Request logging
+  app.addHook('onResponse', (req, reply, done) => {
+    const duration = reply.getResponseTime();
+    const apiKeyPrefix = req.apiKey
+      ? `${req.apiKey.key.substring(0, req.apiKey.key.indexOf('_') + 6)}...`
+      : undefined;
+
+    app.log.info({
+      method: req.method,
+      url: req.url,
+      status: reply.statusCode,
+      duration_ms: duration,
+      api_key_prefix: apiKeyPrefix,
+      request_id: req.id,
+    });
+    done();
+  });
+
+  // Register loggers for modules
+  registerLoggers(app);
 
   const pool = new BrowserPool(config.BROWSER_POOL_SIZE, config.MAX_RENDERS_PER_CONTEXT);
   if (!opts?.skipBrowserInit) {
@@ -100,6 +124,7 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
 
   // API docs
   await registerDocs(app);
+  await errorCodesRoutes(app);
 
   // Register API routes
   await renderRoutes(app, pool, cache, rateLimiter);
@@ -110,13 +135,28 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
   await ogRoutes(app, pool, cache);
   await webhooksRoutes(app);
 
-  app.setErrorHandler((error: { message: string; statusCode?: number; code?: string }, _req, reply) => {
+  app.setErrorHandler((error: { message: string; statusCode?: number; code?: string; validation?: unknown }, req, reply) => {
     const statusCode = error.statusCode ?? 500;
-    reply.status(statusCode).send({
-      error: error.message,
-      code: error.code ?? 'INTERNAL_ERROR',
-      statusCode,
+
+    // Handle Fastify validation errors
+    if (statusCode === 400 && error.validation) {
+      const response = buildErrorResponse('VALIDATION_ERROR', req, {
+        details: error.validation,
+      });
+      return reply.status(400).send(response);
+    }
+
+    // Handle 404 not found
+    if (statusCode === 404) {
+      const response = buildErrorResponse('NOT_FOUND', req);
+      return reply.status(404).send(response);
+    }
+
+    // Handle other errors
+    const response = buildErrorResponse('INTERNAL_ERROR', req, {
+      message: error.message,
     });
+    reply.status(statusCode).send(response);
   });
 
   app.addHook('onClose', async () => {
@@ -143,7 +183,7 @@ export async function start() {
   await mkdir(config.STORAGE_PATH, { recursive: true });
 
   // Start render worker
-  createWorker(config.REDIS_URL, async (job: Job<RenderJobData, RenderJobResult>) => {
+  const worker = createWorker(config.REDIS_URL, async (job: Job<RenderJobData, RenderJobResult>) => {
     const { type, url, options } = job.data;
     const start = performance.now();
 
@@ -162,6 +202,32 @@ export async function start() {
     const filePath = join(config.STORAGE_PATH, `${job.data.jobId}.${ext}`);
     await writeFile(filePath, result.buffer);
     return { resultPath: filePath, contentType: result.contentType, durationMs: Math.round(performance.now() - start) };
+  });
+
+  // Log render job completions
+  worker.on('completed', (job) => {
+    const result = job.returnvalue;
+    const format = result.contentType.includes('pdf') ? 'pdf' : (result.contentType.includes('jpeg') ? 'jpeg' : 'png');
+    app.log.info({
+      url: job.data.url,
+      type: job.data.type,
+      duration_ms: result.durationMs,
+      cache_hit: false, // Queue jobs are never cache hits
+      format,
+      job_id: job.data.jobId,
+      status: 'completed',
+    });
+  });
+
+  worker.on('failed', (job, error) => {
+    if (!job) return;
+    app.log.error({
+      url: job.data.url,
+      type: job.data.type,
+      job_id: job.data.jobId,
+      status: 'failed',
+      error: error.message,
+    });
   });
 
   // Start webhook worker

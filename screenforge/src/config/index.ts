@@ -8,6 +8,7 @@ const envSchema = z.object({
   API_KEY_SALT: z.string().min(16),
   ADMIN_API_KEY: z.string().min(16).optional(),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   BROWSER_POOL_SIZE: z.coerce.number().int().min(1).max(20).default(3),
   MAX_RENDERS_PER_CONTEXT: z.coerce.number().int().min(1).default(100),
   CACHE_TTL_SECONDS: z.coerce.number().int().min(0).default(3600),
