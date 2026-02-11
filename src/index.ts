@@ -67,9 +67,9 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
 
   // Request logging
   app.addHook('onResponse', (req, reply, done) => {
-    const duration = reply.getResponseTime();
+    const duration = reply.elapsedTime;
     const apiKeyPrefix = req.apiKey
-      ? `${req.apiKey.key.substring(0, req.apiKey.key.indexOf('_') + 6)}...`
+      ? req.apiKey.prefix
       : undefined;
 
     app.log.info({

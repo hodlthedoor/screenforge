@@ -6,13 +6,12 @@ import {
   updateUserPassword,
   setPasswordResetToken,
   getUserByResetToken,
-  clearPasswordResetToken,
   getUserByEmailToken,
   markEmailVerified,
   getUserByEmail,
 } from '../db/users.js';
 import { escapeHtml, generateCsrfToken } from '../utils/html.js';
-import { createExpiringToken, isExpired, PASSWORD_RESET_TTL, EMAIL_VERIFICATION_TTL } from '../auth/tokens.js';
+import { createExpiringToken, isExpired, PASSWORD_RESET_TTL } from '../auth/tokens.js';
 import { getPool } from '../db/index.js';
 
 interface AuthBody {
@@ -222,11 +221,10 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     // Update password
     await updateUserPassword(userId, newPassword);
 
-    // Rotate CSRF token
-    req.session.csrfToken = generateCsrfToken();
-    await req.session.save();
+    // Invalidate current session after password change.
+    req.session.destroy();
 
-    return reply.redirect('/dashboard/settings');
+    return reply.redirect('/login');
   });
 
   // Forgot password - request reset token

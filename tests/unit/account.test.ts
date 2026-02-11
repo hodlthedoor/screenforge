@@ -120,6 +120,46 @@ describe('account management', () => {
       expect(newLoginRes.headers.location).toBe('/dashboard');
     });
 
+    it('invalidates existing session after password change', async () => {
+      const regRes = await app.inject({ method: 'GET', url: '/register' });
+      const csrf = extractCsrfToken(regRes.body);
+      const cookie = extractCookie(regRes);
+
+      await app.inject({
+        method: 'POST',
+        url: '/register',
+        headers: { cookie },
+        payload: { email: 'test-account-session-invalidate@example.com', password: 'oldpassword', _csrf: csrf },
+      });
+
+      const settingsRes = await app.inject({
+        method: 'GET',
+        url: '/dashboard/settings',
+        headers: { cookie },
+      });
+      const settingsCsrf = extractCsrfToken(settingsRes.body);
+
+      const changeRes = await app.inject({
+        method: 'POST',
+        url: '/auth/change-password',
+        headers: { cookie },
+        payload: {
+          currentPassword: 'oldpassword',
+          newPassword: 'newpassword123',
+          _csrf: settingsCsrf,
+        },
+      });
+      expect(changeRes.statusCode).toBe(302);
+
+      const dashboardRes = await app.inject({
+        method: 'GET',
+        url: '/dashboard',
+        headers: { cookie },
+      });
+      expect(dashboardRes.statusCode).toBe(302);
+      expect(dashboardRes.headers.location).toBe('/login');
+    });
+
     it('rejects wrong current password', async () => {
       // Register user
       const regRes = await app.inject({ method: 'GET', url: '/register' });
@@ -600,7 +640,7 @@ describe('account management', () => {
 
       // Delete account
       const deleteRes = await app.inject({
-        method: 'POST',
+        method: 'DELETE',
         url: '/dashboard/account',
         headers: { cookie },
         payload: { password: 'password123', _csrf: settingsCsrf },
@@ -640,7 +680,7 @@ describe('account management', () => {
 
       // Delete account
       await app.inject({
-        method: 'POST',
+        method: 'DELETE',
         url: '/dashboard/account',
         headers: { cookie },
         payload: { password: 'password123', _csrf: settingsCsrf },
