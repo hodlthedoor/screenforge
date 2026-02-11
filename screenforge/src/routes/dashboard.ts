@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { getUserById, getUserApiKeys, linkApiKeyToUser, revokeUserApiKey } from '../db/users.js';
-import { createApiKey, getUsageStats } from '../db/api-keys.js';
+import { getUserById, getUserApiKeys, linkApiKeyToUser, revokeUserApiKey, verifyUserPassword, deleteUser } from '../db/users.js';
+import { createApiKey, getUsageStats, rotateApiKey } from '../db/api-keys.js';
 import { getPool } from '../db/index.js';
 import { escapeHtml, generateCsrfToken } from '../utils/html.js';
 
@@ -156,7 +156,7 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
         <td><code>${escapeHtml(k.prefix)}...</code></td>
         <td>${k.tier}</td>
         <td><span class="badge ${k.active ? 'badge-active' : 'badge-revoked'}">${k.active ? 'Active' : 'Revoked'}</span></td>
-        <td>${k.active ? `<form method="POST" action="/dashboard/keys/${k.id}/revoke" style="display:inline"><input type="hidden" name="_csrf" value="${csrfToken}"><button type="submit" class="btn btn-danger btn-sm">Revoke</button></form>` : '—'}</td>
+        <td>${k.active ? `<form method="POST" action="/dashboard/keys/${k.id}/rotate" style="display:inline;margin-right:8px"><input type="hidden" name="_csrf" value="${csrfToken}"><button type="submit" class="btn btn-primary btn-sm">Rotate</button></form><form method="POST" action="/dashboard/keys/${k.id}/revoke" style="display:inline"><input type="hidden" name="_csrf" value="${csrfToken}"><button type="submit" class="btn btn-danger btn-sm">Revoke</button></form>` : '—'}</td>
       </tr>`
     ).join('');
 
@@ -216,6 +216,36 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
     await revokeUserApiKey(user.id, id);
     req.session.csrfToken = generateCsrfToken();
     await req.session.save();
+    return reply.redirect('/dashboard/keys');
+  });
+
+  // Rotate key
+  app.post('/dashboard/keys/:id/rotate', { preHandler: requireAuth }, async (req, reply) => {
+    if (!verifyCsrf(req)) {
+      return reply.status(403).redirect('/dashboard/keys');
+    }
+
+    const user = req.dashboardUser!;
+    const { id } = req.params as { id: string };
+
+    // Verify ownership
+    const ownership = await getPool().query(
+      'SELECT 1 FROM user_api_keys WHERE user_id = $1 AND api_key_id = $2',
+      [user.id, id],
+    );
+    if (ownership.rows.length === 0) {
+      return reply.status(403).send('Not authorized');
+    }
+
+    // Rotate the key
+    const newRawKey = await rotateApiKey(id);
+
+    // Store new key in flash session
+    if (!req.session.flash) req.session.flash = {};
+    req.session.flash.newKey = newRawKey;
+    req.session.csrfToken = generateCsrfToken();
+    await req.session.save();
+
     return reply.redirect('/dashboard/keys');
   });
 
@@ -311,13 +341,62 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
         </div>
       </div>
       <div class="card">
+        <h2 style="margin-bottom:16px">Change Password</h2>
+        <form method="POST" action="/auth/change-password">
+          <input type="hidden" name="_csrf" value="${csrfToken}">
+          <div class="form-group" style="margin-bottom:16px">
+            <label>Current Password</label>
+            <input type="password" name="currentPassword" required style="max-width:400px">
+          </div>
+          <div class="form-group" style="margin-bottom:16px">
+            <label>New Password (min 8 characters)</label>
+            <input type="password" name="newPassword" minlength="8" required style="max-width:400px">
+          </div>
+          <button type="submit" class="btn btn-primary">Change Password</button>
+        </form>
+      </div>
+      <div class="card">
         <h2 style="margin-bottom:16px">Danger Zone</h2>
         <p style="color:var(--muted);margin-bottom:16px">Deleting your account will revoke all API keys and remove all data.</p>
-        <button class="btn btn-danger" onclick="if(confirm('Are you sure?'))document.getElementById('deleteForm').submit()">Delete Account</button>
-        <form id="deleteForm" method="POST" action="/dashboard/settings/delete" style="display:none"><input type="hidden" name="_csrf" value="${csrfToken}"></form>
+        <form method="POST" action="/dashboard/account" onsubmit="return confirm('Are you sure you want to delete your account? This cannot be undone.')">
+          <input type="hidden" name="_csrf" value="${csrfToken}">
+          <div class="form-group" style="margin-bottom:16px">
+            <label>Confirm your password to delete account</label>
+            <input type="password" name="password" required style="max-width:400px">
+          </div>
+          <button type="submit" class="btn btn-danger">Delete Account</button>
+        </form>
       </div>`;
 
     await req.session.save();
     return reply.type('text/html').send(dashboardLayout('Settings', 'settings', html, csrfToken));
+  });
+
+  // Delete account
+  app.post('/dashboard/account', { preHandler: requireAuth }, async (req, reply) => {
+    if (!verifyCsrf(req)) {
+      return reply.status(403).send('Invalid CSRF token');
+    }
+
+    const user = req.dashboardUser!;
+    const { password } = req.body as { password: string; _csrf: string };
+
+    if (!password) {
+      return reply.status(400).send('Password required');
+    }
+
+    // Verify password
+    const valid = await verifyUserPassword(user.id, password);
+    if (!valid) {
+      return reply.status(401).send('Incorrect password');
+    }
+
+    // Delete user (cascade deletes api keys, usage, render jobs, subscriptions via FK constraints)
+    await deleteUser(user.id);
+
+    // Destroy session
+    req.session.destroy();
+
+    return reply.redirect('/login');
   });
 }
