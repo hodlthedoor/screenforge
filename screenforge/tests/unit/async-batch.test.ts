@@ -47,10 +47,14 @@ describe('async render & batch', { timeout: 120_000 }, () => {
     await new Promise<void>((r) => fixtureServer.close(() => r()));
     await rm(TEST_STORAGE, { recursive: true, force: true });
     const pool = getPool();
-    await pool.query('DELETE FROM render_jobs');
-    await pool.query('DELETE FROM batch_jobs');
-    await pool.query('DELETE FROM usage_daily');
-    await pool.query('DELETE FROM api_keys WHERE name = $1', ['Async Test Key']);
+    const keyResult = await pool.query('SELECT id FROM api_keys WHERE name = $1', ['Async Test Key']);
+    const keyIds = keyResult.rows.map((r: { id: string }) => r.id);
+    if (keyIds.length > 0) {
+      await pool.query('DELETE FROM render_jobs WHERE api_key_id = ANY($1)', [keyIds]);
+      await pool.query('DELETE FROM batch_jobs WHERE api_key_id = ANY($1)', [keyIds]);
+      await pool.query('DELETE FROM usage_daily WHERE api_key_id = ANY($1)', [keyIds]);
+      await pool.query('DELETE FROM api_keys WHERE id = ANY($1)', [keyIds]);
+    }
     await closePool();
     resetPool();
     delete process.env.ALLOW_PRIVATE_URLS;
