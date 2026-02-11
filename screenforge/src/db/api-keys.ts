@@ -135,3 +135,36 @@ export async function listApiKeys(): Promise<ApiKey[]> {
     createdAt: row.created_at,
   }));
 }
+
+export interface WebhookConfig {
+  url: string | null;
+  secret: string | null;
+}
+
+export async function getWebhookConfig(apiKeyId: string): Promise<WebhookConfig> {
+  const result = await getPool().query(
+    `SELECT webhook_url, webhook_secret FROM api_keys WHERE id = $1`,
+    [apiKeyId],
+  );
+
+  if (result.rows.length === 0) {
+    throw new Error('API key not found');
+  }
+
+  const row = result.rows[0];
+  return {
+    url: row.webhook_url,
+    secret: row.webhook_secret,
+  };
+}
+
+export async function updateWebhookConfig(
+  apiKeyId: string,
+  url: string | null,
+  secret: string | null,
+): Promise<void> {
+  await getPool().query(
+    `UPDATE api_keys SET webhook_url = $1, webhook_secret = $2 WHERE id = $3`,
+    [url, secret, apiKeyId],
+  );
+}

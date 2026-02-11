@@ -80,6 +80,21 @@ describe('webhook signer', () => {
       expect(result.valid).toBe(true);
     });
 
+    it('rejects signature from the future', () => {
+      const futureTimestamp = Math.floor(Date.now() / 1000) + 400; // 400s in future (exceeds tolerance)
+      const signature = generateWebhookSignature(testPayload, testSecret, futureTimestamp);
+      const result = verifyWebhookSignature(testPayload, signature, testSecret, 300);
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain('future');
+    });
+
+    it('accepts signature slightly in the future within tolerance', () => {
+      const futureTimestamp = Math.floor(Date.now() / 1000) + 100; // 100s in future (within 300s tolerance)
+      const signature = generateWebhookSignature(testPayload, testSecret, futureTimestamp);
+      const result = verifyWebhookSignature(testPayload, signature, testSecret, 300);
+      expect(result.valid).toBe(true);
+    });
+
     it('rejects malformed signature', () => {
       const result = verifyWebhookSignature(testPayload, 'invalid-format', testSecret);
       expect(result.valid).toBe(false);
