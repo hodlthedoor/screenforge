@@ -5,6 +5,7 @@ import { listDeliveries, getDeliveryById, enqueueWebhook } from '../webhooks/del
 import { getWebhookConfig } from '../db/api-keys.js';
 import { createError } from '../security/errors.js';
 import { sanitizeCallbackUrl, SanitizeError } from '../security/sanitize.js';
+import { getConfig } from '../config/index.js';
 import { getPool } from '../db/index.js';
 
 const listDeliveriesSchema = z.object({
@@ -105,7 +106,7 @@ export async function webhooksRoutes(app: FastifyInstance) {
 
       // Validate webhook URL (SSRF protection)
       try {
-        sanitizeCallbackUrl(webhookConfig.url);
+        sanitizeCallbackUrl(webhookConfig.url, getConfig().ALLOW_PRIVATE_URLS);
       } catch (e) {
         if (e instanceof SanitizeError) {
           const err = createError('VALIDATION_ERROR', e.message);
