@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { buildServer } from '../../src/index.js';
+import { loadConfig } from '../../src/config/index.js';
 import type { FastifyInstance } from 'fastify';
 
 describe('error response format', () => {
@@ -8,6 +9,7 @@ describe('error response format', () => {
   beforeAll(async () => {
     process.env.API_KEY_SALT = 'test-salt-must-be-16-chars-long';
     process.env.NODE_ENV = 'test';
+    process.env.REQUIRE_AUTH = 'false';
     app = await buildServer({ skipBrowserInit: true });
   });
 
@@ -47,6 +49,7 @@ describe('error response format', () => {
 
       await testApp.close();
       process.env.REQUIRE_AUTH = 'false';
+      loadConfig();
 
       expect(response.statusCode).toBe(401);
       const body = JSON.parse(response.body);
