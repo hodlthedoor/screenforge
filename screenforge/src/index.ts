@@ -25,7 +25,7 @@ import { authRoutes } from './routes/auth.js';
 import { dashboardRoutes } from './routes/dashboard.js';
 import { billingRoutes } from './routes/billing.js';
 import { webhooksRoutes } from './routes/webhooks.js';
-import { registerLoggers } from './logging/index.js';
+import { registerLoggers, getLogger } from './logging/index.js';
 import { buildErrorResponse } from './security/errors.js';
 import { takeScreenshot } from './renderer/screenshot.js';
 import { renderPdf } from './renderer/pdf.js';
@@ -67,6 +67,11 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
 
   // Request logging
   app.addHook('onResponse', (req, reply, done) => {
+    if (!req.url.startsWith('/v1/')) {
+      done();
+      return;
+    }
+
     const duration = reply.elapsedTime;
     const apiKeyPrefix = req.apiKey
       ? req.apiKey.prefix
@@ -135,6 +140,11 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
   await ogRoutes(app, pool, cache);
   await webhooksRoutes(app);
 
+  app.setNotFoundHandler((req, reply) => {
+    const response = buildErrorResponse('NOT_FOUND', req);
+    reply.status(404).send(response);
+  });
+
   app.setErrorHandler((error: { message: string; statusCode?: number; code?: string; validation?: unknown }, req, reply) => {
     const statusCode = error.statusCode ?? 500;
 
@@ -181,6 +191,7 @@ export async function start() {
   // Start queue worker so async/batch jobs are processed
   const browserPool = (app as unknown as { browserPool: BrowserPool }).browserPool;
   await mkdir(config.STORAGE_PATH, { recursive: true });
+  const queueLogger = getLogger('queue');
 
   // Start render worker
   const worker = createWorker(config.REDIS_URL, async (job: Job<RenderJobData, RenderJobResult>) => {
@@ -208,7 +219,7 @@ export async function start() {
   worker.on('completed', (job) => {
     const result = job.returnvalue;
     const format = result.contentType.includes('pdf') ? 'pdf' : (result.contentType.includes('jpeg') ? 'jpeg' : 'png');
-    app.log.info({
+    queueLogger.info({
       url: job.data.url,
       type: job.data.type,
       duration_ms: result.durationMs,
@@ -221,9 +232,12 @@ export async function start() {
 
   worker.on('failed', (job, error) => {
     if (!job) return;
-    app.log.error({
+    queueLogger.error({
       url: job.data.url,
       type: job.data.type,
+      duration_ms: undefined,
+      cache_hit: false,
+      format: job.data.type === 'pdf' ? 'pdf' : 'png',
       job_id: job.data.jobId,
       status: 'failed',
       error: error.message,

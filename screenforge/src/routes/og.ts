@@ -5,7 +5,7 @@ import type { BrowserPool } from '../renderer/browser-pool.js';
 import { RenderCache } from '../cache/index.js';
 import { getConfig } from '../config/index.js';
 import { isPrivateUrl } from '../renderer/schemas.js';
-import { createError } from '../security/errors.js';
+import { sendError } from '../security/errors.js';
 
 const ogRequestSchema = z.object({
   url: z.string().url().optional(),
@@ -103,8 +103,8 @@ export async function ogRoutes(app: FastifyInstance, pool: BrowserPool, cache: R
   app.post('/v1/og', { preHandler: [authMiddleware] }, async (req, reply) => {
     const parsed = ogRequestSchema.safeParse(req.body);
     if (!parsed.success) {
-      const err = createError('VALIDATION_ERROR', undefined, { details: parsed.error.issues });
-      return reply.status(err.statusCode).send(err);
+      sendError(reply, req, 'VALIDATION_ERROR', { details: parsed.error.issues });
+      return;
     }
 
     const data = parsed.data;
@@ -114,15 +114,15 @@ export async function ogRoutes(app: FastifyInstance, pool: BrowserPool, cache: R
     let fetchedMeta: { title?: string; description?: string; siteName?: string; image?: string } | undefined;
     if (data.url) {
       if (!config.ALLOW_PRIVATE_URLS && isPrivateUrl(data.url)) {
-        const err = createError('SSRF_BLOCKED');
-        return reply.status(err.statusCode).send(err);
+        sendError(reply, req, 'SSRF_BLOCKED');
+        return;
       }
       fetchedMeta = await fetchOgMeta(data.url, pool, config.NAVIGATION_TIMEOUT_MS);
     }
 
     if (!data.title && !data.url) {
-      const err = createError('VALIDATION_ERROR', 'Either url or title must be provided');
-      return reply.status(err.statusCode).send(err);
+      sendError(reply, req, 'VALIDATION_ERROR', { message: 'Either url or title must be provided' });
+      return;
     }
 
     // Generate OG card HTML

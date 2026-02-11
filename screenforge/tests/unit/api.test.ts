@@ -48,8 +48,8 @@ describe('API endpoints', { timeout: 120_000 }, () => {
       });
       expect(res.statusCode).toBe(400);
       const body = JSON.parse(res.body);
-      expect(body.code).toBe('VALIDATION_ERROR');
-      expect(body.statusCode).toBe(400);
+      expect(body.error.code).toBe('VALIDATION_ERROR');
+      expect(body.error.request_id).toBeDefined();
     });
 
     it('returns 400 for invalid url', async () => {
@@ -114,7 +114,8 @@ describe('API endpoints', { timeout: 120_000 }, () => {
       });
       expect(res.statusCode).toBe(400);
       const body = JSON.parse(res.body);
-      expect(body.code).toBe('VALIDATION_ERROR');
+      expect(body.error.code).toBe('VALIDATION_ERROR');
+      expect(body.error.request_id).toBeDefined();
     });
 
     it('renders a PDF and returns buffer', async () => {
@@ -152,7 +153,8 @@ describe('API endpoints', { timeout: 120_000 }, () => {
       });
       expect(res.statusCode).toBe(400);
       const body = JSON.parse(res.body);
-      expect(body.code).toBe('SSRF_BLOCKED');
+      expect(body.error.code).toBe('SSRF_BLOCKED');
+      expect(body.error.request_id).toBeDefined();
 
       await ssrfApp.close();
       process.env.ALLOW_PRIVATE_URLS = 'true';
@@ -169,7 +171,8 @@ describe('API endpoints', { timeout: 120_000 }, () => {
       });
       expect(res.statusCode).toBe(400);
       const body = JSON.parse(res.body);
-      expect(body.code).toBe('SSRF_BLOCKED');
+      expect(body.error.code).toBe('SSRF_BLOCKED');
+      expect(body.error.request_id).toBeDefined();
 
       await ssrfApp.close();
       process.env.ALLOW_PRIVATE_URLS = 'true';
@@ -182,7 +185,8 @@ describe('API endpoints', { timeout: 120_000 }, () => {
       expect(res.statusCode).toBe(404);
       const body = JSON.parse(res.body);
       expect(body.error).toBeDefined();
-      expect(body.statusCode).toBe(404);
+      expect(body.error.code).toBe('NOT_FOUND');
+      expect(body.error.request_id).toBeDefined();
     });
   });
 });

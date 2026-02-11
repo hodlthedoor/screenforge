@@ -21,6 +21,12 @@ describe('error response format', () => {
     });
   }
 
+  function expectNoLegacyErrorShape(body: Record<string, unknown>) {
+    expect(body).not.toHaveProperty('code');
+    expect(body).not.toHaveProperty('statusCode');
+    expect(typeof body.error).toBe('object');
+  }
+
   beforeAll(async () => {
     process.env.API_KEY_SALT = 'test-salt-must-be-16-chars-long';
     process.env.NODE_ENV = 'test';
@@ -46,6 +52,7 @@ describe('error response format', () => {
       const requestId = String(response.headers['x-request-id']);
 
       expectCanonicalEnvelope(body, 'VALIDATION_ERROR', 'Validation failed', requestId);
+      expectNoLegacyErrorShape(body);
       expect(body.error.details).toBeDefined();
     });
 
@@ -70,6 +77,7 @@ describe('error response format', () => {
       const requestId = String(response.headers['x-request-id']);
 
       expectCanonicalEnvelope(body, 'AUTH_REQUIRED', 'API key required. Provide via Authorization: Bearer <key> or x-api-key header.', requestId);
+      expectNoLegacyErrorShape(body);
     });
 
     it('should return consistent format for not found errors', async () => {
@@ -83,6 +91,7 @@ describe('error response format', () => {
       const requestId = String(response.headers['x-request-id']);
 
       expectCanonicalEnvelope(body, 'JOB_NOT_FOUND', 'Job not found', requestId);
+      expectNoLegacyErrorShape(body);
     });
 
     it('should include details field only when needed', async () => {
@@ -112,6 +121,37 @@ describe('error response format', () => {
       expect(response.headers['x-request-id']).toBe(customRequestId);
       const body = JSON.parse(response.body);
       expect(body.error.request_id).toBe(customRequestId);
+    });
+
+    it('should return canonical envelope for batch validation errors', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/batch',
+        headers: { 'content-type': 'application/json' },
+        payload: { items: [] },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body);
+      const requestId = String(response.headers['x-request-id']);
+      expectCanonicalEnvelope(body, 'VALIDATION_ERROR', 'Validation failed', requestId);
+      expectNoLegacyErrorShape(body);
+      expect(body.error.details).toBeDefined();
+    });
+
+    it('should return canonical envelope for OG validation errors', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/og',
+        headers: { 'content-type': 'application/json' },
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body);
+      const requestId = String(response.headers['x-request-id']);
+      expectCanonicalEnvelope(body, 'VALIDATION_ERROR', 'Either url or title must be provided', requestId);
+      expectNoLegacyErrorShape(body);
     });
   });
 

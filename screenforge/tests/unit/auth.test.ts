@@ -128,7 +128,8 @@ describe('auth', () => {
       });
       expect(res.statusCode).toBe(401);
       const body = JSON.parse(res.body);
-      expect(body.code).toBe('AUTH_REQUIRED');
+      expect(body.error.code).toBe('AUTH_REQUIRED');
+      expect(body.error.request_id).toBeDefined();
       process.env.REQUIRE_AUTH = 'false';
     });
 
@@ -176,7 +177,8 @@ describe('auth', () => {
       });
       expect(res.statusCode).toBe(401);
       const body = JSON.parse(res.body);
-      expect(body.code).toBe('INVALID_API_KEY');
+      expect(body.error.code).toBe('INVALID_API_KEY');
+      expect(body.error.request_id).toBeDefined();
       process.env.REQUIRE_AUTH = 'false';
     });
   });
