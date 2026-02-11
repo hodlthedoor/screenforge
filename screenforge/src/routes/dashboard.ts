@@ -122,7 +122,12 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
       [user.id],
     );
 
-    const recentRows = recentResult.rows.map((r) =>
+    const recentRows = recentResult.rows.map((r: {
+      type: string;
+      url: string;
+      status: string;
+      duration_ms: number | null;
+    }) =>
       `<tr><td>${escapeHtml(r.type)}</td><td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(r.url)}</td><td><span class="badge ${r.status === 'completed' ? 'badge-active' : 'badge-revoked'}">${r.status}</span></td><td>${r.duration_ms ? r.duration_ms + 'ms' : '—'}</td></tr>`
     ).join('');
 
@@ -150,7 +155,7 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
     const csrfToken = ensureCsrfToken(req);
     const newKey = consumeFlash(req, 'newKey');
 
-    const keyRows = keys.map((k) =>
+    const keyRows = keys.map((k: { id: string; name: string; prefix: string; tier: string; active: boolean }) =>
       `<tr>
         <td>${escapeHtml(k.name)}</td>
         <td><code>${escapeHtml(k.prefix)}...</code></td>
@@ -276,10 +281,10 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
       [user.id],
     );
 
-    const dailyData = JSON.stringify(dailyResult.rows.map((r) => ({ date: r.date, count: Number(r.total) })));
-    const typeData = JSON.stringify(typeResult.rows.map((r) => ({ type: r.type, count: Number(r.count) })));
+    const dailyData = JSON.stringify(dailyResult.rows.map((r: { date: string; total: number | string }) => ({ date: r.date, count: Number(r.total) })));
+    const typeData = JSON.stringify(typeResult.rows.map((r: { type: string; count: number | string }) => ({ type: r.type, count: Number(r.count) })));
 
-    const statCards = await Promise.all(keys.map(async (k) => {
+    const statCards = await Promise.all(keys.map(async (k: { id: string; name: string; monthlyQuota: number }) => {
       const stats = await getUsageStats(k.id);
       return `<div class="stat"><div class="label">${escapeHtml(k.name)}</div><div class="value">${stats.thisMonth} / ${k.monthlyQuota.toLocaleString()}</div></div>`;
     }));

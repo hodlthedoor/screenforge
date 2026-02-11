@@ -294,7 +294,19 @@ export async function listDeliveries(options: ListDeliveriesOptions): Promise<Li
     [apiKeyId, validatedLimit, offset],
   );
 
-  const deliveries = result.rows.map((row) => ({
+  const deliveries = result.rows.map((row: {
+    id: string;
+    api_key_id: string;
+    job_id: string;
+    url: string;
+    payload: Record<string, unknown>;
+    status: DeliveryStatus['status'];
+    attempts: number;
+    last_status_code: number | null;
+    last_error: string | null;
+    created_at: Date;
+    delivered_at: Date | null;
+  }) => ({
     id: row.id,
     apiKeyId: row.api_key_id,
     jobId: row.job_id,
@@ -302,10 +314,10 @@ export async function listDeliveries(options: ListDeliveriesOptions): Promise<Li
     payload: row.payload,
     status: row.status,
     attempts: row.attempts,
-    lastStatusCode: row.last_status_code,
-    lastError: row.last_error,
+    lastStatusCode: row.last_status_code ?? undefined,
+    lastError: row.last_error ?? undefined,
     createdAt: row.created_at,
-    deliveredAt: row.delivered_at,
+    deliveredAt: row.delivered_at ?? undefined,
   }));
 
   return {

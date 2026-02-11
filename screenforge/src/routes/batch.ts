@@ -145,7 +145,14 @@ export async function batchRoutes(app: FastifyInstance) {
       status: batch.status,
       createdAt: batch.created_at,
       completedAt: batch.completed_at ?? undefined,
-      jobs: jobsResult.rows.map((j) => ({
+      jobs: jobsResult.rows.map((j: {
+        id: string;
+        type: string;
+        url: string;
+        status: string;
+        error: string | null;
+        duration_ms: number | null;
+      }) => ({
         id: j.id,
         type: j.type,
         url: j.url,

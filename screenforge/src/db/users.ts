@@ -7,6 +7,17 @@ export interface User {
   createdAt: Date;
 }
 
+export interface UserApiKey {
+  id: string;
+  prefix: string;
+  name: string;
+  tier: 'free' | 'starter' | 'pro' | 'business';
+  rateLimit: number;
+  monthlyQuota: number;
+  active: boolean;
+  createdAt: Date;
+}
+
 const BCRYPT_ROUNDS = 12;
 
 export async function createUser(email: string, password: string): Promise<User> {
@@ -52,7 +63,7 @@ export async function linkApiKeyToUser(userId: string, apiKeyId: string): Promis
   );
 }
 
-export async function getUserApiKeys(userId: string) {
+export async function getUserApiKeys(userId: string): Promise<UserApiKey[]> {
   const result = await getPool().query(
     `SELECT ak.id, ak.prefix, ak.name, ak.tier, ak.rate_limit, ak.monthly_quota, ak.active, ak.created_at
      FROM api_keys ak
@@ -61,7 +72,16 @@ export async function getUserApiKeys(userId: string) {
      ORDER BY ak.created_at DESC`,
     [userId],
   );
-  return result.rows.map((row) => ({
+  return result.rows.map((row: {
+    id: string;
+    prefix: string;
+    name: string;
+    tier: UserApiKey['tier'];
+    rate_limit: number;
+    monthly_quota: number;
+    active: boolean;
+    created_at: Date;
+  }) => ({
     id: row.id,
     prefix: row.prefix,
     name: row.name,
