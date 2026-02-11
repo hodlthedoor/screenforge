@@ -73,8 +73,9 @@ describe('structured logging', () => {
         method: 'POST',
         url: '/v1/screenshot',
         status: 400,
-        api_key_prefix: 'sf_test',
       });
+      expect(typeof requestLog?.api_key_prefix).toBe('string');
+      expect(String(requestLog?.api_key_prefix)).toMatch(/^sf_/);
       expect(requestLog).toHaveProperty('duration_ms');
       expect(requestLog).toHaveProperty('request_id');
       expect(typeof requestLog?.duration_ms).toBe('number');

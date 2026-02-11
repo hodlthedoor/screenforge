@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { readFile } from 'node:fs/promises';
 import { getPool } from '../db/index.js';
 import { getConfig } from '../config/index.js';
-import { createError } from '../security/errors.js';
+import { sendError } from '../security/errors.js';
 
 export async function asyncRenderRoutes(app: FastifyInstance) {
   const config = getConfig();
@@ -17,8 +17,8 @@ export async function asyncRenderRoutes(app: FastifyInstance) {
     );
 
     if (result.rows.length === 0) {
-      const err = createError('JOB_NOT_FOUND');
-      return reply.status(err.statusCode).send(err);
+      sendError(reply, req, 'JOB_NOT_FOUND');
+      return;
     }
 
     const job = result.rows[0];

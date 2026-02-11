@@ -1,242 +1,262 @@
 # Implementation Plan: Structured Logging and Error Handling Improvements
 
 ## Overview
-Enhance ScreenForge with comprehensive structured JSON logging and consistent error response formatting. Build on existing pino configuration, extend module-based child loggers, and ensure all error responses follow a canonical format with request tracking.
+Enhance ScreenForge with comprehensive structured JSON logging and consistent error handling. Build on existing Fastify/Pino setup, create typed child loggers for modules, add detailed request/render logging, ensure all error responses follow canonical format with request_id, and provide error documentation endpoint.
 
 ## Current State Analysis
 
-### Already Implemented ✅
-- **Pino logger** configured in `src/index.ts` with `pino-pretty` for development
-- **LOG_LEVEL** env var in config schema (lines 11)
-- **Request logging hook** (lines 69-84) — logs method, url, status, duration_ms, api_key_prefix, request_id
-- **Request ID tracking** via `src/security/request-id.ts` — generates/propagates request IDs
-- **Child logger infrastructure** in `src/logging/index.ts` — `getLogger()` creates module-bound loggers
-- **Render job logging** in queue worker (lines 208-230) — logs completed/failed jobs with url, type, duration_ms, format, job_id
-- **Error code infrastructure** in `src/security/errors.ts`:
-  - `ERROR_CODES` constant with status codes
-  - `buildErrorResponse()` creates `{ error: { code, message, details?, request_id } }`
-  - `sendError()` helper
-  - Legacy `createError()` (backwards compat)
-- **Error documentation endpoint** at `GET /v1/errors` (`src/docs/error-codes.ts`)
-- **Tests exist** for logging and error format (though incomplete)
+### ✅ Already Implemented
+- Fastify with Pino configured in `src/index.ts` (lines 40-50)
+- `pino-pretty` for development mode
+- `LOG_LEVEL` env var in config schema (default 'info')
+- Request logging hook with method, url, status, duration_ms, api_key_prefix, request_id (lines 69-84)
+- Render job completion logging in worker (lines 208-220)
+- `src/logging/index.ts` with `registerLoggers()` and `getLogger()` for child loggers
+- `src/security/errors.ts` with `ERROR_CODES`, `buildErrorResponse()`, `sendError()` functions
+- Error responses include request_id via `buildErrorResponse()`
+- `src/docs/error-codes.ts` with error documentation at GET /v1/errors
+- Test files: `tests/unit/logging.test.ts` and `tests/unit/error-format.test.ts` already exist
+- No console.log usage found in src/ (grep returned no results)
 
-### Issues to Fix ❌
-1. **Inconsistent error responses** — routes use legacy `createError()` which returns `{ error: string, code, statusCode, ...extra }` instead of canonical `{ error: { code, message, details?, request_id } }`
-2. **Missing request_id in errors** — request ID exists in headers but not consistently in error response bodies
-3. **No render logging in sync routes** — `/v1/screenshot` and `/v1/pdf` don't log renders (only async queue does)
-4. **Cache hit logging missing** — cache hits should be logged with duration_ms: 0
-5. **No module logger usage** — child loggers exist but aren't used in routes/queue/cache
-6. **Incomplete tests** — placeholders exist but don't verify actual behavior
+### ⚠️ Gaps to Address
+1. **Route handlers using legacy `createError()`** - render.ts, batch.ts, async-render.ts, og.ts still use old format
+2. **Error handler needs standardization** - index.ts error handler (lines 138-160) should use new format consistently
+3. **Queue worker logging incomplete** - Worker error handler doesn't use structured logger
+4. **Module loggers not used yet** - Child loggers exist but aren't utilized in renderer/cache/auth/billing modules
+5. **Cache logging missing** - No structured logs for cache hits/misses, evictions
+6. **Test coverage incomplete** - Existing tests are basic, need more comprehensive scenarios
 
-## Files to Create
+## Files to Create/Modify
 
-### None
-All required files already exist. We only need to modify existing files.
-
-## Files to Modify
-
-### 1. `src/security/errors.ts`
+### 1. **src/security/errors.ts** (MODIFY)
 **Changes:**
-- Deprecate `createError()` — add JSDoc `@deprecated` tag pointing to `buildErrorResponse()` + `sendError()`
-- Ensure `buildErrorResponse()` always includes `request_id` from `req.id` (already does)
-- Add type export for `ErrorResponse` (already exists)
+- Mark `createError()` as deprecated (add JSDoc comment)
+- Keep for backward compatibility but encourage migration to `buildErrorResponse()`/`sendError()`
+- No breaking changes
 
-**Rationale:** Centralize error formatting, ensure all errors are consistent.
+**Edge cases:**
+- Legacy code may still use `createError()` - it must continue working
+- Ensure all error codes have proper typing
 
-### 2. `src/routes/render.ts` (lines 14, 39-42, 48-50, 72-73, 97-98, 109-110, 116-117)
+### 2. **src/index.ts** (MODIFY)
 **Changes:**
-- Replace all `createError()` calls with `buildErrorResponse()` + `reply.status().send()`
-- Add render logging for sync requests:
-  - Cache HIT: log with `{ url, type: 'screenshot'|'pdf', duration_ms: 0, cache_hit: true, format, request_id }`
-  - Cache MISS: log with `{ url, type, duration_ms, cache_hit: false, format, request_id }`
-- Use `getLogger('renderer')` for render-specific logs
+- Update error handler (lines 138-160) to use `buildErrorResponse()` consistently
+- Ensure all error paths include request_id
+- Add structured logging for server startup/shutdown events
+- Log queue worker events with structured format
 
-**Example before:**
-```typescript
-const err = createError('SSRF_BLOCKED');
-return reply.status(err.statusCode).send(err);
-```
+**Edge cases:**
+- Fastify validation errors must preserve details field
+- 404 errors for undefined routes must work correctly
+- Uncaught exceptions should still be logged before crashing
 
-**Example after:**
-```typescript
-const response = buildErrorResponse('SSRF_BLOCKED', req);
-return reply.status(400).send(response);
-```
-
-### 3. `src/routes/batch.ts` (lines 9, 28-29, 41-42, 47-48, 56-57, 122-123)
+### 3. **src/routes/render.ts** (MODIFY)
 **Changes:**
-- Replace all `createError()` calls with `buildErrorResponse()` + `reply.status().send()`
-- Ensure all error responses include `request_id`
+- Replace all `createError()` calls with `sendError()`
+- Add structured logging for cache hits/misses using render logger
+- Log validation failures, SSRF blocks, rate limits with context
 
-### 4. `src/routes/async-render.ts` (lines 5, 20-21)
+**Edge cases:**
+- Async render path must maintain same response format
+- Rate limit errors must include retryAfter field
+- Cached responses must log with cache_hit:true
+
+### 4. **src/routes/batch.ts** (MODIFY)
 **Changes:**
-- Replace `createError()` calls with `buildErrorResponse()` + `reply.status().send()`
+- Replace all `createError()` calls with `sendError()`
+- Add structured logging for batch creation, validation failures
+- Log per-item validation errors with item index
 
-### 5. `src/routes/og.ts` (lines 8, 106-107, 117-118, 124-125)
+**Edge cases:**
+- Batch validation errors must include item index in details
+- SSRF checks per item must log which item failed
+
+### 5. **src/routes/async-render.ts** (MODIFY)
 **Changes:**
-- Replace `createError()` calls with `buildErrorResponse()` + `sendError()`
-- Add render logging:
-  - Cache HIT: log with `{ type: 'og', cache_hit: true, duration_ms: 0, format: 'png' }`
-  - Cache MISS: log with `{ type: 'og', cache_hit: false, duration_ms, format: 'png' }`
-- Use `getLogger('renderer')` for OG card logs
+- Replace `createError()` with `sendError()`
+- Add structured logging for job lookups, file reads
 
-### 6. `src/queue/render-queue.ts`
+**Edge cases:**
+- Job not found must use consistent error format
+- Accept header negotiation should be logged
+
+### 6. **src/routes/og.ts** (MODIFY)
 **Changes:**
-- Import `getLogger('queue')` for structured queue logging
-- Replace worker event logging (lines 46-92) with child logger:
-  - `worker.on('completed')` → use `queueLogger.info()`
-  - `worker.on('failed')` → use `queueLogger.error()`
-- Keep existing log structure (already good): `{ url, type, duration_ms, cache_hit: false, format, job_id, status }`
+- Replace `createError()` with `sendError()`
+- Add structured logging for OG card generation, metadata fetching
+- Log cache hits/misses for OG cards
 
-**Note:** Current implementation logs to `app.log` (lines 211-230 in `src/index.ts`), which is fine but should be moved to queue module.
+**Edge cases:**
+- URL fetch failures should be logged with error details
+- Template selection should be logged
 
-### 7. `src/index.ts`
+### 7. **src/renderer/screenshot.ts** (READ & MODIFY)
 **Changes:**
-- Move queue worker event logging (lines 208-230) to `src/queue/render-queue.ts`
-- Pass `getLogger('queue')` to worker creation
-- Simplify `createWorker()` signature to accept logger
+- Add structured logging using `getLogger('renderer')`
+- Log navigation start/complete, timeouts, errors
+- Include url, viewport, format in logs
 
-### 8. `src/cache/index.ts`
+**Edge cases:**
+- Timeout errors must be distinguishable from other errors
+- Browser crashes should be logged with full context
+
+### 8. **src/renderer/pdf.ts** (READ & MODIFY)
 **Changes:**
-- Import `getLogger('cache')` at module level
-- Add cache operation logging:
-  - `get()` — log cache hits/misses: `{ operation: 'get', key_prefix: hash.slice(0, 8), hit: boolean }`
-  - `set()` — log cache writes: `{ operation: 'set', key_prefix: hash.slice(0, 8), size_bytes: buffer.length }`
-  - `close()` — log shutdown: `{ operation: 'close' }`
+- Add structured logging using `getLogger('renderer')`
+- Log PDF generation start/complete, options used
+- Include url, format, margins in logs
 
-**Rationale:** Cache is a critical performance component; logging helps debug cache behavior.
+**Edge cases:**
+- Template rendering errors should be logged
+- Header/footer template issues should be captured
 
-### 9. `tests/unit/logging.test.ts`
+### 9. **src/cache/index.ts** (READ & MODIFY)
 **Changes:**
-- Complete placeholder tests (lines 69-73, 76-81):
-  - Test `api_key_prefix` logging when auth is present (create test API key)
-  - Test render job logging structure (mock queue worker events)
-- Add new tests:
-  - Verify child loggers include `module` field in logs
-  - Test cache hit/miss logging
-  - Test error logging format
+- Add structured logging using `getLogger('cache')`
+- Log cache operations: get, set, eviction, cleanup
+- Include hash, hit/miss, size, ttl in logs
 
-### 10. `tests/unit/error-format.test.ts`
+**Edge cases:**
+- Eviction events should log reason (TTL vs manual)
+- Redis connection errors must be logged
+
+### 10. **src/auth/middleware.ts** (READ & MODIFY)
 **Changes:**
-- Update assertions to match canonical error format:
-  - OLD: `{ error: string, code: string, statusCode: number }`
-  - NEW: `{ error: { code: string, message: string, details?: object, request_id: string } }`
-- Update line 32-35 to check for `body.error.code`, `body.error.message`, `body.error.request_id`
-- Update line 55-60 (auth errors)
-- Update line 69-75 (not found errors)
-- Update line 88-90 (details field)
-- Add test to verify `request_id` in error body matches `x-request-id` header
+- Add structured logging using `getLogger('auth')`
+- Log auth failures, API key lookups, disabled keys
+- Include api_key_prefix in logs (never full key)
 
-## Approach
+**Edge cases:**
+- Missing API key vs invalid API key should be distinguishable
+- Disabled keys should log with reason
 
-### Phase 1: Update Error Response Format (Low Risk)
-1. Modify all route handlers to use `buildErrorResponse()` + `sendError()`
-2. Remove all `createError()` calls (keep function for backward compat, mark deprecated)
-3. Verify error responses include `request_id` consistently
+### 11. **src/auth/rate-limiter.ts** (READ & MODIFY)
+**Changes:**
+- Add structured logging using `getLogger('auth')`
+- Log rate limit hits, window resets
+- Include api_key_id, limit, remaining in logs
 
-### Phase 2: Add Render Logging (Medium Risk)
-1. Add logging to sync render routes (`/v1/screenshot`, `/v1/pdf`, `/v1/og`)
-2. Log cache hits/misses with structured format
-3. Move queue worker logging from `src/index.ts` to `src/queue/render-queue.ts`
+**Edge cases:**
+- Quota exceeded vs rate limited should be separate logs
+- Redis errors in rate limiter must be logged
 
-### Phase 3: Add Cache Logging (Low Risk)
-1. Import logger in `src/cache/index.ts`
-2. Add operation logging (get, set, close)
-3. Keep logs minimal (key prefix, not full data)
+### 12. **src/queue/render-queue.ts** (MODIFY)
+**Changes:**
+- Use app.log or create queue logger in worker
+- Replace implicit logging with structured logs
+- Log job enqueue, start, complete, fail with full context
 
-### Phase 4: Complete Tests (Low Risk)
-1. Update `error-format.test.ts` to assert new canonical format
-2. Complete placeholder tests in `logging.test.ts`
-3. Add cache logging tests
+**Edge cases:**
+- Worker events must include jobId, apiKeyId, type, url
+- Batch completion checks should be logged
+- Webhook send attempts should be logged
 
-## Edge Cases and Considerations
+### 13. **tests/unit/logging.test.ts** (MODIFY)
+**Changes:**
+- Add tests for renderer, cache, auth, billing module loggers
+- Test structured log format (JSON fields, types)
+- Test render job logging (queue worker events)
+- Test cache hit/miss logging
 
-### 1. Fastify Request ID Availability
-- **Issue:** `req.id` is set by Fastify's built-in request ID generator, but we also have custom `requestIdHook`
-- **Solution:** Current `requestIdHook` reads `req.headers['x-request-id']` or generates UUID, then sets header. Fastify's `req.id` is separate. We should use `req.id` (Fastify's built-in) or ensure `req.id` is set in hook.
-- **Action:** Update `requestIdHook` to set `req.id` instead of just headers
+**Test scenarios:**
+- Child logger creation for all modules
+- Request logging includes all required fields
+- Render logging includes url, type, duration_ms, cache_hit, format
+- Error logging includes request_id, error code
 
-### 2. Performance Impact of Logging
-- **Issue:** Logging every cache operation might add overhead
-- **Solution:** Use `LOG_LEVEL=warn` in production to reduce verbosity; cache logs should be at `debug` level
-- **Action:** Use `logger.debug()` for cache operations, `logger.info()` for renders
+### 14. **tests/unit/error-format.test.ts** (MODIFY)
+**Changes:**
+- Test all route handlers for consistent error format
+- Test request_id propagation in all error paths
+- Test error details field is optional
+- Test /v1/errors endpoint completeness
 
-### 3. Log Volume in Production
-- **Issue:** High-traffic APIs generate massive logs
-- **Solution:**
-  - Request logs already exist (good)
-  - Render logs are 1:1 with requests (acceptable)
-  - Cache logs should be `debug` level (off in production by default)
-- **Action:** Set appropriate log levels (info for important events, debug for verbose)
+**Test scenarios:**
+- Validation errors from all routes
+- Auth errors (missing key, invalid key, disabled key)
+- Rate limit and quota errors
+- SSRF blocking errors
+- Job/batch not found errors
+- Internal server errors
+- All errors include request_id matching x-request-id header
 
-### 4. Sensitive Data in Logs
-- **Issue:** URLs, options, or user data might contain secrets
-- **Solution:**
-  - Never log full request bodies
-  - Log URL domain only (not query params) OR sanitize URLs
-  - Don't log API key values (only prefix — already done)
-- **Action:** Review all log statements to ensure no secrets leak
+## Implementation Approach
 
-### 5. Backwards Compatibility
-- **Issue:** External clients might depend on old error format `{ error: string, code: string }`
-- **Solution:**
-  - Keep `createError()` but deprecate it
-  - Update all internal usage to new format
-  - Document breaking change in migration guide
-- **Action:** Add deprecation warning to `createError()` JSDoc
+### Phase 1: Error Format Standardization (Files 1-6)
+1. Deprecate `createError()` in errors.ts with JSDoc
+2. Update error handler in index.ts to use `buildErrorResponse()`
+3. Migrate all route handlers (render, batch, async-render, og) to `sendError()`
+4. Verify error format consistency across all endpoints
 
-### 6. Request ID Propagation to Queue Jobs
-- **Issue:** Async/batch jobs don't have original request context
-- **Solution:**
-  - Store `request_id` in job data when enqueueing
-  - Include in job completion/failure logs
-- **Action:** Add `requestId` field to `RenderJobData` interface, log it in worker events
+### Phase 2: Module Logger Integration (Files 7-12)
+1. Add logging to renderer modules (screenshot.ts, pdf.ts)
+2. Add logging to cache operations (index.ts)
+3. Add logging to auth middleware and rate limiter
+4. Update queue worker to use structured logging
+5. Add logging to billing operations (if any direct calls exist)
 
-### 7. Error Handler Hook
-- **Issue:** Global error handler (lines 138-160 in `src/index.ts`) already uses `buildErrorResponse()` — good!
-- **Solution:** No changes needed, already correct
-- **Action:** Verify all error paths go through this handler
+### Phase 3: Enhanced Request Logging (File 1)
+1. Ensure request logging hook captures all fields
+2. Add error logging in error handler
+3. Add startup/shutdown logging
+4. Verify log format in development (pino-pretty) and production (JSON)
 
-### 8. Test Environment Logging
-- **Issue:** Tests disable logging (`logger: false` when `NODE_ENV=test`)
-- **Solution:** Mock logger in tests that need to verify log output
-- **Action:** Use `vi.spyOn(app.log, 'info')` to capture logs in tests
+### Phase 4: Test Coverage (Files 13-14)
+1. Update logging.test.ts with comprehensive module logger tests
+2. Update error-format.test.ts with all error scenarios
+3. Add integration tests for render job logging
+4. Verify all tests pass with new logging/error format
 
-### 9. Log Correlation Across Services
-- **Issue:** If ScreenForge calls external services (webhooks), request IDs should propagate
-- **Solution:** Include `X-Request-Id` header in outbound webhook requests
-- **Action:** Update webhook delivery to include request ID (future enhancement, out of scope)
+## Edge Cases & Considerations
 
-### 10. Module Logger Initialization
-- **Issue:** `getLogger()` throws if called before `registerLoggers(app)`
-- **Solution:** Already handled in current implementation
-- **Action:** Ensure all modules import logger lazily (inside route handlers, not at module level)
+### Logging Edge Cases
+1. **Log levels** - Respect LOG_LEVEL env var; don't log sensitive data at any level
+2. **Performance** - Structured logging should not impact render performance; use async logging
+3. **API keys** - Log only prefix (first 7 chars), never full key
+4. **URLs** - Log full URL in render jobs but truncate if excessively long (>200 chars)
+5. **Error stacks** - Include stack traces in error logs but not in error responses
+6. **Request IDs** - Preserve custom x-request-id headers; generate if missing
+7. **Queue workers** - Workers run in separate process; need access to logger (pass via app.log)
+8. **Test mode** - Logger should be disabled in tests (already handled by NODE_ENV=test)
 
-## Implementation Order
+### Error Handling Edge Cases
+1. **Fastify validation** - Preserve Zod validation details in error response
+2. **404s** - Catch-all 404 for undefined routes must use NOT_FOUND code
+3. **500s** - Unhandled exceptions should log stack but return generic INTERNAL_ERROR to client
+4. **Rate limiting** - Must include Retry-After header and retryAfter in response body
+5. **SSRF blocking** - Must clearly indicate which URL was blocked
+6. **Batch errors** - Must indicate which item in batch failed (include index)
+7. **Webhook failures** - Should be logged but not block render job completion
+8. **Database errors** - Should be logged with query context but not expose SQL to client
 
-1. **Update `src/security/request-id.ts`** — set `req.id` to match header
-2. **Update route handlers** (render.ts, batch.ts, async-render.ts, og.ts) — replace `createError()`
-3. **Add render logging** to sync routes (render.ts, og.ts)
-4. **Move queue logging** from index.ts to render-queue.ts
-5. **Add cache logging** to cache/index.ts
-6. **Update tests** (error-format.test.ts, logging.test.ts)
-7. **Run tests** — verify all assertions pass
-8. **Manual testing** — trigger errors, check logs, verify request IDs
+### Backward Compatibility
+1. **createError()** - Keep as deprecated but functional for existing code
+2. **Legacy error format** - Some old clients may expect old format; migration should be gradual
+3. **Webhook payloads** - Don't change webhook payload format (separate from API responses)
+4. **Log format** - Ensure pino-pretty still works for development
+
+### Security Considerations
+1. **Never log** - Full API keys, passwords, tokens, secrets
+2. **Sanitize logs** - Don't log user-provided HTML/scripts that could pollute logs
+3. **Request ID** - Don't allow malicious request IDs to inject log data
+4. **Error details** - Don't expose internal paths, database structure, or stack traces to clients
 
 ## Success Criteria
+- [ ] All route handlers use `sendError()` consistently
+- [ ] All errors include request_id matching x-request-id header
+- [ ] All errors follow canonical format: `{error: {code, message, details?, request_id}}`
+- [ ] GET /v1/errors returns complete error documentation
+- [ ] Module loggers (renderer, queue, cache, auth, billing) used throughout
+- [ ] Request logging includes method, url, status, duration_ms, api_key_prefix, request_id
+- [ ] Render logging includes url, type, duration_ms, cache_hit, format
+- [ ] No console.log usage in src/
+- [ ] All tests pass (logging.test.ts, error-format.test.ts, existing tests)
+- [ ] No breaking changes to API responses or webhook payloads
+- [ ] LOG_LEVEL env var controls verbosity correctly
 
-- ✅ All error responses follow canonical format: `{ error: { code, message, details?, request_id } }`
-- ✅ All API requests log structured JSON with `method`, `url`, `status`, `duration_ms`, `api_key_prefix`, `request_id`
-- ✅ All render operations log with `url`, `type`, `duration_ms`, `cache_hit`, `format`, `request_id`
-- ✅ All module loggers (renderer, queue, cache, auth, billing) are available and used
-- ✅ `request_id` appears in both response headers and error response bodies
-- ✅ Tests pass and verify log format, error format, request ID propagation
-- ✅ No console.log/console.error statements remain (all replaced with structured logger)
-
-## Out of Scope
-
-- Log aggregation/shipping (Datadog, CloudWatch, etc.) — infrastructure concern
-- Distributed tracing (OpenTelemetry) — future enhancement
-- Auth/billing module logging — no changes needed yet (covered by request logging)
-- Webhook request ID propagation — future enhancement
-- Log retention/rotation — handled by deployment environment
+## Execution Notes
+- **No breaking changes** - Existing API behavior must be preserved
+- **Incremental migration** - Routes can be updated one at a time
+- **Test-driven** - Update tests first, then implementation
+- **Backward compatible** - Keep `createError()` functional
+- **Performance** - Async logging must not block requests

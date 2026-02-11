@@ -11,7 +11,7 @@ import type { SlidingWindowRateLimiter } from '../auth/rate-limiter.js';
 import { getQueue, type RenderJobData } from '../queue/render-queue.js';
 import { getPool } from '../db/index.js';
 import { sanitizeUrl, sanitizeSelector, sanitizeWaitFor, sanitizeTemplate, sanitizeCallbackUrl, SanitizeError } from '../security/sanitize.js';
-import { createError } from '../security/errors.js';
+import { sendError } from '../security/errors.js';
 
 const FORMAT_EXT: Record<string, string> = {
   'image/png': 'png',
@@ -36,17 +36,17 @@ export async function renderRoutes(
     reply.header('X-RateLimit-Reset', String(Math.ceil(result.resetAt / 1000)));
 
     if (!result.allowed) {
-      const err = createError('RATE_LIMITED', undefined, {
-        retryAfter: Math.ceil((result.resetAt - Date.now()) / 1000),
+      sendError(reply, req, 'RATE_LIMITED', {
+        details: {
+          retryAfter: Math.ceil((result.resetAt - Date.now()) / 1000),
+        },
       });
-      reply.status(err.statusCode).send(err);
       return true;
     }
 
     const usage = await getUsageStats(req.apiKey.id);
     if (usage.thisMonth >= req.apiKey.monthlyQuota) {
-      const err = createError('QUOTA_EXCEEDED');
-      reply.status(err.statusCode).send(err);
+      sendError(reply, req, 'QUOTA_EXCEEDED');
       return true;
     }
 
@@ -69,9 +69,10 @@ export async function renderRoutes(
       sanitizeCallbackUrl(callbackUrl);
     } catch (e) {
       if (e instanceof SanitizeError) {
-        const err = createError('VALIDATION_ERROR', e.message);
-        return reply.status(err.statusCode).send(err);
+        sendError(reply, req, 'VALIDATION_ERROR', { message: e.message });
+        return;
       }
+      throw e;
     }
 
     const jobResult = await getPool().query(
@@ -94,8 +95,8 @@ export async function renderRoutes(
   app.post('/v1/screenshot', { preHandler: [authMiddleware] }, async (req, reply) => {
     const parsed = screenshotOptionsSchema.safeParse(req.body);
     if (!parsed.success) {
-      const err = createError('VALIDATION_ERROR', undefined, { details: parsed.error.issues });
-      return reply.status(err.statusCode).send(err);
+      sendError(reply, req, 'VALIDATION_ERROR', { details: parsed.error.issues });
+      return;
     }
 
     const options = parsed.data;
@@ -106,15 +107,15 @@ export async function renderRoutes(
       sanitizeWaitFor(options.waitFor);
     } catch (e) {
       if (e instanceof SanitizeError) {
-        const err = createError('VALIDATION_ERROR', e.message);
-        return reply.status(err.statusCode).send(err);
+        sendError(reply, req, 'VALIDATION_ERROR', { message: e.message });
+        return;
       }
       throw e;
     }
 
     if (!config.ALLOW_PRIVATE_URLS && isPrivateUrl(options.url)) {
-      const err = createError('SSRF_BLOCKED');
-      return reply.status(err.statusCode).send(err);
+      sendError(reply, req, 'SSRF_BLOCKED');
+      return;
     }
 
     const blocked = await checkRateAndQuota(req, reply);
@@ -151,8 +152,8 @@ export async function renderRoutes(
   app.post('/v1/pdf', { preHandler: [authMiddleware] }, async (req, reply) => {
     const parsed = pdfOptionsSchema.safeParse(req.body);
     if (!parsed.success) {
-      const err = createError('VALIDATION_ERROR', undefined, { details: parsed.error.issues });
-      return reply.status(err.statusCode).send(err);
+      sendError(reply, req, 'VALIDATION_ERROR', { details: parsed.error.issues });
+      return;
     }
 
     const options = parsed.data;
@@ -163,15 +164,15 @@ export async function renderRoutes(
       sanitizeTemplate(options.footerTemplate);
     } catch (e) {
       if (e instanceof SanitizeError) {
-        const err = createError('VALIDATION_ERROR', e.message);
-        return reply.status(err.statusCode).send(err);
+        sendError(reply, req, 'VALIDATION_ERROR', { message: e.message });
+        return;
       }
       throw e;
     }
 
     if (!config.ALLOW_PRIVATE_URLS && isPrivateUrl(options.url)) {
-      const err = createError('SSRF_BLOCKED');
-      return reply.status(err.statusCode).send(err);
+      sendError(reply, req, 'SSRF_BLOCKED');
+      return;
     }
 
     const blocked = await checkRateAndQuota(req, reply);

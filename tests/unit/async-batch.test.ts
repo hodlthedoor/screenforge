@@ -122,7 +122,8 @@ describe('async render & batch', { timeout: 120_000 }, () => {
       });
       expect(res.statusCode).toBe(404);
       const body = JSON.parse(res.body);
-      expect(body.code).toBe('JOB_NOT_FOUND');
+      expect(body.error.code).toBe('JOB_NOT_FOUND');
+      expect(body.error.request_id).toBeDefined();
     });
   });
 
@@ -159,7 +160,8 @@ describe('async render & batch', { timeout: 120_000 }, () => {
       });
       expect(res.statusCode).toBe(400);
       const body = JSON.parse(res.body);
-      expect(body.code).toBe('VALIDATION_ERROR');
+      expect(body.error.code).toBe('VALIDATION_ERROR');
+      expect(body.error.request_id).toBeDefined();
     });
 
     it('rejects batch with invalid item URL', async () => {
@@ -227,7 +229,8 @@ describe('async render & batch', { timeout: 120_000 }, () => {
       });
       expect(res.statusCode).toBe(404);
       const body = JSON.parse(res.body);
-      expect(body.code).toBe('BATCH_NOT_FOUND');
+      expect(body.error.code).toBe('BATCH_NOT_FOUND');
+      expect(body.error.request_id).toBeDefined();
     });
   });
 });

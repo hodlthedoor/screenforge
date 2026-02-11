@@ -6,7 +6,7 @@ import { authMiddleware } from '../auth/middleware.js';
 import { getConfig } from '../config/index.js';
 import { screenshotOptionsSchema, pdfOptionsSchema, isPrivateUrl } from '../renderer/schemas.js';
 import { sanitizeCallbackUrl, SanitizeError } from '../security/sanitize.js';
-import { createError } from '../security/errors.js';
+import { sendError } from '../security/errors.js';
 
 const batchItemSchema = z.object({
   type: z.enum(['screenshot', 'pdf']).default('screenshot'),
@@ -25,8 +25,8 @@ export async function batchRoutes(app: FastifyInstance) {
   app.post('/v1/batch', { preHandler: [authMiddleware] }, async (req, reply) => {
     const parsed = batchRequestSchema.safeParse(req.body);
     if (!parsed.success) {
-      const err = createError('VALIDATION_ERROR', undefined, { details: parsed.error.issues });
-      return reply.status(err.statusCode).send(err);
+      sendError(reply, req, 'VALIDATION_ERROR', { details: parsed.error.issues });
+      return;
     }
 
     const { items } = parsed.data;
@@ -38,14 +38,19 @@ export async function batchRoutes(app: FastifyInstance) {
       const schema = item.type === 'pdf' ? pdfOptionsSchema : screenshotOptionsSchema;
       const check = schema.safeParse(fullOptions);
       if (!check.success) {
-        const err = createError('VALIDATION_ERROR', `Validation failed for item ${i}`, { details: check.error.issues });
-        return reply.status(err.statusCode).send(err);
+        sendError(reply, req, 'VALIDATION_ERROR', {
+          message: `Validation failed for item ${i}`,
+          details: check.error.issues,
+        });
+        return;
       }
 
       // SSRF check for each item URL
       if (!config.ALLOW_PRIVATE_URLS && isPrivateUrl(item.url)) {
-        const err = createError('SSRF_BLOCKED', `Item ${i}: URLs targeting private networks are not allowed`);
-        return reply.status(err.statusCode).send(err);
+        sendError(reply, req, 'SSRF_BLOCKED', {
+          message: `Item ${i}: URLs targeting private networks are not allowed`,
+        });
+        return;
       }
 
       if (item.callbackUrl) {
@@ -53,8 +58,10 @@ export async function batchRoutes(app: FastifyInstance) {
           sanitizeCallbackUrl(item.callbackUrl);
         } catch (e) {
           if (e instanceof SanitizeError) {
-            const err = createError('VALIDATION_ERROR', `Item ${i}: ${e.message}`);
-            return reply.status(err.statusCode).send(err);
+            sendError(reply, req, 'VALIDATION_ERROR', {
+              message: `Item ${i}: ${e.message}`,
+            });
+            return;
           }
           throw e;
         }
@@ -119,8 +126,8 @@ export async function batchRoutes(app: FastifyInstance) {
     );
 
     if (batchResult.rows.length === 0) {
-      const err = createError('BATCH_NOT_FOUND');
-      return reply.status(err.statusCode).send(err);
+      sendError(reply, req, 'BATCH_NOT_FOUND');
+      return;
     }
 
     const batch = batchResult.rows[0];

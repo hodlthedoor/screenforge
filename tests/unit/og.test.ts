@@ -167,7 +167,8 @@ describe('OG card generation', { timeout: 120_000 }, () => {
       });
       expect(res.statusCode).toBe(400);
       const body = JSON.parse(res.body);
-      expect(body.code).toBe('VALIDATION_ERROR');
+      expect(body.error.code).toBe('VALIDATION_ERROR');
+      expect(body.error.request_id).toBeDefined();
     });
 
     it('generates dark theme OG card', async () => {
