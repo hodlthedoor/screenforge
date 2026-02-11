@@ -168,3 +168,35 @@ export async function updateWebhookConfig(
     [url, secret, apiKeyId],
   );
 }
+
+/**
+ * Rotate an API key (generate new key while keeping tier/quota/name)
+ */
+export async function rotateApiKey(keyId: string): Promise<string> {
+  // Get current key details
+  const result = await getPool().query(
+    `SELECT tier, name FROM api_keys WHERE id = $1`,
+    [keyId],
+  );
+
+  if (result.rows.length === 0) {
+    throw new Error('API key not found');
+  }
+
+  const { tier, name } = result.rows[0];
+
+  // Generate new raw key with same tier
+  const prefix = tier === 'free' ? 'sf_test_' : 'sf_live_';
+  const random = randomBytes(24).toString('base64url');
+  const rawKey = prefix + random;
+  const keyHash = hashApiKey(rawKey);
+  const keyPrefix = rawKey.slice(0, rawKey.indexOf('_', 3) + 1);
+
+  // Update existing row with new hash and prefix
+  await getPool().query(
+    `UPDATE api_keys SET key_hash = $1, prefix = $2, active = true WHERE id = $3`,
+    [keyHash, keyPrefix, keyId],
+  );
+
+  return rawKey;
+}
