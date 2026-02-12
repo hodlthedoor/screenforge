@@ -26,7 +26,7 @@ const png = await client.screenshot('https://example.com', { fullPage: true });
 ```ts
 const client = new ScreenForge({
   apiKey: 'sf_...',
-  baseUrl: 'https://api.screenforge.dev', // optional, default: http://localhost:3000
+  baseUrl: 'https://api.screenforge.dev', // optional, default: http://localhost:3100
   timeout: 30_000, // optional request timeout (ms)
   maxRetries: 2, // optional retry count
 });
@@ -71,6 +71,7 @@ All SDK errors extend `ScreenForgeError`.
 - `AuthenticationError` for `401`/`403`
 - `RateLimitError` for `429` (includes `retryAfter` when available)
 - `ScreenForgeError` for other API/network/timeouts
+- Error metadata from API envelopes is surfaced on errors: `code`, `requestId`, `details`, `retryAfter`
 
 ```ts
 import { RateLimitError } from '@screenforge/sdk';

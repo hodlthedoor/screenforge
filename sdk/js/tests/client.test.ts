@@ -58,6 +58,16 @@ describe('ScreenForge client', () => {
     expect(JSON.parse(String(init.body))).toMatchObject({ url: 'https://example.com', fullPage: true });
   });
 
+  it('uses http://localhost:3100 as the default baseUrl', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(binaryResponse('png-data', 'image/png'));
+    const defaultClient = new ScreenForge({ apiKey: 'test-key' });
+
+    await defaultClient.screenshot('https://example.com');
+
+    const [url] = fetchMock.mock.calls[0] as [string];
+    expect(url).toBe('http://localhost:3100/v1/screenshot');
+  });
+
   it('pdf() posts to /v1/pdf and returns Buffer', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(binaryResponse('pdf-data', 'application/pdf'));
 
@@ -210,7 +220,14 @@ describe('ScreenForge client', () => {
 
   it('throws ValidationError for 400 responses', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      jsonResponse({ error: 'Validation failed', code: 'VALIDATION_ERROR', details: [{ path: ['url'] }] }, 400),
+      jsonResponse({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Validation failed',
+          details: [{ path: ['url'] }],
+          request_id: 'req_validation_1',
+        },
+      }, 400),
     );
 
     await expect(client.screenshot('not-a-url')).rejects.toBeInstanceOf(ValidationError);
@@ -218,7 +235,13 @@ describe('ScreenForge client', () => {
 
   it('throws AuthenticationError for 401 responses', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      jsonResponse({ error: 'Invalid API key', code: 'INVALID_API_KEY' }, 401),
+      jsonResponse({
+        error: {
+          code: 'INVALID_API_KEY',
+          message: 'Invalid API key',
+          request_id: 'req_auth_1',
+        },
+      }, 401),
     );
 
     await expect(client.getUsage()).rejects.toBeInstanceOf(AuthenticationError);
@@ -226,13 +249,57 @@ describe('ScreenForge client', () => {
 
   it('throws RateLimitError for 429 responses and exposes retryAfter', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      jsonResponse({ error: 'Rate limit exceeded', code: 'RATE_LIMITED', retryAfter: 12 }, 429),
+      jsonResponse({
+        error: {
+          code: 'RATE_LIMITED',
+          message: 'Rate limit exceeded',
+          details: {
+            retryAfter: 12,
+          },
+          request_id: 'req_rate_1',
+        },
+      }, 429),
     );
 
     const noRetryClient = new ScreenForge({ apiKey: 'test-key', baseUrl, maxRetries: 0 });
     await expect(noRetryClient.getUsage()).rejects.toMatchObject({
       name: 'RateLimitError',
+      code: 'RATE_LIMITED',
+      requestId: 'req_rate_1',
+      details: {
+        retryAfter: 12,
+      },
       retryAfter: 12,
+    });
+  });
+
+  it('parses nested error envelope metadata from API responses', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      jsonResponse({
+        error: {
+          error: {
+            code: 'RATE_LIMITED',
+            message: 'Rate limit exceeded',
+            details: {
+              retryAfter: 9,
+              reason: 'burst',
+            },
+            request_id: 'req_nested_1',
+          },
+        },
+      }, 429),
+    );
+
+    const noRetryClient = new ScreenForge({ apiKey: 'test-key', baseUrl, maxRetries: 0 });
+    await expect(noRetryClient.getUsage()).rejects.toMatchObject({
+      name: 'RateLimitError',
+      code: 'RATE_LIMITED',
+      requestId: 'req_nested_1',
+      details: {
+        retryAfter: 9,
+        reason: 'burst',
+      },
+      retryAfter: 9,
     });
   });
 
