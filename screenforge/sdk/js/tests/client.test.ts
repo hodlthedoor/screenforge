@@ -127,6 +127,31 @@ describe('ScreenForge client', () => {
     });
   });
 
+  it('screenshotAsync() throws on malformed payload without job id', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      jsonResponse({ pollUrl: `${baseUrl}/v1/render/job_missing` }, 202),
+    );
+
+    await expect(client.screenshotAsync('https://example.com')).rejects.toMatchObject({
+      name: 'ScreenForgeError',
+      code: 'MALFORMED_RESPONSE',
+    });
+  });
+
+  it('batchRender() throws on malformed job payload without job id', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      jsonResponse({
+        batchId: 'batch_123',
+        jobs: [{ pollUrl: `${baseUrl}/v1/render/job_missing` }],
+      }, 202),
+    );
+
+    await expect(client.batchRender([{ type: 'screenshot', url: 'https://a.example.com' }])).rejects.toMatchObject({
+      name: 'ScreenForgeError',
+      code: 'MALFORMED_RESPONSE',
+    });
+  });
+
   it('pollJob() gets JSON job payload', async () => {
     const payload: RenderJob = {
       id: 'job_1',
