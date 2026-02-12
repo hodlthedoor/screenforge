@@ -73,11 +73,13 @@ interface RequestOptions {
 }
 
 interface ApiErrorResponse {
-  error?: string | { message?: string; details?: unknown; request_id?: string; code?: string };
+  error?: unknown;
   code?: string;
   details?: unknown;
   request_id?: string;
+  requestId?: string;
   retryAfter?: number;
+  retry_after?: number;
 }
 
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -97,7 +99,7 @@ export class ScreenForge {
     }
 
     this.apiKey = options.apiKey;
-    this.baseUrl = (options.baseUrl ?? 'http://localhost:3000').replace(/\/$/, '');
+    this.baseUrl = (options.baseUrl ?? 'http://localhost:3100').replace(/\/$/, '');
     this.timeout = options.timeout ?? DEFAULT_TIMEOUT_MS;
     this.maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
     this.retryBaseDelayMs = options.retryBaseDelayMs ?? DEFAULT_RETRY_BASE_DELAY_MS;
@@ -197,8 +199,12 @@ export class ScreenForge {
         }
 
         const parsed = await this.parseErrorResponse(response);
-        const retryAfterHeader = response.headers.get('retry-after');
-        const retryAfterSeconds = parsed.retryAfter ?? (retryAfterHeader ? Number(retryAfterHeader) : undefined);
+        const metadata = this.extractErrorMetadata(parsed, response.status);
+        const retryAfterHeader = this.parseRetryAfterHeader(response.headers.get('retry-after'));
+        const retryAfterSeconds = metadata.retryAfter ?? retryAfterHeader;
+        if (retryAfterSeconds !== undefined) {
+          metadata.retryAfter = retryAfterSeconds;
+        }
 
         if (this.shouldRetryStatus(response.status) && attempt < this.maxRetries) {
           const delay = this.retryDelay(attempt, retryAfterSeconds);
@@ -206,7 +212,7 @@ export class ScreenForge {
           continue;
         }
 
-        throw this.mapHttpError(response.status, parsed, retryAfterSeconds);
+        throw this.mapHttpError(response.status, metadata);
       } catch (err) {
         clearTimeout(timeoutHandle);
 
@@ -262,42 +268,159 @@ export class ScreenForge {
     }
   }
 
-  private mapHttpError(status: number, parsed: ApiErrorResponse, retryAfter?: number): ScreenForgeError {
-    const message = this.errorMessage(parsed, status);
+  private mapHttpError(status: number, metadata: NormalizedApiError): ScreenForgeError {
     const details: RequestErrorDetails = {
       status,
-      code: parsed.code,
-      details: parsed.details,
-      requestId: parsed.request_id,
-      retryAfter,
+      code: metadata.code,
+      details: metadata.details,
+      requestId: metadata.requestId,
+      retryAfter: metadata.retryAfter,
     };
 
     if (status === 429) {
-      return new RateLimitError(message, details);
+      return new RateLimitError(metadata.message, details);
     }
 
     if (status === 400) {
-      return new ValidationError(message, details);
+      return new ValidationError(metadata.message, details);
     }
 
     if (status === 401 || status === 403) {
-      return new AuthenticationError(message, details);
+      return new AuthenticationError(metadata.message, details);
     }
 
-    return new ScreenForgeError(message, details);
+    return new ScreenForgeError(metadata.message, details);
   }
 
-  private errorMessage(parsed: ApiErrorResponse, status: number): string {
+  private extractErrorMetadata(parsed: ApiErrorResponse, status: number): NormalizedApiError {
+    const queue: Record<string, unknown>[] = [];
+    const seen = new Set<Record<string, unknown>>();
+
+    const enqueue = (value: unknown) => {
+      if (!isObject(value)) {
+        return;
+      }
+      if (seen.has(value)) {
+        return;
+      }
+      seen.add(value);
+      queue.push(value);
+    };
+
+    enqueue(parsed);
+    enqueue(parsed.error);
+
+    let message: string | undefined;
+    let code: string | undefined;
+    let details: unknown;
+    let requestId: string | undefined;
+    let retryAfter: number | undefined;
+
     if (typeof parsed.error === 'string' && parsed.error.length > 0) {
-      return parsed.error;
+      message = parsed.error;
     }
 
-    if (parsed.error && typeof parsed.error === 'object' && typeof parsed.error.message === 'string') {
-      return parsed.error.message;
+    while (queue.length > 0) {
+      const current = queue.shift();
+      if (!current) {
+        continue;
+      }
+
+      if (message === undefined && typeof current.message === 'string' && current.message.length > 0) {
+        message = current.message;
+      }
+
+      if (code === undefined && typeof current.code === 'string' && current.code.length > 0) {
+        code = current.code;
+      }
+
+      if (details === undefined && 'details' in current) {
+        details = current.details;
+      }
+
+      if (
+        requestId === undefined
+        && typeof current.request_id === 'string'
+        && current.request_id.length > 0
+      ) {
+        requestId = current.request_id;
+      }
+
+      if (
+        requestId === undefined
+        && typeof current.requestId === 'string'
+        && current.requestId.length > 0
+      ) {
+        requestId = current.requestId;
+      }
+
+      if (retryAfter === undefined) {
+        retryAfter = toRetryAfterSeconds(current.retryAfter) ?? toRetryAfterSeconds(current.retry_after);
+      }
+
+      enqueue(current.error);
     }
 
-    return `Request failed with status ${status}`;
+    if (retryAfter === undefined && isObject(details)) {
+      retryAfter = toRetryAfterSeconds(details.retryAfter) ?? toRetryAfterSeconds(details.retry_after);
+    }
+
+    return {
+      message: message ?? `Request failed with status ${status}`,
+      code,
+      details,
+      requestId,
+      retryAfter,
+    };
   }
+
+  private parseRetryAfterHeader(retryAfterHeader: string | null): number | undefined {
+    if (!retryAfterHeader) {
+      return undefined;
+    }
+
+    const asNumber = toRetryAfterSeconds(retryAfterHeader);
+    if (asNumber !== undefined) {
+      return asNumber;
+    }
+
+    const dateMs = Date.parse(retryAfterHeader);
+    if (Number.isNaN(dateMs)) {
+      return undefined;
+    }
+
+    const seconds = Math.ceil((dateMs - Date.now()) / 1000);
+    return seconds > 0 ? seconds : undefined;
+  }
+}
+
+interface NormalizedApiError {
+  message: string;
+  code?: string;
+  details?: unknown;
+  requestId?: string;
+  retryAfter?: number;
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function toRetryAfterSeconds(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed;
+    }
+
+    return undefined;
+  }
+
+  return undefined;
 }
 
 async function sleep(ms: number): Promise<void> {
