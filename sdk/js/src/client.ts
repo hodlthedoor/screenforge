@@ -123,10 +123,18 @@ export class ScreenForge {
       '/v1/screenshot?async=true',
       { url, ...options },
     );
+    const jobId = normalizeNonEmptyString(result.jobId) ?? normalizeNonEmptyString(result.id);
+    const pollUrl = normalizeNonEmptyString(result.pollUrl);
+    if (!jobId || !pollUrl) {
+      throw new ScreenForgeError('Malformed API response: expected jobId/id and pollUrl', {
+        code: 'MALFORMED_RESPONSE',
+        details: result,
+      });
+    }
 
     return {
-      jobId: result.jobId ?? result.id ?? '',
-      pollUrl: result.pollUrl,
+      jobId,
+      pollUrl,
     };
   }
 
@@ -136,13 +144,27 @@ export class ScreenForge {
       '/v1/batch',
       { items },
     );
+    const batchId = normalizeNonEmptyString(result.batchId);
+    if (!batchId || !Array.isArray(result.jobs)) {
+      throw new ScreenForgeError('Malformed API response: expected batchId and jobs array', {
+        code: 'MALFORMED_RESPONSE',
+        details: result,
+      });
+    }
 
     return {
-      batchId: result.batchId,
-      jobs: result.jobs.map((job) => ({
-        jobId: job.jobId ?? job.id ?? '',
-        pollUrl: job.pollUrl,
-      })),
+      batchId,
+      jobs: result.jobs.map((job) => {
+        const jobId = normalizeNonEmptyString(job.jobId) ?? normalizeNonEmptyString(job.id);
+        const pollUrl = normalizeNonEmptyString(job.pollUrl);
+        if (!jobId || !pollUrl) {
+          throw new ScreenForgeError('Malformed API response: expected jobId/id and pollUrl for each batch job', {
+            code: 'MALFORMED_RESPONSE',
+            details: job,
+          });
+        }
+        return { jobId, pollUrl };
+      }),
     };
   }
 
@@ -316,15 +338,13 @@ export class ScreenForge {
     let requestId: string | undefined;
     let retryAfter: number | undefined;
 
-    if (typeof parsed.error === 'string' && parsed.error.length > 0) {
-      message = parsed.error;
+    const topLevelError = normalizeNonEmptyString(parsed.error);
+    if (topLevelError) {
+      message = topLevelError;
     }
 
     while (queue.length > 0) {
-      const current = queue.shift();
-      if (!current) {
-        continue;
-      }
+      const current = queue.shift() as Record<string, unknown>;
 
       if (message === undefined && typeof current.message === 'string' && current.message.length > 0) {
         message = current.message;
@@ -421,6 +441,14 @@ function toRetryAfterSeconds(value: unknown): number | undefined {
   }
 
   return undefined;
+}
+
+function normalizeNonEmptyString(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
 }
 
 async function sleep(ms: number): Promise<void> {
