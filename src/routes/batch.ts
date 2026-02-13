@@ -108,7 +108,7 @@ export async function batchRoutes(app: FastifyInstance) {
         jobId,
         apiKeyId,
         type: item.type,
-        url: urlOrHtml,
+        ...(item.url ? { url: item.url } : {}),
         options: fullOptions,
         callbackUrl: item.callbackUrl,
         batchId,

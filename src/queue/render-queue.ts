@@ -8,7 +8,7 @@ export interface RenderJobData {
   jobId: string;
   apiKeyId: string | null;
   type: 'screenshot' | 'pdf' | 'og';
-  url: string;
+  url?: string;
   options: Record<string, unknown>;
   callbackUrl?: string;
   batchId?: string;

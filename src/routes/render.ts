@@ -82,7 +82,10 @@ export async function renderRoutes(
     const jobId = jobResult.rows[0].id;
 
     const q = getQueue(config.REDIS_URL);
-    const jobData: RenderJobData = { jobId, apiKeyId, type, url, options, callbackUrl };
+    const jobData: RenderJobData = {
+      jobId, apiKeyId, type, options, callbackUrl,
+      ...(options.html ? {} : { url }),
+    };
     await q.add(`render-${jobId}`, jobData);
 
     return reply.status(202).send({
