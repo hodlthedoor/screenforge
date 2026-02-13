@@ -7,6 +7,8 @@ export const ERROR_CODES = {
   AUTH_REQUIRED: { status: 401, message: 'API key required' },
   INVALID_API_KEY: { status: 401, message: 'Invalid API key' },
   INVALID_ADMIN_KEY: { status: 401, message: 'Invalid admin API key' },
+  INVALID_SIGNATURE: { status: 401, message: 'Invalid URL signature' },
+  SIGNATURE_EXPIRED: { status: 401, message: 'Signed URL has expired' },
   API_KEY_DISABLED: { status: 403, message: 'API key is disabled' },
   QUOTA_EXCEEDED: { status: 429, message: 'Monthly quota exceeded' },
   RATE_LIMITED: { status: 429, message: 'Rate limit exceeded' },

@@ -1,8 +1,10 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { getUserById, getUserApiKeys, linkApiKeyToUser, revokeUserApiKey, verifyUserPassword, deleteUser } from '../db/users.js';
-import { createApiKey, getUsageStats, rotateApiKey } from '../db/api-keys.js';
+import { createApiKey, getUsageStats, rotateApiKey, getApiKeyWithSigningSecret } from '../db/api-keys.js';
+import { generateSignedUrl, type SignedUrlOptions } from '../auth/signed-urls.js';
 import { getPool } from '../db/index.js';
 import { escapeHtml, generateCsrfToken } from '../utils/html.js';
+import { getConfig } from '../config/index.js';
 
 // Session auth guard
 async function requireAuth(req: FastifyRequest, reply: FastifyReply): Promise<void> {
@@ -86,6 +88,7 @@ function dashboardLayout(title: string, nav: string, content: string, csrfToken:
     <a href="/dashboard" class="${nav === 'overview' ? 'active' : ''}">Overview</a>
     <a href="/dashboard/keys" class="${nav === 'keys' ? 'active' : ''}">API Keys</a>
     <a href="/dashboard/usage" class="${nav === 'usage' ? 'active' : ''}">Usage</a>
+    <a href="/dashboard/signed-urls" class="${nav === 'signed-urls' ? 'active' : ''}">Signed URLs</a>
     <a href="/dashboard/billing" class="${nav === 'billing' ? 'active' : ''}">Billing</a>
     <a href="/dashboard/settings" class="${nav === 'settings' ? 'active' : ''}">Settings</a>
     <a href="/docs">API Docs</a>
@@ -433,4 +436,179 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
   app.delete('/dashboard/account', { preHandler: requireAuth }, handleDeleteAccount);
   // Backward-compatible endpoint for non-JS form submissions.
   app.post('/dashboard/account', { preHandler: requireAuth }, handleDeleteAccount);
+
+  // Signed URLs page
+  app.get('/dashboard/signed-urls', { preHandler: requireAuth }, async (req, reply) => {
+    const user = req.dashboardUser!;
+    const csrfToken = ensureCsrfToken(req);
+    const config = getConfig();
+
+    const keys = await getUserApiKeys(user.id);
+
+    const content = `
+      <h1>Signed URLs</h1>
+      <p style="color:var(--muted);margin-bottom:24px">Generate pre-authenticated URLs for embedding screenshots/PDFs without exposing your API key</p>
+
+      <div class="card">
+        <h2 style="margin-bottom:16px">Generate Signed URL</h2>
+        <form id="signed-url-form">
+          <div class="form-group" style="margin-bottom:16px">
+            <label for="api-key">API Key</label>
+            <select id="api-key" required style="width:100%">
+              <option value="">Select an API key...</option>
+              ${keys.map((k) => `<option value="${escapeHtml(k.id)}">${escapeHtml(k.name)} (${escapeHtml(k.prefix)})</option>`).join('')}
+            </select>
+          </div>
+
+          <div class="form-group" style="margin-bottom:16px">
+            <label for="type">Type</label>
+            <select id="type" required style="width:100%">
+              <option value="screenshot">Screenshot</option>
+              <option value="pdf">PDF</option>
+            </select>
+          </div>
+
+          <div class="form-group" style="margin-bottom:16px">
+            <label for="url">Target URL</label>
+            <input type="url" id="url" placeholder="https://example.com" required style="width:100%">
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="width">Viewport Width</label>
+              <input type="number" id="width" placeholder="1920" min="100" max="4096">
+            </div>
+            <div class="form-group">
+              <label for="height">Viewport Height</label>
+              <input type="number" id="height" placeholder="1080" min="100" max="4096">
+            </div>
+          </div>
+
+          <div class="form-row screenshot-only">
+            <div class="form-group">
+              <label for="format">Format</label>
+              <select id="format">
+                <option value="png">PNG</option>
+                <option value="jpeg">JPEG</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="fullPage">Full Page</label>
+              <select id="fullPage">
+                <option value="">No</option>
+                <option value="true">Yes</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-bottom:16px">
+            <label for="expiry">Expiry (seconds, max 30 days)</label>
+            <input type="number" id="expiry" value="3600" min="60" max="2592000" required style="width:100%">
+            <small style="color:var(--muted)">Default: 3600 (1 hour)</small>
+          </div>
+
+          <button type="submit" class="btn btn-primary">Generate Signed URL</button>
+        </form>
+
+        <div id="result" style="display:none;margin-top:24px">
+          <h3 style="margin-bottom:12px">Generated Signed URL</h3>
+          <div class="key-display" id="signed-url-display"></div>
+          <button type="button" class="btn btn-primary btn-sm" onclick="copySignedUrl()">Copy to Clipboard</button>
+          <p style="color:var(--muted);font-size:.85rem;margin-top:12px">This URL is valid until <span id="expiry-time"></span></p>
+        </div>
+      </div>
+
+      <script>
+        const form = document.getElementById('signed-url-form');
+        const typeSelect = document.getElementById('type');
+        const screenshotOnlyFields = document.querySelectorAll('.screenshot-only');
+
+        typeSelect.addEventListener('change', () => {
+          const isScreenshot = typeSelect.value === 'screenshot';
+          screenshotOnlyFields.forEach(el => {
+            el.style.display = isScreenshot ? 'flex' : 'none';
+          });
+        });
+
+        form.addEventListener('submit', async (e) => {
+          e.preventDefault();
+
+          const apiKeyId = document.getElementById('api-key').value;
+          const type = document.getElementById('type').value;
+          const url = document.getElementById('url').value;
+          const width = document.getElementById('width').value;
+          const height = document.getElementById('height').value;
+          const format = document.getElementById('format').value;
+          const fullPage = document.getElementById('fullPage').value;
+          const expiry = parseInt(document.getElementById('expiry').value);
+
+          const options = { type, url };
+          if (width && height) {
+            options.viewport = { width: parseInt(width), height: parseInt(height) };
+          }
+          if (type === 'screenshot') {
+            if (format) options.format = format;
+            if (fullPage) options.fullPage = fullPage === 'true';
+          }
+
+          try {
+            const res = await fetch('/dashboard/signed-urls/generate', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ apiKeyId, options, expiry }),
+            });
+
+            if (!res.ok) {
+              throw new Error('Failed to generate signed URL');
+            }
+
+            const data = await res.json();
+            const fullUrl = '${escapeHtml(config.BASE_URL)}' + data.signedUrl;
+
+            document.getElementById('signed-url-display').textContent = fullUrl;
+            document.getElementById('expiry-time').textContent = new Date(data.expiresAt).toLocaleString();
+            document.getElementById('result').style.display = 'block';
+          } catch (err) {
+            alert('Error: ' + err.message);
+          }
+        });
+
+        function copySignedUrl() {
+          const text = document.getElementById('signed-url-display').textContent;
+          navigator.clipboard.writeText(text).then(() => {
+            alert('Copied to clipboard!');
+          });
+        }
+      </script>
+    `;
+
+    return reply.type('text/html').send(dashboardLayout('Signed URLs', 'signed-urls', content, csrfToken));
+  });
+
+  // Signed URL generation API endpoint
+  app.post('/dashboard/signed-urls/generate', { preHandler: requireAuth }, async (req, reply) => {
+    const user = req.dashboardUser!;
+    const body = req.body as { apiKeyId: string; options: SignedUrlOptions; expiry: number };
+
+    // Verify API key belongs to user
+    const keys = await getUserApiKeys(user.id);
+    const keyExists = keys.find((k) => k.id === body.apiKeyId);
+    if (!keyExists) {
+      return reply.status(403).send({ error: 'API key not found or access denied' });
+    }
+
+    // Get signing secret
+    const apiKey = await getApiKeyWithSigningSecret(body.apiKeyId);
+    if (!apiKey) {
+      return reply.status(404).send({ error: 'API key not found' });
+    }
+
+    // Generate signed URL
+    const signedUrl = generateSignedUrl(apiKey.id, apiKey.signingSecret, body.options, body.expiry);
+
+    // Calculate expiry timestamp
+    const expiresAt = Date.now() + body.expiry * 1000;
+
+    return reply.send({ signedUrl, expiresAt });
+  });
 }

@@ -41,12 +41,13 @@ export async function createApiKey(name: string, tier: 'free' | 'starter' | 'pro
   const keyHash = hashApiKey(rawKey);
   const prefix = rawKey.slice(0, rawKey.indexOf('_', 3) + 1);
   const defaults = TIER_DEFAULTS[tier];
+  const signingSecret = randomBytes(32).toString('hex');
 
   const result = await getPool().query(
-    `INSERT INTO api_keys (key_hash, prefix, name, tier, rate_limit, monthly_quota)
-     VALUES ($1, $2, $3, $4, $5, $6)
+    `INSERT INTO api_keys (key_hash, prefix, name, tier, rate_limit, monthly_quota, signing_secret)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
      RETURNING id, prefix, name, tier, rate_limit, monthly_quota, active, created_at`,
-    [keyHash, prefix, name, tier, defaults.rateLimit, defaults.monthlyQuota],
+    [keyHash, prefix, name, tier, defaults.rateLimit, defaults.monthlyQuota, signingSecret],
   );
 
   const row = result.rows[0];
@@ -208,4 +209,34 @@ export async function rotateApiKey(keyId: string): Promise<string> {
   );
 
   return rawKey;
+}
+
+/**
+ * Get API key with signing secret (for signed URL generation)
+ */
+export async function getApiKeyWithSigningSecret(apiKeyId: string): Promise<{
+  id: string;
+  active: boolean;
+  tier: string;
+  rateLimit: number;
+  monthlyQuota: number;
+  signingSecret: string;
+} | null> {
+  const result = await getPool().query(
+    `SELECT id, active, tier, rate_limit, monthly_quota, signing_secret
+     FROM api_keys WHERE id = $1`,
+    [apiKeyId],
+  );
+
+  if (result.rows.length === 0) return null;
+
+  const row = result.rows[0];
+  return {
+    id: row.id,
+    active: row.active,
+    tier: row.tier,
+    rateLimit: row.rate_limit,
+    monthlyQuota: row.monthly_quota,
+    signingSecret: row.signing_secret,
+  };
 }
