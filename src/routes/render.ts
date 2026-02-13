@@ -101,21 +101,36 @@ export async function renderRoutes(
 
     const options = parsed.data;
 
-    try {
-      sanitizeUrl(options.url);
-      sanitizeSelector(options.selector);
-      sanitizeWaitFor(options.waitFor);
-    } catch (e) {
-      if (e instanceof SanitizeError) {
-        sendError(reply, req, 'VALIDATION_ERROR', { message: e.message });
+    // Only validate URL and check SSRF if rendering from URL (not HTML)
+    if ('url' in options && options.url) {
+      try {
+        sanitizeUrl(options.url);
+        sanitizeSelector(options.selector);
+        sanitizeWaitFor(options.waitFor);
+      } catch (e) {
+        if (e instanceof SanitizeError) {
+          sendError(reply, req, 'VALIDATION_ERROR', { message: e.message });
+          return;
+        }
+        throw e;
+      }
+
+      if (!config.ALLOW_PRIVATE_URLS && isPrivateUrl(options.url)) {
+        sendError(reply, req, 'SSRF_BLOCKED');
         return;
       }
-      throw e;
-    }
-
-    if (!config.ALLOW_PRIVATE_URLS && isPrivateUrl(options.url)) {
-      sendError(reply, req, 'SSRF_BLOCKED');
-      return;
+    } else {
+      // Still sanitize selector and waitFor for HTML renders
+      try {
+        sanitizeSelector(options.selector);
+        sanitizeWaitFor(options.waitFor);
+      } catch (e) {
+        if (e instanceof SanitizeError) {
+          sendError(reply, req, 'VALIDATION_ERROR', { message: e.message });
+          return;
+        }
+        throw e;
+      }
     }
 
     const blocked = await checkRateAndQuota(req, reply);
@@ -123,7 +138,8 @@ export async function renderRoutes(
 
     const query = req.query as { async?: string };
     if (query.async === 'true') {
-      return enqueueRender(req, reply, 'screenshot', options.url, options as unknown as Record<string, unknown>);
+      const urlOrHtml = options.url ?? options.html ?? '';
+      return enqueueRender(req, reply, 'screenshot', urlOrHtml, options as unknown as Record<string, unknown>);
     }
 
     const optionsHash = RenderCache.hashOptions(options as unknown as Record<string, unknown>);
@@ -158,21 +174,36 @@ export async function renderRoutes(
 
     const options = parsed.data;
 
-    try {
-      sanitizeUrl(options.url);
-      sanitizeTemplate(options.headerTemplate);
-      sanitizeTemplate(options.footerTemplate);
-    } catch (e) {
-      if (e instanceof SanitizeError) {
-        sendError(reply, req, 'VALIDATION_ERROR', { message: e.message });
+    // Only validate URL and check SSRF if rendering from URL (not HTML)
+    if ('url' in options && options.url) {
+      try {
+        sanitizeUrl(options.url);
+        sanitizeTemplate(options.headerTemplate);
+        sanitizeTemplate(options.footerTemplate);
+      } catch (e) {
+        if (e instanceof SanitizeError) {
+          sendError(reply, req, 'VALIDATION_ERROR', { message: e.message });
+          return;
+        }
+        throw e;
+      }
+
+      if (!config.ALLOW_PRIVATE_URLS && isPrivateUrl(options.url)) {
+        sendError(reply, req, 'SSRF_BLOCKED');
         return;
       }
-      throw e;
-    }
-
-    if (!config.ALLOW_PRIVATE_URLS && isPrivateUrl(options.url)) {
-      sendError(reply, req, 'SSRF_BLOCKED');
-      return;
+    } else {
+      // Still sanitize templates for HTML renders
+      try {
+        sanitizeTemplate(options.headerTemplate);
+        sanitizeTemplate(options.footerTemplate);
+      } catch (e) {
+        if (e instanceof SanitizeError) {
+          sendError(reply, req, 'VALIDATION_ERROR', { message: e.message });
+          return;
+        }
+        throw e;
+      }
     }
 
     const blocked = await checkRateAndQuota(req, reply);
@@ -180,7 +211,8 @@ export async function renderRoutes(
 
     const query = req.query as { async?: string };
     if (query.async === 'true') {
-      return enqueueRender(req, reply, 'pdf', options.url, options as unknown as Record<string, unknown>);
+      const urlOrHtml = options.url ?? options.html ?? '';
+      return enqueueRender(req, reply, 'pdf', urlOrHtml, options as unknown as Record<string, unknown>);
     }
 
     const optionsHash = RenderCache.hashOptions(options as unknown as Record<string, unknown>);

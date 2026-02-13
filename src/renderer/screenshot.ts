@@ -17,7 +17,11 @@ export async function takeScreenshot(pool: BrowserPool, options: ScreenshotOptio
   try {
     const page = await context.newPage();
 
-    await page.goto(options.url, { waitUntil: 'networkidle', timeout: timeoutMs });
+    if ('html' in options && options.html) {
+      await page.setContent(options.html, { waitUntil: 'networkidle', timeout: timeoutMs });
+    } else if ('url' in options && options.url) {
+      await page.goto(options.url, { waitUntil: 'networkidle', timeout: timeoutMs });
+    }
 
     if (options.waitFor) {
       await page.waitForSelector(options.waitFor, { timeout: 10_000 });

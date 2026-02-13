@@ -4,6 +4,8 @@ export interface Viewport {
 }
 
 export interface ScreenshotOptions {
+  url?: string;
+  html?: string;
   viewport?: Viewport;
   format?: 'png' | 'jpeg';
   quality?: number;
@@ -23,6 +25,8 @@ export interface PdfMargins {
 }
 
 export interface PdfOptions {
+  url?: string;
+  html?: string;
   format?: 'a4' | 'letter' | 'legal';
   landscape?: boolean;
   margins?: PdfMargins;
@@ -44,7 +48,8 @@ export interface OgOptions {
 
 export interface BatchItem {
   type: 'screenshot' | 'pdf';
-  url: string;
+  url?: string;
+  html?: string;
   options?: Record<string, unknown>;
   callbackUrl?: string;
 }

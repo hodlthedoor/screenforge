@@ -18,13 +18,14 @@ export function isPrivateUrl(url: string): boolean {
   }
 }
 
+const MAX_HTML_SIZE = 2 * 1024 * 1024; // 2MB
+
 export const viewportSchema = z.object({
   width: z.number().int().min(1).max(7680).default(1920),
   height: z.number().int().min(1).max(4320).default(1080),
 });
 
-export const screenshotOptionsSchema = z.object({
-  url: httpUrlSchema,
+const screenshotBaseOptionsSchema = z.object({
   viewport: viewportSchema.default({ width: 1920, height: 1080 }),
   format: z.enum(['png', 'jpeg']).default('png'),
   quality: z.number().int().min(0).max(100).optional(),
@@ -33,6 +34,16 @@ export const screenshotOptionsSchema = z.object({
   waitFor: z.string().optional(),
   darkMode: z.boolean().default(false),
   deviceScaleFactor: z.number().min(0.5).max(4).default(1),
+});
+
+export const screenshotOptionsSchema = z.object({
+  url: httpUrlSchema.optional(),
+  html: z.string().min(1).refine((html) => Buffer.byteLength(html, 'utf-8') <= MAX_HTML_SIZE, {
+    message: `HTML content must not exceed ${MAX_HTML_SIZE / 1024 / 1024}MB`,
+  }).optional(),
+  ...screenshotBaseOptionsSchema.shape,
+}).refine((data) => (data.url && !data.html) || (!data.url && data.html), {
+  message: 'Exactly one of url or html must be provided',
 });
 
 export type ScreenshotOptions = z.infer<typeof screenshotOptionsSchema>;
@@ -44,8 +55,7 @@ export const marginsSchema = z.object({
   left: z.string().default('0'),
 });
 
-export const pdfOptionsSchema = z.object({
-  url: httpUrlSchema,
+const pdfBaseOptionsSchema = z.object({
   format: z.enum(['a4', 'letter', 'legal']).default('a4'),
   landscape: z.boolean().default(false),
   margins: marginsSchema.default({ top: '0', right: '0', bottom: '0', left: '0' }),
@@ -53,6 +63,16 @@ export const pdfOptionsSchema = z.object({
   headerTemplate: z.string().optional(),
   footerTemplate: z.string().optional(),
   scale: z.number().min(0.1).max(2).default(1),
+});
+
+export const pdfOptionsSchema = z.object({
+  url: httpUrlSchema.optional(),
+  html: z.string().min(1).refine((html) => Buffer.byteLength(html, 'utf-8') <= MAX_HTML_SIZE, {
+    message: `HTML content must not exceed ${MAX_HTML_SIZE / 1024 / 1024}MB`,
+  }).optional(),
+  ...pdfBaseOptionsSchema.shape,
+}).refine((data) => (data.url && !data.html) || (!data.url && data.html), {
+  message: 'Exactly one of url or html must be provided',
 });
 
 export type PdfOptions = z.infer<typeof pdfOptionsSchema>;
