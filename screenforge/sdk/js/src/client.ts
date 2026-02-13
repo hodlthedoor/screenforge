@@ -105,23 +105,48 @@ export class ScreenForge {
     this.retryBaseDelayMs = options.retryBaseDelayMs ?? DEFAULT_RETRY_BASE_DELAY_MS;
   }
 
-  async screenshot(url: string, options: ScreenshotOptions = {}): Promise<Buffer> {
-    return this.request<Buffer>('POST', '/v1/screenshot', { url, ...options }, { expectBinary: true });
+  async screenshot(urlOrOptions: string | ScreenshotOptions, options: ScreenshotOptions = {}): Promise<Buffer> {
+    const body = typeof urlOrOptions === 'string' ? { url: urlOrOptions, ...options } : urlOrOptions;
+    return this.request<Buffer>('POST', '/v1/screenshot', body, { expectBinary: true });
   }
 
-  async pdf(url: string, options: PdfOptions = {}): Promise<Buffer> {
-    return this.request<Buffer>('POST', '/v1/pdf', { url, ...options }, { expectBinary: true });
+  async pdf(urlOrOptions: string | PdfOptions, options: PdfOptions = {}): Promise<Buffer> {
+    const body = typeof urlOrOptions === 'string' ? { url: urlOrOptions, ...options } : urlOrOptions;
+    return this.request<Buffer>('POST', '/v1/pdf', body, { expectBinary: true });
   }
 
   async og(url: string, options: OgOptions = {}): Promise<Buffer> {
     return this.request<Buffer>('POST', '/v1/og', { url, ...options }, { expectBinary: true });
   }
 
-  async screenshotAsync(url: string, options: ScreenshotOptions = {}): Promise<AsyncRenderResponse> {
+  async screenshotAsync(urlOrOptions: string | ScreenshotOptions, options: ScreenshotOptions = {}): Promise<AsyncRenderResponse> {
+    const body = typeof urlOrOptions === 'string' ? { url: urlOrOptions, ...options } : urlOrOptions;
     const result = await this.request<{ id?: string; jobId?: string; pollUrl: string }>(
       'POST',
       '/v1/screenshot?async=true',
-      { url, ...options },
+      body,
+    );
+    const jobId = normalizeNonEmptyString(result.jobId) ?? normalizeNonEmptyString(result.id);
+    const pollUrl = normalizeNonEmptyString(result.pollUrl);
+    if (!jobId || !pollUrl) {
+      throw new ScreenForgeError('Malformed API response: expected jobId/id and pollUrl', {
+        code: 'MALFORMED_RESPONSE',
+        details: result,
+      });
+    }
+
+    return {
+      jobId,
+      pollUrl,
+    };
+  }
+
+  async pdfAsync(urlOrOptions: string | PdfOptions, options: PdfOptions = {}): Promise<AsyncRenderResponse> {
+    const body = typeof urlOrOptions === 'string' ? { url: urlOrOptions, ...options } : urlOrOptions;
+    const result = await this.request<{ id?: string; jobId?: string; pollUrl: string }>(
+      'POST',
+      '/v1/pdf?async=true',
+      body,
     );
     const jobId = normalizeNonEmptyString(result.jobId) ?? normalizeNonEmptyString(result.id);
     const pollUrl = normalizeNonEmptyString(result.pollUrl);

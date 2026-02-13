@@ -10,9 +10,12 @@ import { sendError } from '../security/errors.js';
 
 const batchItemSchema = z.object({
   type: z.enum(['screenshot', 'pdf']).default('screenshot'),
-  url: z.string().url(),
+  url: z.string().url().optional(),
+  html: z.string().optional(),
   options: z.record(z.string(), z.unknown()).optional(),
   callbackUrl: z.string().optional(),
+}).refine((data) => (data.url && !data.html) || (!data.url && data.html), {
+  message: 'Exactly one of url or html must be provided',
 });
 
 const batchRequestSchema = z.object({
@@ -34,7 +37,10 @@ export async function batchRoutes(app: FastifyInstance) {
     // Validate each item's options against its type schema
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
-      const fullOptions = { url: item.url, ...(item.options ?? {}) };
+      const fullOptions = {
+        ...(item.url ? { url: item.url } : { html: item.html }),
+        ...(item.options ?? {}),
+      };
       const schema = item.type === 'pdf' ? pdfOptionsSchema : screenshotOptionsSchema;
       const check = schema.safeParse(fullOptions);
       if (!check.success) {
@@ -45,8 +51,8 @@ export async function batchRoutes(app: FastifyInstance) {
         return;
       }
 
-      // SSRF check for each item URL
-      if (!config.ALLOW_PRIVATE_URLS && isPrivateUrl(item.url)) {
+      // SSRF check only for URL-based renders
+      if (item.url && !config.ALLOW_PRIVATE_URLS && isPrivateUrl(item.url)) {
         sendError(reply, req, 'SSRF_BLOCKED', {
           message: `Item ${i}: URLs targeting private networks are not allowed`,
         });
@@ -82,11 +88,17 @@ export async function batchRoutes(app: FastifyInstance) {
     const jobIds: string[] = [];
 
     for (const item of items) {
+      const urlOrHtml = item.url ?? item.html!;
+      const fullOptions = {
+        ...(item.url ? { url: item.url } : { html: item.html }),
+        ...(item.options ?? {}),
+      };
+
       // Create job record in DB
       const jobResult = await pool.query(
         `INSERT INTO render_jobs (api_key_id, type, url, options, status, batch_id)
          VALUES ($1, $2, $3, $4, 'pending', $5) RETURNING id`,
-        [apiKeyId, item.type, item.url, JSON.stringify(item.options ?? {}), batchId],
+        [apiKeyId, item.type, urlOrHtml, JSON.stringify(fullOptions), batchId],
       );
       const jobId = jobResult.rows[0].id;
       jobIds.push(jobId);
@@ -96,8 +108,8 @@ export async function batchRoutes(app: FastifyInstance) {
         jobId,
         apiKeyId,
         type: item.type,
-        url: item.url,
-        options: { url: item.url, ...(item.options ?? {}) },
+        url: urlOrHtml,
+        options: fullOptions,
         callbackUrl: item.callbackUrl,
         batchId,
       };

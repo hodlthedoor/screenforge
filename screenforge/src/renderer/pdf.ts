@@ -13,7 +13,12 @@ export async function renderPdf(pool: BrowserPool, options: PdfOptions, timeoutM
 
   try {
     const page = await context.newPage();
-    await page.goto(options.url, { waitUntil: 'networkidle', timeout: timeoutMs });
+
+    if ('html' in options && options.html) {
+      await page.setContent(options.html, { waitUntil: 'networkidle', timeout: timeoutMs });
+    } else if ('url' in options && options.url) {
+      await page.goto(options.url, { waitUntil: 'networkidle', timeout: timeoutMs });
+    }
 
     const size = FORMAT_SIZE[options.format];
 
