@@ -1,4 +1,5 @@
 import { chromium, type Browser, type BrowserContext, type BrowserContextOptions } from 'playwright';
+import { updateBrowserPoolGauges } from '../metrics/index.js';
 
 interface PoolEntry {
   browser: Browser;
@@ -31,6 +32,7 @@ export class BrowserPool {
       this.pool.push({ browser, renderCount: 0 });
     }
     this.initialized = true;
+    this.updateMetrics();
   }
 
   async acquire(contextOptions?: BrowserContextOptions): Promise<BrowserContext> {
@@ -50,6 +52,7 @@ export class BrowserPool {
 
     entry.renderCount++;
     this.totalRenders++;
+    this.updateMetrics();
 
     return entry.browser.newContext(contextOptions);
   }
@@ -62,11 +65,16 @@ export class BrowserPool {
     };
   }
 
+  private updateMetrics(): void {
+    updateBrowserPoolGauges(this.pool.length, this.maxPoolSize - this.pool.length);
+  }
+
   async close(): Promise<void> {
     await Promise.all(this.pool.map((e) => e.browser.close()));
     this.pool = [];
     this.initialized = false;
     this.roundRobin = 0;
     this.totalRenders = 0;
+    this.updateMetrics();
   }
 }
