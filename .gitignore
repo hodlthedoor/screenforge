@@ -1,6 +1,7 @@
 node_modules/
 dist/
 .env
+ecosystem.config.cjs
 *.log
 coverage/
 .playwright/
