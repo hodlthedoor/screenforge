@@ -4,6 +4,8 @@ import { getPool } from './index.js';
 export interface User {
   id: string;
   email: string;
+  isAdmin: boolean;
+  active: boolean;
   createdAt: Date;
 }
 
@@ -20,21 +22,24 @@ export interface UserApiKey {
 
 const BCRYPT_ROUNDS = 12;
 
+function mapUser(row: { id: string; email: string; is_admin: boolean; active: boolean; created_at: Date }): User {
+  return { id: row.id, email: row.email, isAdmin: row.is_admin, active: row.active, createdAt: row.created_at };
+}
+
 export async function createUser(email: string, password: string): Promise<User> {
   const passwordHash = await hash(password, BCRYPT_ROUNDS);
   const result = await getPool().query(
     `INSERT INTO users (email, password_hash)
      VALUES ($1, $2)
-     RETURNING id, email, created_at`,
+     RETURNING id, email, is_admin, active, created_at`,
     [email.toLowerCase().trim(), passwordHash],
   );
-  const row = result.rows[0];
-  return { id: row.id, email: row.email, createdAt: row.created_at };
+  return mapUser(result.rows[0]);
 }
 
 export async function verifyUser(email: string, password: string): Promise<User | null> {
   const result = await getPool().query(
-    'SELECT id, email, password_hash, created_at FROM users WHERE email = $1',
+    'SELECT id, email, password_hash, is_admin, active, created_at FROM users WHERE email = $1',
     [email.toLowerCase().trim()],
   );
   if (result.rows.length === 0) return null;
@@ -43,17 +48,16 @@ export async function verifyUser(email: string, password: string): Promise<User 
   const valid = await compare(password, row.password_hash);
   if (!valid) return null;
 
-  return { id: row.id, email: row.email, createdAt: row.created_at };
+  return mapUser(row);
 }
 
 export async function getUserById(id: string): Promise<User | null> {
   const result = await getPool().query(
-    'SELECT id, email, created_at FROM users WHERE id = $1',
+    'SELECT id, email, is_admin, active, created_at FROM users WHERE id = $1',
     [id],
   );
   if (result.rows.length === 0) return null;
-  const row = result.rows[0];
-  return { id: row.id, email: row.email, createdAt: row.created_at };
+  return mapUser(result.rows[0]);
 }
 
 export async function linkApiKeyToUser(userId: string, apiKeyId: string): Promise<void> {
@@ -143,12 +147,11 @@ export async function setPasswordResetToken(email: string, token: string, expire
  */
 export async function getUserByResetToken(token: string): Promise<User | null> {
   const result = await getPool().query(
-    'SELECT id, email, created_at, password_reset_expires FROM users WHERE password_reset_token = $1',
+    'SELECT id, email, is_admin, active, created_at, password_reset_expires FROM users WHERE password_reset_token = $1',
     [token],
   );
   if (result.rows.length === 0) return null;
-  const row = result.rows[0];
-  return { id: row.id, email: row.email, createdAt: row.created_at };
+  return mapUser(result.rows[0]);
 }
 
 /**
@@ -176,12 +179,11 @@ export async function setEmailVerificationToken(userId: string, token: string, e
  */
 export async function getUserByEmailToken(token: string): Promise<User | null> {
   const result = await getPool().query(
-    'SELECT id, email, created_at, email_token_expires FROM users WHERE email_token = $1',
+    'SELECT id, email, is_admin, active, created_at, email_token_expires FROM users WHERE email_token = $1',
     [token],
   );
   if (result.rows.length === 0) return null;
-  const row = result.rows[0];
-  return { id: row.id, email: row.email, createdAt: row.created_at };
+  return mapUser(result.rows[0]);
 }
 
 /**
@@ -206,10 +208,115 @@ export async function deleteUser(userId: string): Promise<void> {
  */
 export async function getUserByEmail(email: string): Promise<User | null> {
   const result = await getPool().query(
-    'SELECT id, email, created_at FROM users WHERE email = $1',
+    'SELECT id, email, is_admin, active, created_at FROM users WHERE email = $1',
     [email.toLowerCase().trim()],
   );
   if (result.rows.length === 0) return null;
-  const row = result.rows[0];
-  return { id: row.id, email: row.email, createdAt: row.created_at };
+  return mapUser(result.rows[0]);
+}
+
+// --- Admin functions ---
+
+export async function listAllUsers(opts: {
+  page: number;
+  perPage: number;
+  search?: string;
+}): Promise<{ users: (User & { tier: string; rendersThisMonth: number })[]; total: number }> {
+  const offset = (opts.page - 1) * opts.perPage;
+  const params: unknown[] = [opts.perPage, offset];
+  let where = '';
+  if (opts.search) {
+    where = 'WHERE u.email ILIKE $3';
+    params.push(`%${opts.search}%`);
+  }
+
+  const countWhere = opts.search ? 'WHERE u.email ILIKE $1' : '';
+  const countResult = await getPool().query(
+    `SELECT COUNT(*)::int as total FROM users u ${countWhere}`,
+    opts.search ? [`%${opts.search}%`] : [],
+  );
+
+  const result = await getPool().query(
+    `SELECT u.id, u.email, u.is_admin, u.active, u.created_at,
+       COALESCE(s.plan, 'free') as tier,
+       COALESCE(renders.count, 0)::int as renders_this_month
+     FROM users u
+     LEFT JOIN LATERAL (
+       SELECT plan FROM subscriptions WHERE user_id = u.id AND status = 'active' ORDER BY created_at DESC LIMIT 1
+     ) s ON true
+     LEFT JOIN LATERAL (
+       SELECT COUNT(*) as count FROM render_jobs rj
+       JOIN user_api_keys uak ON uak.api_key_id = rj.api_key_id
+       WHERE uak.user_id = u.id AND rj.created_at >= date_trunc('month', CURRENT_DATE)
+     ) renders ON true
+     ${where}
+     ORDER BY u.created_at DESC
+     LIMIT $1 OFFSET $2`,
+    params,
+  );
+
+  return {
+    users: result.rows.map((row: { id: string; email: string; is_admin: boolean; active: boolean; created_at: Date; tier: string; renders_this_month: number }) => ({
+      ...mapUser(row),
+      tier: row.tier,
+      rendersThisMonth: row.renders_this_month,
+    })),
+    total: countResult.rows[0].total,
+  };
+}
+
+export async function toggleUserActive(userId: string): Promise<boolean> {
+  const result = await getPool().query(
+    'UPDATE users SET active = NOT active WHERE id = $1 RETURNING active',
+    [userId],
+  );
+  return result.rows[0]?.active ?? false;
+}
+
+export async function changeUserTier(userId: string, tier: string): Promise<void> {
+  const pool = getPool();
+  // Update API keys owned by the user to the new tier
+  await pool.query(
+    `UPDATE api_keys SET tier = $1
+     WHERE id IN (SELECT api_key_id FROM user_api_keys WHERE user_id = $2)`,
+    [tier, userId],
+  );
+}
+
+export async function getAdminUserDetail(userId: string): Promise<{
+  user: User;
+  keys: UserApiKey[];
+  subscription: { plan: string; status: string; currentPeriodEnd: Date } | null;
+  recentRenders: { id: string; type: string; url: string; status: string; createdAt: Date }[];
+} | null> {
+  const user = await getUserById(userId);
+  if (!user) return null;
+
+  const keys = await getUserApiKeys(userId);
+
+  const subResult = await getPool().query(
+    `SELECT plan, status, current_period_end FROM subscriptions WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1`,
+    [userId],
+  );
+  const subscription = subResult.rows.length > 0
+    ? { plan: subResult.rows[0].plan, status: subResult.rows[0].status, currentPeriodEnd: subResult.rows[0].current_period_end }
+    : null;
+
+  const rendersResult = await getPool().query(
+    `SELECT rj.id, rj.type, rj.url, rj.status, rj.created_at
+     FROM render_jobs rj
+     JOIN user_api_keys uak ON uak.api_key_id = rj.api_key_id
+     WHERE uak.user_id = $1
+     ORDER BY rj.created_at DESC LIMIT 20`,
+    [userId],
+  );
+
+  return {
+    user,
+    keys,
+    subscription,
+    recentRenders: rendersResult.rows.map((r: { id: string; type: string; url: string; status: string; created_at: Date }) => ({
+      id: r.id, type: r.type, url: r.url, status: r.status, createdAt: r.created_at,
+    })),
+  };
 }
