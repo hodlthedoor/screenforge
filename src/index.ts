@@ -35,6 +35,7 @@ import { screenshotOptionsSchema, pdfOptionsSchema } from './renderer/schemas.js
 import { writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Job } from 'bullmq';
+import { initMetrics, getMetrics, incrementApiRequestCounter, observeApiRequestDuration } from './metrics/index.js';
 
 export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
   const config = loadConfig();
@@ -64,10 +65,15 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
     saveUninitialized: false,
   });
 
+  // Initialize metrics if enabled
+  if (config.METRICS_ENABLED) {
+    initMetrics();
+  }
+
   // Request ID tracking
   app.addHook('onRequest', requestIdHook);
 
-  // Request logging
+  // Request logging and metrics
   app.addHook('onResponse', (req, reply, done) => {
     if (!req.url.startsWith('/v1/')) {
       done();
@@ -87,6 +93,13 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
       api_key_prefix: apiKeyPrefix,
       request_id: req.id,
     });
+
+    // Record metrics if enabled
+    if (config.METRICS_ENABLED) {
+      incrementApiRequestCounter(req.method, req.url, reply.statusCode);
+      observeApiRequestDuration(req.url, duration / 1000); // Convert ms to seconds
+    }
+
     done();
   });
 
@@ -122,6 +135,15 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
   });
 
   app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
+
+  // Prometheus metrics endpoint (no auth required for scraping)
+  if (config.METRICS_ENABLED) {
+    app.get('/metrics', async (req, reply) => {
+      const metrics = await getMetrics();
+      reply.type('text/plain; version=0.0.4; charset=utf-8');
+      return metrics;
+    });
+  }
 
   // Landing page & auth
   await landingRoutes(app);

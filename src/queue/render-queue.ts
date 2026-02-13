@@ -3,6 +3,7 @@ import { Redis } from 'ioredis';
 import { getPool } from '../db/index.js';
 import { enqueueWebhook } from '../webhooks/delivery.js';
 import { getWebhookConfig } from '../db/api-keys.js';
+import { incrementRenderCounter, observeRenderDuration } from '../metrics/index.js';
 
 export interface RenderJobData {
   jobId: string;
@@ -54,6 +55,11 @@ export function createWorker(
       [result.resultPath, result.contentType, result.durationMs, job.data.jobId],
     );
 
+    // Record metrics (always record, even if cache hit, since this was a job completion)
+    const format = result.contentType === 'application/pdf' ? 'pdf' : 'png';
+    incrementRenderCounter(job.data.type, format, 'completed', false);
+    observeRenderDuration(job.data.type, format, result.durationMs / 1000);
+
     // Update batch progress
     if (job.data.batchId) {
       await pool.query(
@@ -77,6 +83,10 @@ export function createWorker(
       `UPDATE render_jobs SET status = 'failed', error = $1, completed_at = NOW() WHERE id = $2`,
       [error.message, job.data.jobId],
     );
+
+    // Record metrics for failed jobs
+    const format = job.data.type === 'pdf' ? 'pdf' : 'png';
+    incrementRenderCounter(job.data.type, format, 'failed', false);
 
     if (job.data.batchId) {
       await pool.query(

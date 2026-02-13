@@ -21,6 +21,7 @@ const envSchema = z.object({
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_PUBLISHABLE_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  METRICS_ENABLED: z.enum(['true', 'false']).default('true').transform((v) => v === 'true'),
 });
 
 export type Config = z.infer<typeof envSchema>;
