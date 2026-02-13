@@ -47,8 +47,11 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: psql "$DATABASE_URL" -f sql/002_auth_queue.sql
-      - run: psql "$DATABASE_URL" -f sql/003_users.sql
+      - name: Run database migrations
+        run: |
+          for f in sql/001_init.sql sql/002_auth_queue.sql sql/003_users.sql sql/004_billing.sql sql/005_webhooks.sql sql/006_account.sql sql/007_signed_urls.sql sql/008_admin.sql sql/009_email.sql; do
+            psql "$DATABASE_URL" -f "$f"
+          done
       - run: npx playwright install chromium --with-deps
       - run: npm test
 

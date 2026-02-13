@@ -94,6 +94,7 @@ function registerHtml(csrfToken: string, error?: string): string {
     <button type="submit">Create Account</button>
   </form>
   <div class="link">Already have an account? <a href="/login">Log in</a></div>
+  <div class="link"><a href="/terms">Terms</a> · <a href="/privacy">Privacy</a></div>
 </div></body></html>`;
 }
 
