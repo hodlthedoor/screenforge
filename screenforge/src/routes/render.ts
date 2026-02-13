@@ -96,7 +96,47 @@ export async function renderRoutes(
     });
   }
 
-  app.post('/v1/screenshot', { preHandler: [authMiddleware] }, async (req, reply) => {
+  app.post('/v1/screenshot', {
+    schema: {
+      tags: ['render'],
+      summary: 'Take a screenshot',
+      description: 'Capture a screenshot of a URL or HTML content. Returns binary image data (PNG or JPEG).',
+      security: [{ apiKey: [] }],
+      querystring: {
+        type: 'object',
+        properties: {
+          async: { type: 'string', enum: ['true', 'false'], description: 'Queue as async job' },
+        },
+      },
+      body: {
+        type: 'object',
+        properties: {
+          url: { type: 'string', description: 'URL to screenshot' },
+          html: { type: 'string', description: 'HTML content to render' },
+          format: { type: 'string', enum: ['png', 'jpeg'], default: 'png' },
+          viewport: {
+            type: 'object',
+            properties: {
+              width: { type: 'integer', minimum: 1, maximum: 7680, default: 1920 },
+              height: { type: 'integer', minimum: 1, maximum: 4320, default: 1080 },
+            },
+          },
+          fullPage: { type: 'boolean', default: false },
+          selector: { type: 'string', description: 'CSS selector to capture' },
+          waitFor: { type: 'string', description: 'CSS selector to wait for' },
+          darkMode: { type: 'boolean', default: false },
+          deviceScaleFactor: { type: 'number', minimum: 0.5, maximum: 4, default: 1 },
+          quality: { type: 'integer', minimum: 0, maximum: 100 },
+          callback_url: { type: 'string', description: 'Webhook callback URL (async only)' },
+          block_ads: { type: 'boolean', default: false },
+          hide_cookies: { type: 'boolean', default: false },
+          custom_css: { type: 'string' },
+          custom_js: { type: 'string' },
+        },
+      },
+    },
+    preHandler: [authMiddleware],
+  }, async (req, reply) => {
     const parsed = screenshotOptionsSchema.safeParse(req.body);
     if (!parsed.success) {
       sendError(reply, req, 'VALIDATION_ERROR', { details: parsed.error.issues });
@@ -175,7 +215,48 @@ export async function renderRoutes(
       .send(result.buffer);
   });
 
-  app.post('/v1/pdf', { preHandler: [authMiddleware] }, async (req, reply) => {
+  app.post('/v1/pdf', {
+    schema: {
+      tags: ['render'],
+      summary: 'Generate a PDF',
+      description: 'Render a URL or HTML content to PDF. Returns binary PDF data.',
+      security: [{ apiKey: [] }],
+      querystring: {
+        type: 'object',
+        properties: {
+          async: { type: 'string', enum: ['true', 'false'], description: 'Queue as async job' },
+        },
+      },
+      body: {
+        type: 'object',
+        properties: {
+          url: { type: 'string', description: 'URL to render' },
+          html: { type: 'string', description: 'HTML content to render' },
+          format: { type: 'string', enum: ['a4', 'letter', 'legal'], default: 'a4' },
+          landscape: { type: 'boolean', default: false },
+          margins: {
+            type: 'object',
+            properties: {
+              top: { type: 'string', default: '0' },
+              right: { type: 'string', default: '0' },
+              bottom: { type: 'string', default: '0' },
+              left: { type: 'string', default: '0' },
+            },
+          },
+          printBackground: { type: 'boolean', default: true },
+          headerTemplate: { type: 'string' },
+          footerTemplate: { type: 'string' },
+          scale: { type: 'number', minimum: 0.1, maximum: 2, default: 1 },
+          callback_url: { type: 'string', description: 'Webhook callback URL (async only)' },
+          block_ads: { type: 'boolean', default: false },
+          hide_cookies: { type: 'boolean', default: false },
+          custom_css: { type: 'string' },
+          custom_js: { type: 'string' },
+        },
+      },
+    },
+    preHandler: [authMiddleware],
+  }, async (req, reply) => {
     const parsed = pdfOptionsSchema.safeParse(req.body);
     if (!parsed.success) {
       sendError(reply, req, 'VALIDATION_ERROR', { details: parsed.error.issues });

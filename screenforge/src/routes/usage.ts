@@ -5,7 +5,15 @@ import { getConfig } from '../config/index.js';
 import { createError } from '../security/errors.js';
 
 export async function usageRoutes(app: FastifyInstance) {
-  app.get('/v1/usage', { preHandler: [authMiddleware] }, async (req, reply) => {
+  app.get('/v1/usage', {
+    schema: {
+      tags: ['usage'],
+      summary: 'Get usage stats',
+      description: 'Get usage statistics for the authenticated API key.',
+      security: [{ apiKey: [] }],
+    },
+    preHandler: [authMiddleware],
+  }, async (req, reply) => {
     const config = getConfig();
 
     if (!config.REQUIRE_AUTH || !req.apiKey) {

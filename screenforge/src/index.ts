@@ -118,7 +118,17 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
 
   const startTime = Date.now();
 
-  app.get('/v1/health', async () => {
+  // API docs (register before routes so swagger captures all endpoints)
+  await registerDocs(app);
+  await errorCodesRoutes(app);
+
+  app.get('/v1/health', {
+    schema: {
+      tags: ['health'],
+      summary: 'Detailed health check',
+      description: 'Returns detailed health status including browser pool and queue metrics.',
+    },
+  }, async () => {
     let queueMetrics = { waiting: 0, active: 0, completed: 0, failed: 0 };
     try {
       queueMetrics = await getQueueMetrics(config.REDIS_URL);
@@ -136,7 +146,13 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
     };
   });
 
-  app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
+  app.get('/health', {
+    schema: {
+      tags: ['health'],
+      summary: 'Basic health check',
+      description: 'Returns basic health status.',
+    },
+  }, async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
 
   // Prometheus metrics endpoint (no auth required for scraping)
   if (config.METRICS_ENABLED) {
@@ -154,10 +170,6 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
   await billingRoutes(app);
   await adminPanelRoutes(app);
   await legalRoutes(app);
-
-  // API docs
-  await registerDocs(app);
-  await errorCodesRoutes(app);
 
   // Register API routes
   await renderRoutes(app, pool, cache, rateLimiter);
