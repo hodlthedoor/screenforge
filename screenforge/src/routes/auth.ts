@@ -58,6 +58,7 @@ function loginHtml(csrfToken: string, error?: string): string {
     <input type="password" id="password" name="password" required>
     <button type="submit">Log In</button>
   </form>
+  <div class="link"><a href="/auth/forgot-password">Forgot password?</a></div>
   <div class="link">Don't have an account? <a href="/register">Sign up</a></div>
 </div></body></html>`;
 }
@@ -416,8 +417,8 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     return reply.redirect('/login');
   });
 
-  // Email verification
-  app.post('/auth/verify-email/:token', async (req: FastifyRequest<{ Params: { token: string } }>, reply: FastifyReply) => {
+  // Email verification — GET handles link clicks from email, POST kept for API compatibility
+  async function handleEmailVerification(req: FastifyRequest<{ Params: { token: string } }>, reply: FastifyReply): Promise<void> {
     const { token } = req.params;
     const user = await getUserByEmailToken(token);
 
@@ -454,5 +455,8 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 </div></body></html>`;
 
     return reply.type('text/html').send(html);
-  });
+  }
+
+  app.get('/auth/verify-email/:token', handleEmailVerification);
+  app.post('/auth/verify-email/:token', handleEmailVerification);
 }

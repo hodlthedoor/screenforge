@@ -10,6 +10,12 @@ vi.mock('nodemailer', () => ({
   },
 }));
 
+// Mock logger
+const mockLoggerWarn = vi.fn();
+vi.mock('../../src/logging/index.js', () => ({
+  getLogger: () => ({ warn: mockLoggerWarn }),
+}));
+
 // Mock ioredis for usage monitor tests
 const mockRedisGet = vi.fn();
 const mockRedisSet = vi.fn();
@@ -207,7 +213,7 @@ describe('Email Sender', () => {
   });
 
   it('skips sending and logs warning when SMTP not configured', async () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    mockLoggerWarn.mockClear();
 
     const result = await sendEmail({
       to: 'user@example.com',
@@ -218,11 +224,9 @@ describe('Email Sender', () => {
 
     expect(result.sent).toBe(false);
     expect(result.reason).toBe('smtp_not_configured');
-    expect(warnSpy).toHaveBeenCalledWith(
+    expect(mockLoggerWarn).toHaveBeenCalledWith(
       expect.stringContaining('SMTP not configured'),
     );
-
-    warnSpy.mockRestore();
   });
 
   it('sends email when SMTP is configured', async () => {
