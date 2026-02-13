@@ -26,6 +26,7 @@ import { authRoutes } from './routes/auth.js';
 import { dashboardRoutes } from './routes/dashboard.js';
 import { billingRoutes } from './routes/billing.js';
 import { webhooksRoutes } from './routes/webhooks.js';
+import { adminPanelRoutes } from './routes/admin-panel.js';
 import { registerLoggers, getLogger } from './logging/index.js';
 import { buildErrorResponse } from './security/errors.js';
 import { takeScreenshot } from './renderer/screenshot.js';
@@ -127,6 +128,7 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
   await authRoutes(app);
   await dashboardRoutes(app);
   await billingRoutes(app);
+  await adminPanelRoutes(app);
 
   // API docs
   await registerDocs(app);
