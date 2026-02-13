@@ -19,6 +19,7 @@ import { getQueueMetrics, createWorker, type RenderJobData, type RenderJobResult
 import { closePool } from './db/index.js';
 import { closeQueue } from './queue/render-queue.js';
 import { createWebhookWorker, closeWebhookQueue } from './webhooks/delivery.js';
+import { createUsageMonitor, closeUsageMonitor } from './email/usage-monitor.js';
 import { registerDocs } from './docs/swagger.js';
 import { errorCodesRoutes } from './docs/error-codes.js';
 import { landingRoutes } from './routes/landing.js';
@@ -201,6 +202,7 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
     await rateLimiter.close();
     await closeQueue();
     await closeWebhookQueue();
+    await closeUsageMonitor();
     await closePool();
   });
 
@@ -275,6 +277,9 @@ export async function start() {
 
   // Start webhook worker
   createWebhookWorker(config.REDIS_URL);
+
+  // Start usage monitor (hourly quota check)
+  createUsageMonitor(config.REDIS_URL);
 
   try {
     await app.listen({ port: config.PORT, host: '0.0.0.0' });
