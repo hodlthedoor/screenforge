@@ -1,17 +1,41 @@
 import { register, collectDefaultMetrics, Counter, Histogram, Gauge } from 'prom-client';
 
-// Initialize default metrics (CPU, memory, event loop lag)
 let metricsInitialized = false;
+
+// Known route patterns for normalization (prevents unbounded cardinality)
+const ROUTE_PATTERNS: Array<{ pattern: RegExp; normalized: string }> = [
+  { pattern: /^\/v1\/render\/[^/]+$/, normalized: '/v1/render/:id' },
+  { pattern: /^\/v1\/batch\/[^/]+$/, normalized: '/v1/batch/:id' },
+  { pattern: /^\/v1\/signed\/screenshot/, normalized: '/v1/signed/screenshot' },
+  { pattern: /^\/v1\/signed\/pdf/, normalized: '/v1/signed/pdf' },
+  { pattern: /^\/v1\/billing\/portal/, normalized: '/v1/billing/portal' },
+  { pattern: /^\/v1\/billing\/checkout/, normalized: '/v1/billing/checkout' },
+  { pattern: /^\/v1\/billing\/webhook/, normalized: '/v1/billing/webhook' },
+];
+
+export function normalizeRoute(url: string): string {
+  // Strip query string
+  const path = url.split('?')[0];
+
+  // Check known patterns with dynamic segments
+  for (const { pattern, normalized } of ROUTE_PATTERNS) {
+    if (pattern.test(path)) return normalized;
+  }
+
+  // Static /v1/* routes pass through as-is
+  if (path.startsWith('/v1/')) return path;
+
+  // Non-API routes are grouped to prevent cardinality explosion
+  return 'other';
+}
 
 export function initMetrics(): void {
   if (metricsInitialized) {
     return;
   }
 
-  // Default metrics (process CPU, memory, event loop lag)
   collectDefaultMetrics({ register });
 
-  // Custom counters
   new Counter({
     name: 'screenforge_renders_total',
     help: 'Total number of render jobs processed',
@@ -33,7 +57,6 @@ export function initMetrics(): void {
     registers: [register],
   });
 
-  // Histograms
   new Histogram({
     name: 'screenforge_render_duration_seconds',
     help: 'Render job duration in seconds',
@@ -50,7 +73,6 @@ export function initMetrics(): void {
     registers: [register],
   });
 
-  // Gauges
   new Gauge({
     name: 'screenforge_queue_depth',
     help: 'Number of jobs in the queue by status',
@@ -58,15 +80,11 @@ export function initMetrics(): void {
     registers: [register],
   });
 
+  // Single gauge with state label: "total" (pool size) and "in_use" (contexts currently checked out)
   new Gauge({
-    name: 'screenforge_browser_pool_active',
-    help: 'Number of active browsers in the pool',
-    registers: [register],
-  });
-
-  new Gauge({
-    name: 'screenforge_browser_pool_available',
-    help: 'Number of available browsers in the pool',
+    name: 'screenforge_browser_pool_browsers',
+    help: 'Browser pool size by state',
+    labelNames: ['state'],
     registers: [register],
   });
 
@@ -104,12 +122,12 @@ export function incrementRenderCounter(
 
 export function incrementApiRequestCounter(
   method: string,
-  route: string,
+  rawUrl: string,
   statusCode: number
 ): void {
   const counter = register.getSingleMetric('screenforge_api_requests_total') as Counter<string>;
   if (counter) {
-    counter.inc({ method, route, status_code: statusCode.toString() });
+    counter.inc({ method, route: normalizeRoute(rawUrl), status_code: statusCode.toString() });
   }
 }
 
@@ -128,10 +146,10 @@ export function observeRenderDuration(type: string, format: string, durationSeco
   }
 }
 
-export function observeApiRequestDuration(route: string, durationSeconds: number): void {
+export function observeApiRequestDuration(rawUrl: string, durationSeconds: number): void {
   const histogram = register.getSingleMetric('screenforge_api_request_duration_seconds') as Histogram<string>;
   if (histogram) {
-    histogram.observe({ route }, durationSeconds);
+    histogram.observe({ route: normalizeRoute(rawUrl) }, durationSeconds);
   }
 }
 
@@ -143,15 +161,11 @@ export function updateQueueDepthGauge(status: string, count: number): void {
   }
 }
 
-export function updateBrowserPoolGauges(active: number, available: number): void {
-  const activeGauge = register.getSingleMetric('screenforge_browser_pool_active') as Gauge<string>;
-  const availableGauge = register.getSingleMetric('screenforge_browser_pool_available') as Gauge<string>;
-
-  if (activeGauge) {
-    activeGauge.set(active);
-  }
-  if (availableGauge) {
-    availableGauge.set(available);
+export function updateBrowserPoolGauge(total: number, inUse: number): void {
+  const gauge = register.getSingleMetric('screenforge_browser_pool_browsers') as Gauge<string>;
+  if (gauge) {
+    gauge.set({ state: 'total' }, total);
+    gauge.set({ state: 'in_use' }, inUse);
   }
 }
 

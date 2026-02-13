@@ -1,5 +1,5 @@
 import { chromium, type Browser, type BrowserContext, type BrowserContextOptions } from 'playwright';
-import { updateBrowserPoolGauges } from '../metrics/index.js';
+import { updateBrowserPoolGauge } from '../metrics/index.js';
 
 interface PoolEntry {
   browser: Browser;
@@ -16,6 +16,7 @@ export class BrowserPool {
   private pool: PoolEntry[] = [];
   private roundRobin = 0;
   private totalRenders = 0;
+  private inUseContexts = 0;
   private readonly maxPoolSize: number;
   private readonly maxRendersPerContext: number;
   private initialized = false;
@@ -52,9 +53,18 @@ export class BrowserPool {
 
     entry.renderCount++;
     this.totalRenders++;
+    this.inUseContexts++;
     this.updateMetrics();
 
-    return entry.browser.newContext(contextOptions);
+    const context = await entry.browser.newContext(contextOptions);
+
+    // Decrement in-use when context is closed
+    context.on('close', () => {
+      this.inUseContexts = Math.max(0, this.inUseContexts - 1);
+      this.updateMetrics();
+    });
+
+    return context;
   }
 
   stats(): BrowserPoolStats {
@@ -66,7 +76,7 @@ export class BrowserPool {
   }
 
   private updateMetrics(): void {
-    updateBrowserPoolGauges(this.pool.length, this.maxPoolSize - this.pool.length);
+    updateBrowserPoolGauge(this.pool.length, this.inUseContexts);
   }
 
   async close(): Promise<void> {
@@ -75,6 +85,7 @@ export class BrowserPool {
     this.initialized = false;
     this.roundRobin = 0;
     this.totalRenders = 0;
+    this.inUseContexts = 0;
     this.updateMetrics();
   }
 }

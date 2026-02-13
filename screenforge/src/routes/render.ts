@@ -8,6 +8,7 @@ import { getConfig } from '../config/index.js';
 import { authMiddleware } from '../auth/middleware.js';
 import { incrementUsage, getUsageStats } from '../db/api-keys.js';
 import type { SlidingWindowRateLimiter } from '../auth/rate-limiter.js';
+import { incrementRenderCounter, observeRenderDuration } from '../metrics/index.js';
 import { getQueue, type RenderJobData } from '../queue/render-queue.js';
 import { getPool } from '../db/index.js';
 import { sanitizeUrl, sanitizeSelector, sanitizeWaitFor, sanitizeTemplate, sanitizeCallbackUrl, SanitizeError } from '../security/sanitize.js';
@@ -149,6 +150,8 @@ export async function renderRoutes(
 
     const cached = await cache.get(optionsHash);
     if (cached) {
+      const format = cached.contentType.includes('jpeg') ? 'jpeg' : 'png';
+      incrementRenderCounter('screenshot', format, 'completed', true);
       const buffer = await cache.readFile(cached.filePath);
       return reply
         .header('Content-Type', cached.contentType)
@@ -160,6 +163,10 @@ export async function renderRoutes(
     const result = await takeScreenshot(pool, options, config.NAVIGATION_TIMEOUT_MS);
     const ext = FORMAT_EXT[result.contentType] ?? 'bin';
     await cache.set(optionsHash, result.buffer, result.contentType, ext);
+
+    const format = result.contentType.includes('jpeg') ? 'jpeg' : 'png';
+    incrementRenderCounter('screenshot', format, 'completed', false);
+    observeRenderDuration('screenshot', format, result.durationMs / 1000);
 
     return reply
       .header('Content-Type', result.contentType)
@@ -222,6 +229,7 @@ export async function renderRoutes(
 
     const cached = await cache.get(optionsHash);
     if (cached) {
+      incrementRenderCounter('pdf', 'pdf', 'completed', true);
       const buffer = await cache.readFile(cached.filePath);
       return reply
         .header('Content-Type', cached.contentType)
@@ -232,6 +240,9 @@ export async function renderRoutes(
 
     const result = await renderPdf(pool, options, config.NAVIGATION_TIMEOUT_MS);
     await cache.set(optionsHash, result.buffer, result.contentType, 'pdf');
+
+    incrementRenderCounter('pdf', 'pdf', 'completed', false);
+    observeRenderDuration('pdf', 'pdf', result.durationMs / 1000);
 
     return reply
       .header('Content-Type', result.contentType)
