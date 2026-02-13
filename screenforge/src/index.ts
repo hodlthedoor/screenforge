@@ -198,8 +198,11 @@ export async function start() {
     const { type, url, options } = job.data;
     const start = performance.now();
 
+    // Build schema input from options; only inject url if options doesn't already have url or html
+    const schemaInput = (options.url || options.html) ? { ...options } : { url, ...options };
+
     if (type === 'pdf') {
-      const parsed = pdfOptionsSchema.parse({ url, ...options });
+      const parsed = pdfOptionsSchema.parse(schemaInput);
       const result = await renderPdf(browserPool, parsed, config.NAVIGATION_TIMEOUT_MS);
       const filePath = join(config.STORAGE_PATH, `${job.data.jobId}.pdf`);
       await writeFile(filePath, result.buffer);
@@ -207,7 +210,7 @@ export async function start() {
     }
 
     // Default: screenshot (including og type)
-    const parsed = screenshotOptionsSchema.parse({ url, ...options });
+    const parsed = screenshotOptionsSchema.parse(schemaInput);
     const result = await takeScreenshot(browserPool, parsed, config.NAVIGATION_TIMEOUT_MS);
     const ext = parsed.format === 'jpeg' ? 'jpg' : 'png';
     const filePath = join(config.STORAGE_PATH, `${job.data.jobId}.${ext}`);

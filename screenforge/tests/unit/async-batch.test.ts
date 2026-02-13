@@ -127,6 +127,57 @@ describe('async render & batch', { timeout: 120_000 }, () => {
     });
   });
 
+  describe('POST /v1/screenshot?async=true with HTML', () => {
+    it('returns 202 for async HTML screenshot', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/screenshot?async=true',
+        headers: { 'x-api-key': apiKey },
+        payload: { html: '<html><body><h1>Async HTML</h1></body></html>' },
+      });
+      expect(res.statusCode).toBe(202);
+      const body = JSON.parse(res.body);
+      expect(body.id).toBeDefined();
+      expect(body.status).toBe('pending');
+      expect(body.pollUrl).toContain('/v1/render/');
+    });
+
+    it('stores HTML job in DB without url validation failure', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/screenshot?async=true',
+        headers: { 'x-api-key': apiKey },
+        payload: { html: '<html><body>DB check</body></html>' },
+      });
+      expect(res.statusCode).toBe(202);
+      const { id } = JSON.parse(res.body);
+
+      const pollRes = await app.inject({
+        method: 'GET',
+        url: `/v1/render/${id}`,
+      });
+      expect(pollRes.statusCode).toBe(200);
+      const pollBody = JSON.parse(pollRes.body);
+      expect(pollBody.id).toBe(id);
+      expect(['pending', 'processing', 'completed']).toContain(pollBody.status);
+    });
+  });
+
+  describe('POST /v1/pdf?async=true with HTML', () => {
+    it('returns 202 for async HTML PDF', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/pdf?async=true',
+        headers: { 'x-api-key': apiKey },
+        payload: { html: '<html><body><h1>Async PDF</h1></body></html>' },
+      });
+      expect(res.statusCode).toBe(202);
+      const body = JSON.parse(res.body);
+      expect(body.id).toBeDefined();
+      expect(body.status).toBe('pending');
+    });
+  });
+
   describe('POST /v1/batch', () => {
     it('creates a batch with multiple items', async () => {
       const res = await app.inject({
@@ -193,6 +244,44 @@ describe('async render & batch', { timeout: 120_000 }, () => {
       expect(res.statusCode).toBe(202);
       const body = JSON.parse(res.body);
       expect(body.total).toBe(2);
+    });
+
+    it('creates a batch with HTML items', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/batch',
+        headers: { 'x-api-key': apiKey },
+        payload: {
+          items: [
+            { type: 'screenshot', html: '<html><body><h1>Batch HTML 1</h1></body></html>' },
+            { type: 'pdf', html: '<html><body><h1>Batch HTML 2</h1></body></html>' },
+          ],
+        },
+      });
+      expect(res.statusCode).toBe(202);
+      const body = JSON.parse(res.body);
+      expect(body.batchId).toBeDefined();
+      expect(body.total).toBe(2);
+      expect(body.status).toBe('processing');
+      expect(body.jobs).toHaveLength(2);
+    });
+
+    it('supports mixed URL and HTML items in batch', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/batch',
+        headers: { 'x-api-key': apiKey },
+        payload: {
+          items: [
+            { type: 'screenshot', url: fixtureUrl },
+            { type: 'screenshot', html: '<html><body><h1>Mixed batch</h1></body></html>' },
+          ],
+        },
+      });
+      expect(res.statusCode).toBe(202);
+      const body = JSON.parse(res.body);
+      expect(body.total).toBe(2);
+      expect(body.jobs).toHaveLength(2);
     });
   });
 

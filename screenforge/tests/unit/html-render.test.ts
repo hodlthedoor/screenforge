@@ -155,6 +155,47 @@ describe('HTML rendering', { timeout: 60_000 }, () => {
     });
   });
 
+  describe('worker schema input for HTML jobs', () => {
+    it('parses correctly when options contains html (simulates async/batch worker)', () => {
+      // Simulate what the worker does: job.data has url=undefined, options={html: '...'}
+      const url = undefined;
+      const options: Record<string, unknown> = { html: SIMPLE_HTML };
+      const schemaInput = (options.url || options.html) ? { ...options } : { url, ...options };
+
+      const result = screenshotOptionsSchema.safeParse(schemaInput);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.html).toBe(SIMPLE_HTML);
+        expect(result.data.url).toBeUndefined();
+      }
+    });
+
+    it('parses correctly when options contains url (standard URL job)', () => {
+      const url = 'https://example.com';
+      const options: Record<string, unknown> = { url: 'https://example.com' };
+      const schemaInput = (options.url || options.html) ? { ...options } : { url, ...options };
+
+      const result = screenshotOptionsSchema.safeParse(schemaInput);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.url).toBe('https://example.com');
+      }
+    });
+
+    it('falls back to job.data.url for legacy jobs without options.url', () => {
+      // Legacy jobs where url was in job.data.url, not in options
+      const url = 'https://example.com';
+      const options: Record<string, unknown> = { format: 'jpeg' };
+      const schemaInput = (options.url || options.html) ? { ...options } : { url, ...options };
+
+      const result = screenshotOptionsSchema.safeParse(schemaInput);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.url).toBe('https://example.com');
+      }
+    });
+  });
+
   describe('cache with HTML', () => {
     it('generates consistent hash for identical HTML', () => {
       const options1 = { html: SIMPLE_HTML, viewport: { width: 1920, height: 1080 }, format: 'png' as const };
