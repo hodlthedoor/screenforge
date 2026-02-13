@@ -19,10 +19,10 @@ export interface CreateKeyResult {
 }
 
 const TIER_DEFAULTS: Record<string, { rateLimit: number; monthlyQuota: number }> = {
-  free: { rateLimit: 10, monthlyQuota: 1000 },
-  starter: { rateLimit: 50, monthlyQuota: 10000 },
-  pro: { rateLimit: 200, monthlyQuota: 100000 },
-  business: { rateLimit: 1000, monthlyQuota: 1000000 },
+  free: { rateLimit: 10, monthlyQuota: 100 },
+  starter: { rateLimit: 50, monthlyQuota: 5000 },
+  pro: { rateLimit: 200, monthlyQuota: 25000 },
+  business: { rateLimit: 1000, monthlyQuota: 999999999 },
 };
 
 export function hashApiKey(rawKey: string): string {

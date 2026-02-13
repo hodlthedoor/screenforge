@@ -54,7 +54,7 @@ describe('auth', () => {
       expect(result.key.name).toBe('Test Key');
       expect(result.key.tier).toBe('free');
       expect(result.key.rateLimit).toBe(10);
-      expect(result.key.monthlyQuota).toBe(1000);
+      expect(result.key.monthlyQuota).toBe(100); // free tier: 100 renders/mo
       expect(result.key.active).toBe(true);
     });
 
@@ -63,7 +63,7 @@ describe('auth', () => {
       expect(result.rawKey).toMatch(/^sf_live_/);
       expect(result.key.tier).toBe('pro');
       expect(result.key.rateLimit).toBe(200);
-      expect(result.key.monthlyQuota).toBe(100000);
+      expect(result.key.monthlyQuota).toBe(25000);
     });
   });
 

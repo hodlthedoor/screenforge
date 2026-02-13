@@ -19,15 +19,15 @@ describe('billing plans', () => {
     });
 
     it('plans have correct pricing', () => {
-      expect(PLANS.starter.priceMonthly).toBe(9);
-      expect(PLANS.pro.priceMonthly).toBe(29);
-      expect(PLANS.business.priceMonthly).toBe(99);
+      expect(PLANS.starter.priceMonthly).toBe(29);
+      expect(PLANS.pro.priceMonthly).toBe(79);
+      expect(PLANS.business.priceMonthly).toBe(199);
     });
 
-    it('plans have increasing quotas', () => {
+    it('plans have increasing quotas (business is unlimited = -1)', () => {
       expect(PLANS.free.monthlyQuota).toBeLessThan(PLANS.starter.monthlyQuota);
       expect(PLANS.starter.monthlyQuota).toBeLessThan(PLANS.pro.monthlyQuota);
-      expect(PLANS.pro.monthlyQuota).toBeLessThan(PLANS.business.monthlyQuota);
+      expect(PLANS.business.monthlyQuota).toBe(999_999_999);
     });
 
     it('plans have increasing rate limits', () => {
@@ -42,7 +42,7 @@ describe('billing plans', () => {
       const plan = getPlanByTier('pro');
       expect(plan).toBeDefined();
       expect(plan!.tier).toBe('pro');
-      expect(plan!.priceMonthly).toBe(29);
+      expect(plan!.priceMonthly).toBe(79);
     });
 
     it('returns undefined for invalid tier', () => {
