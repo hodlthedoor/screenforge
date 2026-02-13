@@ -10,7 +10,23 @@ const createKeySchema = z.object({
 });
 
 export async function adminRoutes(app: FastifyInstance) {
-  app.post('/v1/keys', { preHandler: [adminAuthMiddleware] }, async (req, reply) => {
+  app.post('/v1/keys', {
+    schema: {
+      tags: ['admin'],
+      summary: 'Create API key',
+      description: 'Create a new API key with the specified name and tier.',
+      security: [{ apiKey: [] }],
+      body: {
+        type: 'object',
+        required: ['name'],
+        properties: {
+          name: { type: 'string', minLength: 1, maxLength: 100 },
+          tier: { type: 'string', enum: ['free', 'starter', 'pro', 'business'], default: 'free' },
+        },
+      },
+    },
+    preHandler: [adminAuthMiddleware],
+  }, async (req, reply) => {
     const parsed = createKeySchema.safeParse(req.body);
     if (!parsed.success) {
       const err = createError('VALIDATION_ERROR', undefined, { details: parsed.error.issues });
@@ -28,7 +44,15 @@ export async function adminRoutes(app: FastifyInstance) {
     });
   });
 
-  app.get('/v1/keys', { preHandler: [adminAuthMiddleware] }, async (_req, reply) => {
+  app.get('/v1/keys', {
+    schema: {
+      tags: ['admin'],
+      summary: 'List API keys',
+      description: 'List all API keys.',
+      security: [{ apiKey: [] }],
+    },
+    preHandler: [adminAuthMiddleware],
+  }, async (_req, reply) => {
     const keys = await listApiKeys();
     return reply.send({ keys });
   });

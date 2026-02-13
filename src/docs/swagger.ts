@@ -8,7 +8,7 @@ export async function registerDocs(app: FastifyInstance) {
       info: {
         title: 'ScreenForge API',
         description: 'Self-hostable screenshot & render API — open-source alternative to ScreenshotOne',
-        version: '0.2.0',
+        version: '1.0.0',
       },
       servers: [{ url: '/' }],
       components: {
@@ -34,6 +34,10 @@ export async function registerDocs(app: FastifyInstance) {
         { name: 'admin', description: 'Admin API key management' },
         { name: 'usage', description: 'Usage and quota tracking' },
         { name: 'health', description: 'Health checks' },
+        { name: 'signed', description: 'Signed URL rendering' },
+        { name: 'billing', description: 'Billing & Stripe integration' },
+        { name: 'webhooks', description: 'Webhook management' },
+        { name: 'auth', description: 'Authentication' },
       ],
     },
   });

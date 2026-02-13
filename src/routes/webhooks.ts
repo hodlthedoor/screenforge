@@ -21,7 +21,22 @@ export async function webhooksRoutes(app: FastifyInstance) {
   // GET /v1/webhooks/deliveries - List webhook deliveries for the authenticated API key
   app.get(
     '/v1/webhooks/deliveries',
-    { preHandler: [authMiddleware] },
+    {
+      schema: {
+        tags: ['webhooks'],
+        summary: 'List webhook deliveries',
+        description: 'List webhook deliveries for the authenticated API key.',
+        security: [{ apiKey: [] }],
+        querystring: {
+          type: 'object',
+          properties: {
+            page: { type: 'number', minimum: 1, default: 1 },
+            limit: { type: 'number', minimum: 1, maximum: 100, default: 50 },
+          },
+        },
+      },
+      preHandler: [authMiddleware],
+    },
     async (req, reply) => {
       const parsed = listDeliveriesSchema.safeParse(req.query);
       if (!parsed.success) {
@@ -58,7 +73,22 @@ export async function webhooksRoutes(app: FastifyInstance) {
   // GET /v1/webhooks/deliveries/:id - Get a specific delivery by ID
   app.get(
     '/v1/webhooks/deliveries/:id',
-    { preHandler: [authMiddleware] },
+    {
+      schema: {
+        tags: ['webhooks'],
+        summary: 'Get webhook delivery',
+        description: 'Get a specific webhook delivery by ID.',
+        security: [{ apiKey: [] }],
+        params: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', description: 'Delivery ID' },
+          },
+          required: ['id'],
+        },
+      },
+      preHandler: [authMiddleware],
+    },
     async (req, reply) => {
       const { id } = req.params as { id: string };
       const apiKeyId = req.apiKey!.id;
@@ -88,7 +118,21 @@ export async function webhooksRoutes(app: FastifyInstance) {
   // POST /v1/webhooks/test - Send a test webhook to the configured URL
   app.post(
     '/v1/webhooks/test',
-    { preHandler: [authMiddleware] },
+    {
+      schema: {
+        tags: ['webhooks'],
+        summary: 'Send test webhook',
+        description: 'Send a test webhook to the configured URL.',
+        security: [{ apiKey: [] }],
+        body: {
+          type: 'object',
+          properties: {
+            payload: { type: 'object', additionalProperties: true, description: 'Custom payload for the test webhook' },
+          },
+        },
+      },
+      preHandler: [authMiddleware],
+    },
     async (req, reply) => {
       const parsed = testWebhookSchema.safeParse(req.body);
       if (!parsed.success) {

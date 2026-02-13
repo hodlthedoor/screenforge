@@ -7,7 +7,20 @@ import { sendError } from '../security/errors.js';
 export async function asyncRenderRoutes(app: FastifyInstance) {
   const config = getConfig();
 
-  app.get('/v1/render/:id', async (req, reply) => {
+  app.get('/v1/render/:id', {
+    schema: {
+      tags: ['async'],
+      summary: 'Poll async render job',
+      description: 'Get the status and result of an async render job.',
+      params: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', description: 'Job ID' },
+        },
+        required: ['id'],
+      },
+    },
+  }, async (req, reply) => {
     const { id } = req.params as { id: string };
 
     const result = await getPool().query(

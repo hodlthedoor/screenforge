@@ -100,7 +100,27 @@ async function fetchOgMeta(url: string, pool: BrowserPool, timeoutMs: number): P
 }
 
 export async function ogRoutes(app: FastifyInstance, pool: BrowserPool, cache: RenderCache) {
-  app.post('/v1/og', { preHandler: [authMiddleware] }, async (req, reply) => {
+  app.post('/v1/og', {
+    schema: {
+      tags: ['og'],
+      summary: 'Generate OG card',
+      description: 'Generate an Open Graph preview image from a URL or custom data.',
+      security: [{ apiKey: [] }],
+      body: {
+        type: 'object',
+        properties: {
+          url: { type: 'string', description: 'URL to fetch OG metadata from' },
+          title: { type: 'string', maxLength: 200 },
+          description: { type: 'string', maxLength: 500 },
+          siteName: { type: 'string', maxLength: 100 },
+          image: { type: 'string' },
+          theme: { type: 'string', enum: ['light', 'dark'], default: 'light' },
+          template: { type: 'string', enum: ['default', 'article', 'product'], default: 'default' },
+        },
+      },
+    },
+    preHandler: [authMiddleware],
+  }, async (req, reply) => {
     const parsed = ogRequestSchema.safeParse(req.body);
     if (!parsed.success) {
       sendError(reply, req, 'VALIDATION_ERROR', { details: parsed.error.issues });

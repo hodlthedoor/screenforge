@@ -162,11 +162,43 @@ export async function signedRoutes(
     });
   }
 
-  app.get('/v1/signed/screenshot', async (req, reply) => {
+  app.get('/v1/signed/screenshot', {
+    schema: {
+      tags: ['signed'],
+      summary: 'Signed screenshot URL',
+      description: 'Render a screenshot via a pre-signed URL.',
+      querystring: {
+        type: 'object',
+        properties: {
+          url: { type: 'string', description: 'URL to screenshot' },
+          api_key_id: { type: 'string', description: 'API key ID' },
+          signature: { type: 'string', description: 'HMAC signature' },
+          expires: { type: 'string', description: 'Expiration timestamp' },
+        },
+        required: ['url', 'api_key_id', 'signature', 'expires'],
+      },
+    },
+  }, async (req, reply) => {
     return handleSignedRequest(req, reply, 'screenshot');
   });
 
-  app.get('/v1/signed/pdf', async (req, reply) => {
+  app.get('/v1/signed/pdf', {
+    schema: {
+      tags: ['signed'],
+      summary: 'Signed PDF URL',
+      description: 'Render a PDF via a pre-signed URL.',
+      querystring: {
+        type: 'object',
+        properties: {
+          url: { type: 'string', description: 'URL to render as PDF' },
+          api_key_id: { type: 'string', description: 'API key ID' },
+          signature: { type: 'string', description: 'HMAC signature' },
+          expires: { type: 'string', description: 'Expiration timestamp' },
+        },
+        required: ['url', 'api_key_id', 'signature', 'expires'],
+      },
+    },
+  }, async (req, reply) => {
     return handleSignedRequest(req, reply, 'pdf');
   });
 }

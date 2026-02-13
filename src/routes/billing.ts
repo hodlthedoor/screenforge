@@ -227,6 +227,11 @@ export async function billingRoutes(app: FastifyInstance): Promise<void> {
 
   // Stripe webhook handler
   app.post('/v1/billing/webhook', {
+    schema: {
+      tags: ['billing'],
+      summary: 'Stripe webhook',
+      description: 'Handle Stripe webhook events for subscription management.',
+    },
     config: { rawBody: true },
   }, async (req, reply) => {
     const webhookSecret = config.STRIPE_WEBHOOK_SECRET;

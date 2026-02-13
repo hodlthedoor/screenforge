@@ -25,7 +25,36 @@ const batchRequestSchema = z.object({
 export async function batchRoutes(app: FastifyInstance) {
   const config = getConfig();
 
-  app.post('/v1/batch', { preHandler: [authMiddleware] }, async (req, reply) => {
+  app.post('/v1/batch', {
+    schema: {
+      tags: ['batch'],
+      summary: 'Submit batch render job',
+      description: 'Submit multiple render jobs (screenshot or PDF) as a batch.',
+      security: [{ apiKey: [] }],
+      body: {
+        type: 'object',
+        required: ['items'],
+        properties: {
+          items: {
+            type: 'array',
+            minItems: 1,
+            maxItems: 50,
+            items: {
+              type: 'object',
+              properties: {
+                type: { type: 'string', enum: ['screenshot', 'pdf'], default: 'screenshot' },
+                url: { type: 'string', },
+                html: { type: 'string' },
+                options: { type: 'object', additionalProperties: true },
+                callbackUrl: { type: 'string', },
+              },
+            },
+          },
+        },
+      },
+    },
+    preHandler: [authMiddleware],
+  }, async (req, reply) => {
     const parsed = batchRequestSchema.safeParse(req.body);
     if (!parsed.success) {
       sendError(reply, req, 'VALIDATION_ERROR', { details: parsed.error.issues });
@@ -128,7 +157,20 @@ export async function batchRoutes(app: FastifyInstance) {
     });
   });
 
-  app.get('/v1/batch/:id', async (req, reply) => {
+  app.get('/v1/batch/:id', {
+    schema: {
+      tags: ['batch'],
+      summary: 'Get batch status',
+      description: 'Get the status and jobs of a batch render.',
+      params: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', description: 'Batch ID' },
+        },
+        required: ['id'],
+      },
+    },
+  }, async (req, reply) => {
     const { id } = req.params as { id: string };
 
     const batchResult = await getPool().query(
