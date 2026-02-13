@@ -307,7 +307,6 @@ curl -X POST ${safeBaseUrl}/v1/pdf \\
   <section class="testimonials">
     <div class="container">
       <h2 class="section-title">Trusted by teams shipping visuals at scale</h2>
-      <p class="section-subtitle"></p>
       <div class="testimonials-grid">
         <article class="quote-card">
           <p>"ScreenForge replaced multiple brittle screenshot scripts and cut our rendering latency by half."</p>
@@ -381,7 +380,7 @@ curl -X POST ${safeBaseUrl}/v1/pdf \\
         demoPreview.innerHTML = '<img src="' + imageUrl + '" alt="Screenshot preview" />';
         demoStatus.textContent = 'Done';
       } catch {
-        demoStatus.textContent = 'Network error';
+        demoStatus.textContent = '';
         demoPreview.innerHTML = '<p class="demo-empty">Demo coming soon! Sign up to try the API.</p>';
       } finally {
         demoButton.disabled = false;
