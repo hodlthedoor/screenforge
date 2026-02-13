@@ -191,7 +191,7 @@ export async function getUserByEmailToken(token: string): Promise<User | null> {
  */
 export async function markEmailVerified(userId: string): Promise<void> {
   await getPool().query(
-    'UPDATE users SET email_verified = true, email_token = NULL, email_token_expires = NULL WHERE id = $1',
+    'UPDATE users SET email_verified = true, email_verified_at = NOW(), email_token = NULL, email_token_expires = NULL WHERE id = $1',
     [userId],
   );
 }

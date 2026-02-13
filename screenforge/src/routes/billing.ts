@@ -5,6 +5,8 @@ import { getStripe } from '../billing/stripe.js';
 import { PLANS, getPlanByPriceId } from '../billing/plans.js';
 import { getUserById } from '../db/users.js';
 import { escapeHtml, generateCsrfToken } from '../utils/html.js';
+import { sendEmail, getSmtpConfig } from '../email/index.js';
+import { renderSubscriptionChanged, renderPaymentFailed } from '../email/templates.js';
 
 async function requireAuth(req: FastifyRequest, reply: FastifyReply): Promise<void> {
   const userId = req.session.userId;
@@ -327,6 +329,30 @@ export async function billingRoutes(app: FastifyInstance): Promise<void> {
               ? (plan?.tier ?? 'free')
               : 'free';
             await updateUserTier(subUser.rows[0].user_id, tier);
+
+            // Send subscription changed email
+            if (plan) {
+              const user = await getUserById(subUser.rows[0].user_id);
+              if (user) {
+                const oldSub = await pool.query(
+                  'SELECT plan FROM subscriptions WHERE stripe_sub_id = $1',
+                  [subscription.id],
+                );
+                const oldPlan = oldSub.rows[0]?.plan ?? 'free';
+                const oldPlanName = PLANS[oldPlan]?.name ?? oldPlan;
+                const newPlanName = PLANS[plan.tier]?.name ?? plan.tier;
+                if (oldPlanName !== newPlanName) {
+                  const smtp = getSmtpConfig();
+                  const template = renderSubscriptionChanged({
+                    email: user.email,
+                    oldPlan: oldPlanName,
+                    newPlan: newPlanName,
+                    dashboardUrl: `${config.BASE_URL}/dashboard/billing`,
+                  });
+                  void sendEmail({ to: user.email, ...template }, smtp);
+                }
+              }
+            }
           }
           break;
         }
@@ -363,6 +389,20 @@ export async function billingRoutes(app: FastifyInstance): Promise<void> {
               "UPDATE subscriptions SET status = 'past_due' WHERE stripe_sub_id = $1",
               [invoice.subscription],
             );
+          }
+
+          // Send payment failed email
+          const failedUser = await pool.query(
+            'SELECT id, email FROM users WHERE stripe_customer_id = $1',
+            [invoice.customer],
+          );
+          if (failedUser.rows.length > 0) {
+            const smtp = getSmtpConfig();
+            const template = renderPaymentFailed({
+              email: failedUser.rows[0].email,
+              billingUrl: `${config.BASE_URL}/v1/billing/portal`,
+            });
+            void sendEmail({ to: failedUser.rows[0].email, ...template }, smtp);
           }
           break;
         }

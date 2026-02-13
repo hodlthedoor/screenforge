@@ -5,14 +5,18 @@ import {
   verifyUserPassword,
   updateUserPassword,
   setPasswordResetToken,
+  setEmailVerificationToken,
   getUserByResetToken,
   getUserByEmailToken,
   markEmailVerified,
   getUserByEmail,
 } from '../db/users.js';
 import { escapeHtml, generateCsrfToken } from '../utils/html.js';
-import { createExpiringToken, isExpired, PASSWORD_RESET_TTL } from '../auth/tokens.js';
+import { createExpiringToken, isExpired, PASSWORD_RESET_TTL, EMAIL_VERIFICATION_TTL } from '../auth/tokens.js';
 import { getPool } from '../db/index.js';
+import { getConfig } from '../config/index.js';
+import { sendEmail, getSmtpConfig } from '../email/index.js';
+import { renderWelcomeEmail, renderEmailVerification, renderPasswordReset } from '../email/templates.js';
 
 interface AuthBody {
   email: string;
@@ -145,6 +149,27 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       req.session.userId = user.id;
       req.session.csrfToken = generateCsrfToken();
       await req.session.save();
+
+      // Send welcome + verification emails (fire-and-forget)
+      const config = getConfig();
+      const smtp = getSmtpConfig();
+      const { token: verifyToken, expiresAt } = createExpiringToken(EMAIL_VERIFICATION_TTL);
+      await setEmailVerificationToken(user.id, verifyToken, expiresAt);
+
+      const welcomeEmail = renderWelcomeEmail({
+        email: user.email,
+        apiKeyPrefix: '(create your first key in the dashboard)',
+        dashboardUrl: `${config.BASE_URL}/dashboard`,
+        docsUrl: `${config.BASE_URL}/docs`,
+      });
+      void sendEmail({ to: user.email, ...welcomeEmail }, smtp);
+
+      const verifyEmail = renderEmailVerification({
+        email: user.email,
+        verifyUrl: `${config.BASE_URL}/auth/verify-email/${verifyToken}`,
+      });
+      void sendEmail({ to: user.email, ...verifyEmail }, smtp);
+
       return reply.redirect('/dashboard');
     } catch (err: unknown) {
       const pgErr = err as { code?: string };
@@ -279,7 +304,14 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     if (user) {
       const { token, expiresAt } = createExpiringToken(PASSWORD_RESET_TTL);
       await setPasswordResetToken(email, token, expiresAt);
-      // Phase 3: send email here
+
+      const config = getConfig();
+      const smtp = getSmtpConfig();
+      const resetEmail = renderPasswordReset({
+        email: user.email,
+        resetUrl: `${config.BASE_URL}/auth/reset-password/${token}`,
+      });
+      void sendEmail({ to: user.email, ...resetEmail }, smtp);
     }
 
     const html = `<!DOCTYPE html>

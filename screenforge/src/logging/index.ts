@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { FastifyBaseLogger } from 'fastify';
 
-type ModuleName = 'renderer' | 'queue' | 'cache' | 'auth' | 'billing';
+type ModuleName = 'renderer' | 'queue' | 'cache' | 'auth' | 'billing' | 'email';
 
 let appLogger: FastifyBaseLogger | null = null;
 
