@@ -5,6 +5,8 @@ const MAX_WAIT_FOR_LENGTH = 500;
 const MAX_TEMPLATE_LENGTH = 10_000;
 const MAX_URL_LENGTH = 2048;
 const MAX_CALLBACK_URL_LENGTH = 2048;
+const MAX_CUSTOM_CSS_LENGTH = 50 * 1024; // 50KB
+const MAX_CUSTOM_JS_LENGTH = 10 * 1024; // 10KB
 
 const DANGEROUS_PATTERNS = [
   /<script[^>]*>/i,
@@ -65,6 +67,33 @@ export function sanitizeCallbackUrl(input: string | undefined, allowPrivate = fa
   }
   if (!allowPrivate && isPrivateUrl(input)) {
     throw new SanitizeError('Callback URL must not target private/internal networks');
+  }
+  return input;
+}
+
+const DANGEROUS_JS_PATTERNS = [
+  /\beval\s*\(/,
+  /\bFunction\s*\(/,
+  /\bnew\s+Function\b/,
+  /=\s*Function\b/,
+  /\bimport\s*\(/,
+];
+
+export function sanitizeCustomJs(input: string): string {
+  if (Buffer.byteLength(input, 'utf-8') > MAX_CUSTOM_JS_LENGTH) {
+    throw new SanitizeError('Custom JS exceeds maximum length (10KB)');
+  }
+  for (const pattern of DANGEROUS_JS_PATTERNS) {
+    if (pattern.test(input)) {
+      throw new SanitizeError('Custom JS contains dangerous patterns (eval, Function, import())');
+    }
+  }
+  return input;
+}
+
+export function sanitizeCustomCss(input: string): string {
+  if (Buffer.byteLength(input, 'utf-8') > MAX_CUSTOM_CSS_LENGTH) {
+    throw new SanitizeError('Custom CSS exceeds maximum length (50KB)');
   }
   return input;
 }

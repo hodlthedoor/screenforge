@@ -1,5 +1,6 @@
 import type { BrowserPool } from './browser-pool.js';
 import type { PdfOptions, RenderResult } from './schemas.js';
+import { applyPreNavigationFilters, applyPostNavigationFilters } from './filters.js';
 
 const FORMAT_SIZE: Record<string, { width: string; height: string }> = {
   a4: { width: '210mm', height: '297mm' },
@@ -14,11 +15,15 @@ export async function renderPdf(pool: BrowserPool, options: PdfOptions, timeoutM
   try {
     const page = await context.newPage();
 
+    await applyPreNavigationFilters(page, options);
+
     if ('html' in options && options.html) {
       await page.setContent(options.html, { waitUntil: 'networkidle', timeout: timeoutMs });
     } else if ('url' in options && options.url) {
       await page.goto(options.url, { waitUntil: 'networkidle', timeout: timeoutMs });
     }
+
+    await applyPostNavigationFilters(page, options);
 
     const size = FORMAT_SIZE[options.format];
 

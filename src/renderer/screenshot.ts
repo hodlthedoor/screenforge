@@ -1,5 +1,6 @@
 import type { BrowserPool } from './browser-pool.js';
 import type { ScreenshotOptions, RenderResult } from './schemas.js';
+import { applyPreNavigationFilters, applyPostNavigationFilters } from './filters.js';
 
 const FORMAT_CONTENT_TYPE: Record<string, string> = {
   png: 'image/png',
@@ -17,11 +18,15 @@ export async function takeScreenshot(pool: BrowserPool, options: ScreenshotOptio
   try {
     const page = await context.newPage();
 
+    await applyPreNavigationFilters(page, options);
+
     if ('html' in options && options.html) {
       await page.setContent(options.html, { waitUntil: 'networkidle', timeout: timeoutMs });
     } else if ('url' in options && options.url) {
       await page.goto(options.url, { waitUntil: 'networkidle', timeout: timeoutMs });
     }
+
+    await applyPostNavigationFilters(page, options);
 
     if (options.waitFor) {
       await page.waitForSelector(options.waitFor, { timeout: 10_000 });

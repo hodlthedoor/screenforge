@@ -19,6 +19,21 @@ export function isPrivateUrl(url: string): boolean {
 }
 
 const MAX_HTML_SIZE = 2 * 1024 * 1024; // 2MB
+const MAX_CUSTOM_CSS_SIZE = 50 * 1024; // 50KB
+const MAX_CUSTOM_JS_SIZE = 10 * 1024; // 10KB
+
+const contentFilterSchema = z.object({
+  block_ads: z.boolean().default(false),
+  hide_cookies: z.boolean().default(false),
+  custom_css: z.string().refine(
+    (s) => Buffer.byteLength(s, 'utf-8') <= MAX_CUSTOM_CSS_SIZE,
+    { message: 'custom_css must not exceed 50KB' },
+  ).optional(),
+  custom_js: z.string().refine(
+    (s) => Buffer.byteLength(s, 'utf-8') <= MAX_CUSTOM_JS_SIZE,
+    { message: 'custom_js must not exceed 10KB' },
+  ).optional(),
+});
 
 export const viewportSchema = z.object({
   width: z.number().int().min(1).max(7680).default(1920),
@@ -42,6 +57,7 @@ export const screenshotOptionsSchema = z.object({
     message: `HTML content must not exceed ${MAX_HTML_SIZE / 1024 / 1024}MB`,
   }).optional(),
   ...screenshotBaseOptionsSchema.shape,
+  ...contentFilterSchema.shape,
 }).refine((data) => (data.url && !data.html) || (!data.url && data.html), {
   message: 'Exactly one of url or html must be provided',
 });
@@ -71,6 +87,7 @@ export const pdfOptionsSchema = z.object({
     message: `HTML content must not exceed ${MAX_HTML_SIZE / 1024 / 1024}MB`,
   }).optional(),
   ...pdfBaseOptionsSchema.shape,
+  ...contentFilterSchema.shape,
 }).refine((data) => (data.url && !data.html) || (!data.url && data.html), {
   message: 'Exactly one of url or html must be provided',
 });
