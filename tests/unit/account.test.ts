@@ -381,6 +381,40 @@ describe('account management', () => {
       expect(userCheck.rows[0].email_token_expires).toBeNull();
     });
 
+    it('GET request verifies email (clickable link from email)', async () => {
+      const regRes = await app.inject({ method: 'GET', url: '/register' });
+      const csrf = extractCsrfToken(regRes.body);
+      const cookie = extractCookie(regRes);
+
+      await app.inject({
+        method: 'POST',
+        url: '/register',
+        headers: { cookie },
+        payload: { email: 'test-account-verify-get@example.com', password: 'password123', _csrf: csrf },
+      });
+
+      const token = 'd'.repeat(64);
+      const expires = new Date(Date.now() + 3600000);
+      await getPool().query(
+        `UPDATE users SET email_token = $1, email_token_expires = $2 WHERE email = $3`,
+        [token, expires, 'test-account-verify-get@example.com'],
+      );
+
+      const res = await app.inject({
+        method: 'GET',
+        url: `/auth/verify-email/${token}`,
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body).toContain('Email Verified');
+
+      const userCheck = await getPool().query(
+        `SELECT email_verified FROM users WHERE email = $1`,
+        ['test-account-verify-get@example.com'],
+      );
+      expect(userCheck.rows[0].email_verified).toBe(true);
+    });
+
     it('invalid/expired token rejected', async () => {
       const res = await app.inject({
         method: 'POST',

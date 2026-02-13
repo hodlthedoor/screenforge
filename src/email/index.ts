@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import { getLogger } from '../logging/index.js';
 
 export interface SmtpConfig {
   host: string;
@@ -26,7 +27,7 @@ export async function sendEmail(
   smtp?: SmtpConfig,
 ): Promise<SendResult> {
   if (!smtp) {
-    console.warn('[email] SMTP not configured — skipping email send');
+    getLogger('email').warn('SMTP not configured — skipping email send');
     return { sent: false, reason: 'smtp_not_configured' };
   }
 
