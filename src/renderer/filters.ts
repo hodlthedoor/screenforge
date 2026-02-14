@@ -63,8 +63,8 @@ export async function applyPostNavigationFilters(page: Page, options: ContentFil
       selectors.forEach((selector: string) => {
         try {
           // @ts-expect-error - document is available in browser evaluate context but not in Node types
-          document.querySelectorAll(selector).forEach((el: any) => el.remove()); // eslint-disable-line no-undef
-        } catch (e) {
+          document.querySelectorAll(selector).forEach((el: Element) => el.remove()); // eslint-disable-line no-undef
+        } catch {
           // Invalid selector — skip silently
         }
       });
