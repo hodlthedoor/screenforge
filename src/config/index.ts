@@ -38,6 +38,10 @@ const envSchema = z.object({
   CIRCUIT_BREAKER_THRESHOLD: z.coerce.number().int().min(1).default(3),
   ANALYTICS_SCRIPT: z.string().optional(),
 
+  // Scheduler for recurring screenshot jobs
+  SCHEDULER_ENABLED: z.enum(['true', 'false']).default('true').transform((v) => v === 'true'),
+  SCHEDULER_POLL_INTERVAL_MS: z.coerce.number().int().min(5000).default(60_000),
+
   // Storage backend: 'local' (default) or 's3' (S3-compatible)
   STORAGE_BACKEND: z.enum(['local', 's3']).default('local'),
   S3_BUCKET: z.string().optional(),

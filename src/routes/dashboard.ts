@@ -105,6 +105,7 @@ function dashboardLayout(title: string, nav: string, content: string, csrfToken:
     <a href="/dashboard/usage" class="${nav === 'usage' ? 'active' : ''}">Usage</a>
     <a href="/dashboard/webhooks" class="${nav === 'webhooks' ? 'active' : ''}">Webhooks</a>
     <a href="/dashboard/analytics" class="${nav === 'analytics' ? 'active' : ''}">Analytics</a>
+    <a href="/dashboard/schedules" class="${nav === 'schedules' ? 'active' : ''}">Schedules</a>
     <a href="/dashboard/signed-urls" class="${nav === 'signed-urls' ? 'active' : ''}">Signed URLs</a>
     <a href="/dashboard/billing" class="${nav === 'billing' ? 'active' : ''}">Billing</a>
     <a href="/dashboard/settings" class="${nav === 'settings' ? 'active' : ''}">Settings</a>
@@ -858,6 +859,62 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
     const expiresAt = Date.now() + body.expiry * 1000;
 
     return reply.send({ signedUrl, expiresAt });
+  });
+
+  // Schedules
+  app.get('/dashboard/schedules', { preHandler: requireAuth }, async (req, reply) => {
+    const csrfToken = ensureCsrfToken(req);
+    try {
+      const user = req.dashboardUser!;
+      const pool = getPool();
+      const keys = await getUserApiKeys(user.id);
+      const keyIds = keys.map((k) => k.id);
+
+      if (keyIds.length === 0) {
+        const html = `<h1>Schedules</h1><p style="color:var(--muted)">Create an API key first to set up recurring render schedules.</p>`;
+        await req.session.save();
+        return reply.type('text/html').send(dashboardLayout('Schedules', 'schedules', html, csrfToken));
+      }
+
+      const result = await pool.query(
+        `SELECT s.id, s.name, s.cron_expression, s.render_type, s.render_config, s.enabled,
+                s.last_run_at, s.next_run_at, s.created_at
+         FROM schedules s
+         WHERE s.api_key_id = ANY($1)
+         ORDER BY s.created_at DESC`,
+        [keyIds],
+      );
+
+      const rows = result.rows.map((r: { id: string; name: string; cron_expression: string; render_type: string; render_config: Record<string, unknown>; enabled: boolean; last_run_at: string | null; next_run_at: string | null }) => {
+        const statusBadge = r.enabled ? '<span class="badge badge-active">Active</span>' : '<span class="badge badge-revoked">Disabled</span>';
+        const url = typeof r.render_config?.url === 'string' ? r.render_config.url : '—';
+        return `<tr>
+          <td>${escapeHtml(r.name)}</td>
+          <td><code>${escapeHtml(r.cron_expression)}</code></td>
+          <td>${escapeHtml(r.render_type)}</td>
+          <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(url)}</td>
+          <td>${statusBadge}</td>
+          <td>${r.last_run_at ? new Date(r.last_run_at).toLocaleString() : '—'}</td>
+          <td>${r.next_run_at ? new Date(r.next_run_at).toLocaleString() : '—'}</td>
+        </tr>`;
+      }).join('');
+
+      const html = `
+        <h1>Schedules</h1>
+        <p style="color:var(--muted);margin-bottom:24px">Set up recurring screenshot, PDF, or OG card renders on a cron schedule. Manage via the <a href="/docs/swagger#/schedules">Schedules API</a>.</p>
+        <div class="card">
+          <h2 style="margin-bottom:16px">Active Schedules</h2>
+          ${result.rows.length > 0
+            ? `<table><thead><tr><th>Name</th><th>Cron</th><th>Type</th><th>URL</th><th>Status</th><th>Last Run</th><th>Next Run</th></tr></thead><tbody>${rows}</tbody></table>`
+            : '<p style="color:var(--muted)">No schedules yet. Use the API to create recurring render schedules.</p>'}
+        </div>`;
+
+      await req.session.save();
+      return reply.type('text/html').send(dashboardLayout('Schedules', 'schedules', html, csrfToken));
+    } catch (err) {
+      req.log.error(err, 'Dashboard schedules error');
+      return reply.status(500).type('text/html').send(renderError('Schedules Error', 'Failed to load schedules. Please try again.', csrfToken));
+    }
   });
 
   // Analytics

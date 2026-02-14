@@ -5,6 +5,7 @@ export interface Plan {
   stripePriceId: string | null;
   rateLimit: number;
   monthlyQuota: number;
+  maxSchedules: number;
 }
 
 export const PLANS: Record<string, Plan> = {
@@ -15,6 +16,7 @@ export const PLANS: Record<string, Plan> = {
     stripePriceId: null,
     rateLimit: 10,
     monthlyQuota: 100,
+    maxSchedules: 3,
   },
   starter: {
     name: 'Starter',
@@ -23,6 +25,7 @@ export const PLANS: Record<string, Plan> = {
     stripePriceId: 'price_starter',
     rateLimit: 50,
     monthlyQuota: 5_000,
+    maxSchedules: 10,
   },
   pro: {
     name: 'Pro',
@@ -31,6 +34,7 @@ export const PLANS: Record<string, Plan> = {
     stripePriceId: 'price_pro',
     rateLimit: 200,
     monthlyQuota: 25_000,
+    maxSchedules: 50,
   },
   business: {
     name: 'Business',
@@ -39,6 +43,7 @@ export const PLANS: Record<string, Plan> = {
     stripePriceId: 'price_business',
     rateLimit: 1_000,
     monthlyQuota: 999_999_999,
+    maxSchedules: 999,
   },
 };
 

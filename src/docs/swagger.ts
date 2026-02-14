@@ -38,6 +38,7 @@ export async function registerDocs(app: FastifyInstance) {
         { name: 'signed', description: 'Signed URL rendering' },
         { name: 'billing', description: 'Billing & Stripe integration' },
         { name: 'webhooks', description: 'Webhook management' },
+        { name: 'schedules', description: 'Recurring render schedules' },
         { name: 'auth', description: 'Authentication' },
       ],
     },

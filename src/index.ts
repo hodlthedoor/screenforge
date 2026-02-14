@@ -41,7 +41,9 @@ import { legalRoutes } from './routes/legal.js';
 import { playgroundRoutes } from './routes/playground.js';
 import { docsSiteRoutes } from './routes/docs-site.js';
 import { analyticsRoutes } from './routes/analytics.js';
+import { schedulesRoutes } from './routes/schedules.js';
 import { registerLoggers, getLogger } from './logging/index.js';
+import { startScheduler, stopScheduler } from './scheduler/index.js';
 import { buildErrorResponse } from './security/errors.js';
 import { takeScreenshot } from './renderer/screenshot.js';
 import { renderPdf } from './renderer/pdf.js';
@@ -261,6 +263,7 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
   await ogRoutes(app, pool, cache);
   await webhooksRoutes(app);
   await analyticsRoutes(app);
+  await schedulesRoutes(app);
 
   app.setNotFoundHandler((req, reply) => {
     const response = buildErrorResponse('NOT_FOUND', req);
@@ -358,6 +361,7 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
 
       // Close resources (wrap each in try-catch so one failure doesn't block others)
       const closeResources = [
+        { name: 'scheduler', fn: () => stopScheduler() },
         { name: 'storage lifecycle', fn: () => storageLifecycle.stop() },
         { name: 'browser pool', fn: () => pool.close() },
         { name: 'render cache', fn: () => cache.close() },
@@ -511,6 +515,9 @@ export async function start() {
 
   // Start usage monitor (hourly quota check)
   createUsageMonitor(config.REDIS_URL);
+
+  // Start schedule poller (recurring render jobs)
+  startScheduler();
 
   // Start storage lifecycle manager (hourly cleanup)
   const lifecycle = (app as unknown as { storageLifecycle?: StorageLifecycleManager }).storageLifecycle;
