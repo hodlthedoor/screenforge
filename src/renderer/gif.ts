@@ -98,7 +98,16 @@ export async function captureGif(
     const totalFrames = Math.ceil(options.duration * options.fps);
     const frameDurationMs = 1000 / options.fps;
 
+    // Reserve 20% of timeout budget for cleanup/encoding
+    const frameCaptureDeadline = start + timeoutMs * 0.8;
+
     for (let i = 0; i < totalFrames; i++) {
+      if (performance.now() > frameCaptureDeadline) {
+        throw new Error(
+          `GIF frame capture timed out after ${i}/${totalFrames} frames`,
+        );
+      }
+
       const frameStart = performance.now();
 
       // Capture PNG screenshot, decode to raw RGBA with sharp
@@ -119,9 +128,18 @@ export async function captureGif(
       }
     }
 
-    encoder.finish();
+    try {
+      encoder.finish();
+    } catch (e) {
+      throw new Error(
+        `GIF encoder failed to finalize: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
 
     const gifBuffer: Buffer = encoder.out.getData();
+    if (!gifBuffer || gifBuffer.length === 0) {
+      throw new Error('GIF encoder produced empty output');
+    }
     const durationMs = Math.round(performance.now() - start);
 
     return {

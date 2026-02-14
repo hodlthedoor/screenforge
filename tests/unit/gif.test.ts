@@ -190,6 +190,47 @@ describe('gifOptionsSchema', () => {
     expect(result.success).toBe(true);
   });
 
+  // Blur selectors
+  it('accepts blur_selectors and blur_radius', () => {
+    const result = gifOptionsSchema.safeParse({
+      url: 'https://example.com',
+      blur_selectors: ['.credit-card', '#ssn'],
+      blur_radius: 20,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.blur_selectors).toEqual(['.credit-card', '#ssn']);
+      expect(result.data.blur_radius).toBe(20);
+    }
+  });
+
+  it('uses default blur_radius of 10', () => {
+    const result = gifOptionsSchema.safeParse({
+      url: 'https://example.com',
+      blur_selectors: ['.pii'],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.blur_radius).toBe(10);
+    }
+  });
+
+  it('rejects blur_radius above max (50)', () => {
+    const result = gifOptionsSchema.safeParse({
+      url: 'https://example.com',
+      blur_radius: 51,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects blur_radius below min (1)', () => {
+    const result = gifOptionsSchema.safeParse({
+      url: 'https://example.com',
+      blur_radius: 0,
+    });
+    expect(result.success).toBe(false);
+  });
+
   // Emulation options
   it('accepts emulation options', () => {
     const result = gifOptionsSchema.safeParse({
@@ -263,6 +304,21 @@ describe('POST /v1/gif route', () => {
       payload: { url: 'https://example.com', height: 1080 },
     });
     expect(res.statusCode).toBe(400);
+  });
+
+  it('accepts blur_selectors in request body', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/gif',
+      payload: {
+        url: 'https://example.com',
+        blur_selectors: ['.sensitive'],
+        blur_radius: 15,
+      },
+    });
+    // Should not fail on validation — will fail on browser pool (no browser in test)
+    // but should NOT be 400
+    expect(res.statusCode).not.toBe(400);
   });
 
   it('blocks SSRF to private URLs', async () => {

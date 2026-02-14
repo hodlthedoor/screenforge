@@ -70,6 +70,8 @@ export async function gifRoutes(
           },
           hide_selectors: { type: 'array', items: { type: 'string' }, maxItems: 20 },
           remove_selectors: { type: 'array', items: { type: 'string' }, maxItems: 20 },
+          blur_selectors: { type: 'array', items: { type: 'string' }, maxItems: 20 },
+          blur_radius: { type: 'number', minimum: 1, maximum: 50, default: 10, description: 'Blur radius in pixels' },
           custom_css: { type: 'string' },
           custom_js: { type: 'string' },
           headers: { type: 'object', additionalProperties: { type: 'string' } },
