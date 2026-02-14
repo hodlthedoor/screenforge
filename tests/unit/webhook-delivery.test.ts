@@ -2,8 +2,8 @@ import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { getPool, closePool } from '../../src/db/index.js';
 import { createApiKey } from '../../src/db/api-keys.js';
 import { loadConfig } from '../../src/config/index.js';
-import { enqueueWebhook, getDeliveryStatus, RETRY_DELAYS, createWebhookWorker, closeWebhookQueue, type WebhookJobData } from '../../src/webhooks/delivery.js';
-import type { Worker } from 'bullmq';
+import { enqueueWebhook, getDeliveryStatus, RETRY_DELAYS, processWebhookJob, closeWebhookQueue, type WebhookJobData } from '../../src/webhooks/delivery.js';
+import type { Job } from 'bullmq';
 import { createServer, type Server } from 'node:http';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
@@ -13,7 +13,6 @@ describe('webhook delivery', () => {
   let requests: Array<{ headers: IncomingMessage['headers']; body: string }> = [];
   let responseStatus = 200;
   let apiKeyId: string;
-  let webhookWorker: Worker<WebhookJobData>;
 
   beforeAll(async () => {
     process.env.API_KEY_SALT = 'test-salt-must-be-16-chars-long';
@@ -22,9 +21,6 @@ describe('webhook delivery', () => {
     process.env.REDIS_URL = 'redis://127.0.0.1:6379/15';
     process.env.ALLOW_PRIVATE_URLS = 'true';
     loadConfig();
-
-    // Start webhook worker
-    webhookWorker = createWebhookWorker('redis://127.0.0.1:6379/15');
 
     // Create test API key
     const result = await createApiKey('webhook-test', 'free');
@@ -58,8 +54,6 @@ describe('webhook delivery', () => {
   });
 
   afterEach(async () => {
-    // Wait for any in-flight webhook deliveries to finish processing
-    await new Promise((resolve) => setTimeout(resolve, 300));
     requests = [];
     responseStatus = 200;
     await getPool().query('DELETE FROM webhook_deliveries WHERE api_key_id = $1', [apiKeyId]);
@@ -78,27 +72,48 @@ describe('webhook delivery', () => {
     await closePool();
   });
 
-  describe('enqueueWebhook', () => {
-    it('creates a delivery record with pending status', async () => {
-      // Pause the worker so it doesn't process the job before we can check
-      await webhookWorker.pause(true);
+  /** Helper to create a render job and enqueue a webhook delivery */
+  async function createJobAndEnqueue() {
+    const jobResult = await getPool().query(
+      `INSERT INTO render_jobs (api_key_id, type, url, options)
+       VALUES ($1, 'screenshot', 'https://example.com', '{}')
+       RETURNING id`,
+      [apiKeyId],
+    );
+    const jobId = jobResult.rows[0].id;
 
-      // Create a real render job for testing
-      const jobResult = await getPool().query(
-        `INSERT INTO render_jobs (api_key_id, type, url, options)
-         VALUES ($1, 'screenshot', 'https://example.com', '{}')
-         RETURNING id`,
-        [apiKeyId],
-      );
-      const jobId = jobResult.rows[0].id;
+    const deliveryId = await enqueueWebhook(
+      apiKeyId,
+      jobId,
+      webhookUrl,
+      { jobId, status: 'completed' },
+      'whsec_test_key',
+    );
 
-      const deliveryId = await enqueueWebhook(
+    return { jobId, deliveryId };
+  }
+
+  /** Helper to directly invoke the webhook processor (bypasses BullMQ worker) */
+  async function processDirectly(deliveryId: string, jobId: string, overrides?: Partial<WebhookJobData>) {
+    const fakeJob = {
+      data: {
+        deliveryId,
         apiKeyId,
         jobId,
-        webhookUrl,
-        { jobId, status: 'completed' },
-        'whsec_test_key',
-      );
+        url: webhookUrl,
+        payload: { jobId, status: 'completed' },
+        secret: 'whsec_test_key',
+        attemptNumber: 0,
+        ...overrides,
+      },
+    } as Job<WebhookJobData>;
+
+    await processWebhookJob(fakeJob);
+  }
+
+  describe('enqueueWebhook', () => {
+    it('creates a delivery record with pending status', async () => {
+      const { jobId, deliveryId } = await createJobAndEnqueue();
 
       expect(deliveryId).toBeDefined();
 
@@ -116,34 +131,15 @@ describe('webhook delivery', () => {
       expect(delivery.attempts).toBe(0);
       expect(delivery.payload.jobId).toBe(jobId);
       expect(delivery.payload.status).toBe('completed');
-
-      // Resume the worker for subsequent tests
-      webhookWorker.resume();
     });
   });
 
   describe('webhook processing', () => {
     it('includes X-ScreenForge-Signature header on delivery', async () => {
-      const jobResult = await getPool().query(
-        `INSERT INTO render_jobs (api_key_id, type, url, options)
-         VALUES ($1, 'screenshot', 'https://example.com', '{}')
-         RETURNING id`,
-        [apiKeyId],
-      );
-      const jobId = jobResult.rows[0].id;
+      const { jobId, deliveryId } = await createJobAndEnqueue();
 
-      await enqueueWebhook(
-        apiKeyId,
-        jobId,
-        webhookUrl,
-        { jobId, status: 'completed' },
-        'whsec_test_key',
-      );
-
-      // Poll for webhook delivery (CI can be slow)
-      for (let i = 0; i < 20 && requests.length === 0; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 200));
-      }
+      // Directly invoke the processor instead of waiting for BullMQ worker
+      await processDirectly(deliveryId, jobId);
 
       expect(requests).toHaveLength(1);
       const req = requests[0];
@@ -153,31 +149,12 @@ describe('webhook delivery', () => {
     });
 
     it('marks delivery as delivered on 2xx response', async () => {
-      const jobResult = await getPool().query(
-        `INSERT INTO render_jobs (api_key_id, type, url, options)
-         VALUES ($1, 'screenshot', 'https://example.com', '{}')
-         RETURNING id`,
-        [apiKeyId],
-      );
-      const jobId = jobResult.rows[0].id;
+      const { jobId, deliveryId } = await createJobAndEnqueue();
 
-      const deliveryId = await enqueueWebhook(
-        apiKeyId,
-        jobId,
-        webhookUrl,
-        { jobId, status: 'completed' },
-        'whsec_test_key',
-      );
+      await processDirectly(deliveryId, jobId);
 
-      // Poll for delivery completion (CI can be slow)
-      let delivery;
-      for (let i = 0; i < 20; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 200));
-        delivery = await getDeliveryStatus(deliveryId);
-        if (delivery.status !== 'pending') break;
-      }
-
-      expect(delivery!.status).toBe('delivered');
+      const delivery = await getDeliveryStatus(deliveryId);
+      expect(delivery.status).toBe('delivered');
       expect(delivery.attempts).toBe(1);
       expect(delivery.lastStatusCode).toBe(200);
       expect(delivery.deliveredAt).toBeDefined();
@@ -186,31 +163,12 @@ describe('webhook delivery', () => {
     it('retries on non-2xx response', async () => {
       responseStatus = 500;
 
-      const jobResult = await getPool().query(
-        `INSERT INTO render_jobs (api_key_id, type, url, options)
-         VALUES ($1, 'screenshot', 'https://example.com', '{}')
-         RETURNING id`,
-        [apiKeyId],
-      );
-      const jobId = jobResult.rows[0].id;
+      const { jobId, deliveryId } = await createJobAndEnqueue();
 
-      const deliveryId = await enqueueWebhook(
-        apiKeyId,
-        jobId,
-        webhookUrl,
-        { jobId, status: 'completed' },
-        'whsec_test_key',
-      );
+      await processDirectly(deliveryId, jobId);
 
-      // Poll for first attempt (CI can be slow)
-      let delivery;
-      for (let i = 0; i < 20; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 200));
-        delivery = await getDeliveryStatus(deliveryId);
-        if (delivery.status !== 'pending') break;
-      }
-
-      expect(delivery!.status).toBe('retrying');
+      const delivery = await getDeliveryStatus(deliveryId);
+      expect(delivery.status).toBe('retrying');
       expect(delivery.attempts).toBe(1);
       expect(delivery.lastStatusCode).toBe(500);
     });
@@ -222,21 +180,7 @@ describe('webhook delivery', () => {
     it('marks as failed after max retries', async () => {
       responseStatus = 500;
 
-      const jobResult = await getPool().query(
-        `INSERT INTO render_jobs (api_key_id, type, url, options)
-         VALUES ($1, 'screenshot', 'https://example.com', '{}')
-         RETURNING id`,
-        [apiKeyId],
-      );
-      const jobId = jobResult.rows[0].id;
-
-      const deliveryId = await enqueueWebhook(
-        apiKeyId,
-        jobId,
-        webhookUrl,
-        { jobId, status: 'completed' },
-        'whsec_test_key',
-      );
+      const { deliveryId } = await createJobAndEnqueue();
 
       // Manually simulate 5 failed attempts
       for (let i = 0; i < 5; i++) {
@@ -256,21 +200,7 @@ describe('webhook delivery', () => {
 
   describe('getDeliveryStatus', () => {
     it('returns delivery status', async () => {
-      const jobResult = await getPool().query(
-        `INSERT INTO render_jobs (api_key_id, type, url, options)
-         VALUES ($1, 'screenshot', 'https://example.com', '{}')
-         RETURNING id`,
-        [apiKeyId],
-      );
-      const jobId = jobResult.rows[0].id;
-
-      const deliveryId = await enqueueWebhook(
-        apiKeyId,
-        jobId,
-        webhookUrl,
-        { jobId, status: 'completed' },
-        'whsec_test_key',
-      );
+      const { jobId, deliveryId } = await createJobAndEnqueue();
 
       const status = await getDeliveryStatus(deliveryId);
       expect(status).toMatchObject({

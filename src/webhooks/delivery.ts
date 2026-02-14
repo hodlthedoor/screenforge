@@ -55,7 +55,7 @@ export function createWebhookWorker(redisUrl: string): Worker<WebhookJobData> {
   return worker;
 }
 
-async function processWebhookJob(job: Job<WebhookJobData>): Promise<void> {
+export async function processWebhookJob(job: Job<WebhookJobData>): Promise<void> {
   const { deliveryId, url, payload, secret, attemptNumber } = job.data;
   const config = getConfig();
 
