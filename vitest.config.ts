@@ -11,6 +11,7 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['tests/**/*.test.ts'],
+    exclude: ['tests/e2e/**'],
     env: {
       REDIS_URL: 'redis://127.0.0.1:6379/15',
       NODE_ENV: 'test',
