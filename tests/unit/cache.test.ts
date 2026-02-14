@@ -51,6 +51,22 @@ describe('RenderCache', () => {
     expect(hash1).toBe(hash2);
   });
 
+  it('hashOptions excludes cache_ttl from hash computation', () => {
+    const withTtl = RenderCache.hashOptions({ url: 'https://example.com', cache_ttl: 3600 });
+    const withoutTtl = RenderCache.hashOptions({ url: 'https://example.com' });
+    const differentTtl = RenderCache.hashOptions({ url: 'https://example.com', cache_ttl: 7200 });
+    expect(withTtl).toBe(withoutTtl);
+    expect(withTtl).toBe(differentTtl);
+  });
+
+  it('hashOptions includes cache_key in hash computation', () => {
+    const withKey = RenderCache.hashOptions({ url: 'https://example.com', cache_key: 'key1' });
+    const withoutKey = RenderCache.hashOptions({ url: 'https://example.com' });
+    const differentKey = RenderCache.hashOptions({ url: 'https://example.com', cache_key: 'key2' });
+    expect(withKey).not.toBe(withoutKey);
+    expect(withKey).not.toBe(differentKey);
+  });
+
   it('returns null for cache miss', async () => {
     const result = await cache.get('nonexistent-hash-val');
     expect(result).toBeNull();

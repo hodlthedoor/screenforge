@@ -30,6 +30,7 @@ export class RenderCache {
       if (Array.isArray(obj)) return obj.map(sortDeep);
       const sorted: Record<string, unknown> = {};
       for (const key of Object.keys(obj as Record<string, unknown>).sort()) {
+        if (key === 'cache_ttl') continue; // cache_ttl is a control param, not content — exclude from hash
         sorted[key] = sortDeep((obj as Record<string, unknown>)[key]);
       }
       return sorted;
@@ -73,7 +74,6 @@ export class RenderCache {
     if (ttl > 0) {
       await this.redis.set(`screenforge:cache:${optionsHash}`, JSON.stringify(entry), 'EX', ttl);
     } else {
-      // TTL=0 means no expiration
       await this.redis.set(`screenforge:cache:${optionsHash}`, JSON.stringify(entry));
     }
 
