@@ -29,6 +29,10 @@ jobs:
         working-directory: sdk/js
         run: npm run build
 
+      - name: Run tests
+        working-directory: sdk/js
+        run: npm test
+
       - name: Publish to npm
         working-directory: sdk/js
         run: npm publish
