@@ -36,6 +36,14 @@ const envSchema = z.object({
   RENDER_TIMEOUT_MS: z.coerce.number().int().min(1000).max(120_000).default(30_000),
   CIRCUIT_BREAKER_THRESHOLD: z.coerce.number().int().min(1).default(3),
   ANALYTICS_SCRIPT: z.string().optional(),
+
+  // Storage backend: 'local' (default) or 's3' (S3-compatible)
+  STORAGE_BACKEND: z.enum(['local', 's3']).default('local'),
+  S3_BUCKET: z.string().optional(),
+  S3_REGION: z.string().optional(),
+  S3_ACCESS_KEY_ID: z.string().optional(),
+  S3_SECRET_ACCESS_KEY: z.string().optional(),
+  S3_ENDPOINT: z.string().optional(),
 });
 
 export type Config = z.infer<typeof envSchema>;

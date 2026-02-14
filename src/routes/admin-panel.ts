@@ -3,6 +3,7 @@ import { getUserById, listAllUsers, toggleUserActive, changeUserTier, getAdminUs
 import { getPool } from '../db/index.js';
 import { getQueueMetrics, getQueue } from '../queue/render-queue.js';
 import { getConfig } from '../config/index.js';
+import { getStorageBackend } from '../storage/index.js';
 import { escapeHtml, generateCsrfToken } from '../utils/html.js';
 import { statSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -494,10 +495,10 @@ export async function adminPanelRoutes(app: FastifyInstance): Promise<void> {
        WHERE status = 'completed' AND completed_at < NOW() - INTERVAL '24 hours' AND result_path IS NOT NULL`,
     );
 
-    const { unlinkSync } = await import('node:fs');
+    const storage = getStorageBackend();
     for (const row of oldJobs.rows) {
       try {
-        unlinkSync(row.result_path);
+        await storage.delete(row.result_path);
       } catch { /* file may already be removed */ }
     }
 

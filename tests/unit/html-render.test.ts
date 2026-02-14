@@ -4,6 +4,8 @@ import { takeScreenshot } from '../../src/renderer/screenshot.js';
 import { renderPdf } from '../../src/renderer/pdf.js';
 import { screenshotOptionsSchema, pdfOptionsSchema } from '../../src/renderer/schemas.js';
 import { RenderCache } from '../../src/cache/index.js';
+import { loadConfig } from '../../src/config/index.js';
+import { resetStorageBackend } from '../../src/storage/index.js';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -20,6 +22,12 @@ describe('HTML rendering', { timeout: 60_000 }, () => {
     pool = new BrowserPool(1, 100);
     await pool.init();
     tempDir = await mkdtemp(join(tmpdir(), 'screenforge-html-test-'));
+    process.env.API_KEY_SALT = 'test-salt-must-be-16-chars-long';
+    process.env.NODE_ENV = 'test';
+    process.env.STORAGE_PATH = tempDir;
+    process.env.REDIS_URL = 'redis://127.0.0.1:6379/15';
+    loadConfig();
+    resetStorageBackend();
     cache = new RenderCache('redis://127.0.0.1:6379/15', tempDir, 60);
   });
 

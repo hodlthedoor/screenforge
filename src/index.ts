@@ -41,9 +41,9 @@ import { buildErrorResponse } from './security/errors.js';
 import { takeScreenshot } from './renderer/screenshot.js';
 import { renderPdf } from './renderer/pdf.js';
 import { screenshotOptionsSchema, pdfOptionsSchema } from './renderer/schemas.js';
-import { writeFile, mkdir } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdir } from 'node:fs/promises';
 import type { Job } from 'bullmq';
+import { getStorageBackend } from './storage/index.js';
 import { initMetrics, getMetrics, incrementApiRequestCounter, observeApiRequestDuration } from './metrics/index.js';
 
 export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
@@ -392,13 +392,15 @@ export async function start() {
     // Build schema input from options; only inject url if options doesn't already have url or html
     const schemaInput = (options.url || options.html) ? { ...options } : { url, ...options };
 
+    const storage = getStorageBackend();
+
     if (type === 'pdf') {
       const parsed = pdfOptionsSchema.parse(schemaInput);
       const result = await renderPdf(browserPool, parsed, config.NAVIGATION_TIMEOUT_MS);
-      const filePath = join(config.STORAGE_PATH, `${job.data.jobId}.pdf`);
-      await writeFile(filePath, result.buffer);
+      const key = `${job.data.jobId}.pdf`;
+      const resultPath = await storage.upload(key, result.buffer, result.contentType);
       return {
-        resultPath: filePath,
+        resultPath,
         contentType: result.contentType,
         durationMs: result.durationMs,
         metadata: result.metadata,
@@ -409,10 +411,10 @@ export async function start() {
     const parsed = screenshotOptionsSchema.parse(schemaInput);
     const result = await takeScreenshot(browserPool, parsed, config.NAVIGATION_TIMEOUT_MS);
     const ext = parsed.format === 'jpeg' ? 'jpg' : 'png';
-    const filePath = join(config.STORAGE_PATH, `${job.data.jobId}.${ext}`);
-    await writeFile(filePath, result.buffer);
+    const key = `${job.data.jobId}.${ext}`;
+    const resultPath = await storage.upload(key, result.buffer, result.contentType);
     return {
-      resultPath: filePath,
+      resultPath,
       contentType: result.contentType,
       durationMs: Math.round(performance.now() - start),
       metadata: result.metadata,

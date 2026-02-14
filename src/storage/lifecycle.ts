@@ -2,6 +2,7 @@ import { readdir, stat, unlink, rmdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { FastifyBaseLogger } from 'fastify';
 import { incrementStorageReclaimedBytes } from '../metrics/index.js';
+import { getConfig } from '../config/index.js';
 
 export interface StorageLifecycleOptions {
   storagePath: string;
@@ -49,6 +50,17 @@ export class StorageLifecycleManager {
   }
 
   async runCleanup(): Promise<void> {
+    // Skip cleanup when using S3 backend (S3 has its own lifecycle rules)
+    try {
+      const config = getConfig();
+      if (config.STORAGE_BACKEND === 's3') {
+        this.logger?.info('Skipping local cleanup — S3 backend manages its own lifecycle');
+        return;
+      }
+    } catch {
+      // Config not loaded (e.g., in tests) — proceed with local cleanup
+    }
+
     // Prevent concurrent runs
     if (this.isRunning) {
       this.logger?.debug('Cleanup already in progress, skipping');

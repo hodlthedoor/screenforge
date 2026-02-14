@@ -1,8 +1,8 @@
 import type { FastifyInstance } from 'fastify';
-import { readFile } from 'node:fs/promises';
 import { getPool } from '../db/index.js';
 import { getConfig } from '../config/index.js';
 import { sendError } from '../security/errors.js';
+import { getStorageBackend } from '../storage/index.js';
 
 export async function asyncRenderRoutes(app: FastifyInstance) {
   const config = getConfig();
@@ -42,7 +42,7 @@ export async function asyncRenderRoutes(app: FastifyInstance) {
       const accept = (req.headers.accept ?? '').toLowerCase();
       // If client wants the rendered file directly
       if (accept.includes(job.content_type) || accept.includes('image/') || accept.includes('application/pdf')) {
-        const buffer = await readFile(job.result_path);
+        const buffer = await getStorageBackend().download(job.result_path);
         return reply
           .header('Content-Type', job.content_type)
           .header('X-Render-Duration-Ms', String(job.duration_ms))

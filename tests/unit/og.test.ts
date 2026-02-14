@@ -3,6 +3,7 @@ import { buildServer } from '../../src/index.js';
 import type { FastifyInstance } from 'fastify';
 import { getPool, closePool, resetPool } from '../../src/db/index.js';
 import { loadConfig } from '../../src/config/index.js';
+import { resetStorageBackend } from '../../src/storage/index.js';
 import { resolve } from 'node:path';
 import { rm } from 'node:fs/promises';
 import { createServer, type Server } from 'node:http';
@@ -41,6 +42,7 @@ describe('OG card generation', { timeout: 120_000 }, () => {
     process.env.ALLOW_PRIVATE_URLS = 'true';
     process.env.REQUIRE_AUTH = 'false';
     loadConfig();
+    resetStorageBackend();
 
     app = await buildServer();
   });

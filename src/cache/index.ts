@@ -1,9 +1,8 @@
 import { createHash } from 'node:crypto';
-import { mkdir, writeFile, readFile, access } from 'node:fs/promises';
-import { join } from 'node:path';
 import { Redis } from 'ioredis';
 import type { RenderMetadata } from '../renderer/schemas.js';
 import { updateCacheGauges } from '../metrics/index.js';
+import { getStorageBackend } from '../storage/index.js';
 
 // Redis keys for atomic cache counters (avoids KEYS scan)
 const CACHE_COUNT_KEY = 'screenforge:cache:_count';
@@ -18,12 +17,10 @@ export interface CacheEntry {
 
 export class RenderCache {
   private redis: Redis;
-  private storagePath: string;
   private ttlSeconds: number;
 
-  constructor(redisUrl: string, storagePath: string, ttlSeconds: number) {
+  constructor(redisUrl: string, _storagePath: string, ttlSeconds: number) {
     this.redis = new Redis(redisUrl, { maxRetriesPerRequest: 3 });
-    this.storagePath = storagePath;
     this.ttlSeconds = ttlSeconds;
   }
 
@@ -49,27 +46,26 @@ export class RenderCache {
 
     const entry: CacheEntry = JSON.parse(raw);
 
-    try {
-      await access(entry.filePath);
+    const storage = getStorageBackend();
+    const fileExists = await storage.exists(entry.filePath);
+    if (fileExists) {
       await this.emitMetrics();
       return entry;
-    } catch {
-      // File missing on disk — evict from Redis and adjust counters
-      await this.redis.del(`screenforge:cache:${optionsHash}`);
-      await this.redis.decr(CACHE_COUNT_KEY);
-      await this.redis.decrby(CACHE_SIZE_KEY, entry.sizeBytes);
-      await this.emitMetrics();
-      return null;
     }
+
+    // File missing — evict from Redis and adjust counters
+    await this.redis.del(`screenforge:cache:${optionsHash}`);
+    await this.redis.decr(CACHE_COUNT_KEY);
+    await this.redis.decrby(CACHE_SIZE_KEY, entry.sizeBytes);
+    await this.emitMetrics();
+    return null;
   }
 
   async set(optionsHash: string, buffer: Buffer, contentType: string, ext: string, metadata?: RenderMetadata): Promise<CacheEntry> {
     const date = new Date().toISOString().slice(0, 10);
-    const dir = join(this.storagePath, date);
-    await mkdir(dir, { recursive: true });
-
-    const filePath = join(dir, `${optionsHash}.${ext}`);
-    await writeFile(filePath, buffer);
+    const key = `${date}/${optionsHash}.${ext}`;
+    const storage = getStorageBackend();
+    const filePath = await storage.upload(key, buffer, contentType);
 
     const entry: CacheEntry = { filePath, contentType, sizeBytes: buffer.length, metadata };
     await this.redis.set(`screenforge:cache:${optionsHash}`, JSON.stringify(entry), 'EX', this.ttlSeconds);
@@ -83,7 +79,7 @@ export class RenderCache {
   }
 
   async readFile(filePath: string): Promise<Buffer> {
-    return readFile(filePath);
+    return getStorageBackend().download(filePath);
   }
 
   private async emitMetrics(): Promise<void> {

@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { RenderCache } from '../../src/cache/index.js';
+import { loadConfig } from '../../src/config/index.js';
+import { resetStorageBackend } from '../../src/storage/index.js';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -10,6 +12,12 @@ describe('RenderCache', () => {
 
   beforeAll(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'screenforge-test-'));
+    process.env.API_KEY_SALT = 'test-salt-must-be-16-chars-long';
+    process.env.NODE_ENV = 'test';
+    process.env.STORAGE_PATH = tempDir;
+    process.env.REDIS_URL = 'redis://127.0.0.1:6379/15';
+    loadConfig();
+    resetStorageBackend();
     cache = new RenderCache('redis://127.0.0.1:6379/15', tempDir, 60);
   });
 
@@ -70,8 +78,8 @@ describe('RenderCache', () => {
     const entry = await cache.get(hash);
     expect(entry).not.toBeNull();
 
-    // Delete the file manually
-    await rm(entry!.filePath);
+    // Delete the file manually (filePath is a storage key, resolve to actual path)
+    await rm(join(tempDir, entry!.filePath));
     const result = await cache.get(hash);
     expect(result).toBeNull();
   });
