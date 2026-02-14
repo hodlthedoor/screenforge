@@ -2,7 +2,6 @@ import type { FastifyInstance } from 'fastify';
 import { gifOptionsSchema, isPrivateUrl } from '../renderer/schemas.js';
 import { captureGif } from '../renderer/gif.js';
 import type { BrowserPool } from '../renderer/browser-pool.js';
-import { RenderCache } from '../cache/index.js';
 import { getConfig } from '../config/index.js';
 import { authMiddleware } from '../auth/middleware.js';
 import { incrementUsage, getUsageStats } from '../db/api-keys.js';
@@ -16,7 +15,6 @@ import { sendError } from '../security/errors.js';
 export async function gifRoutes(
   app: FastifyInstance,
   pool: BrowserPool,
-  cache: RenderCache,
   rateLimiter?: SlidingWindowRateLimiter,
 ) {
   const config = getConfig();
@@ -122,6 +120,15 @@ export async function gifRoutes(
     }
 
     const options = parsed.data;
+
+    // Validate duration against config max
+    const maxDurationSec = config.GIF_MAX_DURATION_MS / 1000;
+    if (options.duration > maxDurationSec) {
+      sendError(reply, req, 'VALIDATION_ERROR', {
+        message: `duration must be at most ${maxDurationSec}s (GIF_MAX_DURATION_MS=${config.GIF_MAX_DURATION_MS})`,
+      });
+      return;
+    }
 
     // Sanitize inputs
     try {

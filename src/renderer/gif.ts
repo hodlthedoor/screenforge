@@ -20,6 +20,16 @@ export async function captureGif(
 ): Promise<RenderResult> {
   const start = performance.now();
 
+  // Clamp duration to GIF_MAX_DURATION_MS from config
+  let maxDurationSec = 10;
+  try {
+    const cfg = getConfig();
+    maxDurationSec = cfg.GIF_MAX_DURATION_MS / 1000;
+  } catch {
+    // Config not loaded (e.g., in tests) — use default
+  }
+  options = { ...options, duration: Math.min(options.duration, maxDurationSec) };
+
   // Merge per-request proxy over global default
   let proxy = options.proxy;
   if (!proxy) {

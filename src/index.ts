@@ -255,7 +255,7 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
   await usageRoutes(app);
   await asyncRenderRoutes(app);
   await batchRoutes(app);
-  await gifRoutes(app, pool, cache, rateLimiter);
+  await gifRoutes(app, pool, rateLimiter);
   await ogRoutes(app, pool, cache);
   await webhooksRoutes(app);
   await analyticsRoutes(app);
