@@ -149,6 +149,40 @@ describe('screenshotOptionsSchema', () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it('accepts custom headers', () => {
+    const result = screenshotOptionsSchema.safeParse({
+      url: 'https://example.com',
+      headers: { 'Authorization': 'Bearer token123', 'X-Custom': 'value' },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.headers).toEqual({ 'Authorization': 'Bearer token123', 'X-Custom': 'value' });
+    }
+  });
+
+  it('accepts custom cookies', () => {
+    const result = screenshotOptionsSchema.safeParse({
+      url: 'https://example.com',
+      cookies: [
+        { name: 'session', value: 'abc123', domain: '.example.com', path: '/' },
+        { name: 'pref', value: 'dark', domain: 'example.com' },
+      ],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.cookies).toHaveLength(2);
+      expect(result.data.cookies![0].name).toBe('session');
+    }
+  });
+
+  it('accepts cookies with optional domain and path', () => {
+    const result = screenshotOptionsSchema.safeParse({
+      url: 'https://example.com',
+      cookies: [{ name: 'test', value: 'value1' }],
+    });
+    expect(result.success).toBe(true);
+  });
 });
 
 describe('pdfOptionsSchema', () => {
@@ -202,6 +236,32 @@ describe('pdfOptionsSchema', () => {
   it('rejects file:// URLs (non-http protocol)', () => {
     const result = pdfOptionsSchema.safeParse({ url: 'file:///etc/shadow' });
     expect(result.success).toBe(false);
+  });
+
+  it('accepts custom headers', () => {
+    const result = pdfOptionsSchema.safeParse({
+      url: 'https://example.com',
+      headers: { 'Authorization': 'Bearer token123', 'X-Custom': 'value' },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.headers).toEqual({ 'Authorization': 'Bearer token123', 'X-Custom': 'value' });
+    }
+  });
+
+  it('accepts custom cookies', () => {
+    const result = pdfOptionsSchema.safeParse({
+      url: 'https://example.com',
+      cookies: [
+        { name: 'session', value: 'abc123', domain: '.example.com', path: '/' },
+        { name: 'pref', value: 'dark', domain: 'example.com' },
+      ],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.cookies).toHaveLength(2);
+      expect(result.data.cookies![0].name).toBe('session');
+    }
   });
 });
 

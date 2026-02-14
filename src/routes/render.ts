@@ -11,7 +11,7 @@ import type { SlidingWindowRateLimiter } from '../auth/rate-limiter.js';
 import { incrementRenderCounter, observeRenderDuration } from '../metrics/index.js';
 import { getQueue, type RenderJobData } from '../queue/render-queue.js';
 import { getPool } from '../db/index.js';
-import { sanitizeUrl, sanitizeSelector, sanitizeWaitFor, sanitizeTemplate, sanitizeCallbackUrl, SanitizeError } from '../security/sanitize.js';
+import { sanitizeUrl, sanitizeSelector, sanitizeWaitFor, sanitizeTemplate, sanitizeCallbackUrl, sanitizeHeaders, sanitizeCookies, SanitizeError } from '../security/sanitize.js';
 import { sendError } from '../security/errors.js';
 import type { RenderMetadata } from '../renderer/schemas.js';
 
@@ -178,6 +178,25 @@ export async function renderRoutes(
           hide_cookies: { type: 'boolean', default: false },
           custom_css: { type: 'string' },
           custom_js: { type: 'string' },
+          headers: {
+            type: 'object',
+            description: 'Custom HTTP headers to send with the request',
+            additionalProperties: { type: 'string' },
+          },
+          cookies: {
+            type: 'array',
+            description: 'Custom cookies to set before rendering',
+            items: {
+              type: 'object',
+              properties: {
+                name: { type: 'string', description: 'Cookie name' },
+                value: { type: 'string', description: 'Cookie value' },
+                domain: { type: 'string', description: 'Cookie domain (optional)' },
+                path: { type: 'string', description: 'Cookie path (optional)' },
+              },
+              required: ['name', 'value'],
+            },
+          },
         },
       },
     },
@@ -190,6 +209,18 @@ export async function renderRoutes(
     }
 
     const options = parsed.data;
+
+    // Sanitize custom headers and cookies
+    try {
+      sanitizeHeaders(options.headers);
+      sanitizeCookies(options.cookies);
+    } catch (e) {
+      if (e instanceof SanitizeError) {
+        sendError(reply, req, 'VALIDATION_ERROR', { message: e.message });
+        return;
+      }
+      throw e;
+    }
 
     // Only validate URL and check SSRF if rendering from URL (not HTML)
     if ('url' in options && options.url) {
@@ -304,6 +335,25 @@ export async function renderRoutes(
           hide_cookies: { type: 'boolean', default: false },
           custom_css: { type: 'string' },
           custom_js: { type: 'string' },
+          headers: {
+            type: 'object',
+            description: 'Custom HTTP headers to send with the request',
+            additionalProperties: { type: 'string' },
+          },
+          cookies: {
+            type: 'array',
+            description: 'Custom cookies to set before rendering',
+            items: {
+              type: 'object',
+              properties: {
+                name: { type: 'string', description: 'Cookie name' },
+                value: { type: 'string', description: 'Cookie value' },
+                domain: { type: 'string', description: 'Cookie domain (optional)' },
+                path: { type: 'string', description: 'Cookie path (optional)' },
+              },
+              required: ['name', 'value'],
+            },
+          },
         },
       },
     },
@@ -316,6 +366,18 @@ export async function renderRoutes(
     }
 
     const options = parsed.data;
+
+    // Sanitize custom headers and cookies
+    try {
+      sanitizeHeaders(options.headers);
+      sanitizeCookies(options.cookies);
+    } catch (e) {
+      if (e instanceof SanitizeError) {
+        sendError(reply, req, 'VALIDATION_ERROR', { message: e.message });
+        return;
+      }
+      throw e;
+    }
 
     // Only validate URL and check SSRF if rendering from URL (not HTML)
     if ('url' in options && options.url) {

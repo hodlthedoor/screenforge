@@ -222,4 +222,118 @@ describe('API endpoints', { timeout: 120_000 }, () => {
       expect(body.error.request_id).toBeDefined();
     });
   });
+
+  describe('custom headers and cookies', () => {
+    let authServer: Server;
+    let authUrl: string;
+
+    beforeAll(async () => {
+      // Create a test server that requires custom auth header
+      authServer = createServer((req, res) => {
+        const authHeader = req.headers['authorization'];
+        const cookieHeader = req.headers['cookie'];
+
+        if (authHeader === 'Bearer secret-token') {
+          res.writeHead(200, { 'Content-Type': 'text/html' });
+          res.end('<html><body><h1>Authenticated</h1></body></html>');
+        } else if (cookieHeader?.includes('session=valid-session')) {
+          res.writeHead(200, { 'Content-Type': 'text/html' });
+          res.end('<html><body><h1>Cookie Auth</h1></body></html>');
+        } else {
+          res.writeHead(401, { 'Content-Type': 'text/html' });
+          res.end('<html><body><h1>Unauthorized</h1></body></html>');
+        }
+      });
+      await new Promise<void>((resolve) => authServer.listen(0, '127.0.0.1', resolve));
+      const addr = authServer.address();
+      if (addr && typeof addr === 'object') {
+        authUrl = `http://127.0.0.1:${addr.port}`;
+      }
+    });
+
+    afterAll(async () => {
+      await new Promise<void>((resolve) => authServer.close(() => resolve()));
+    });
+
+    it('rejects blocked Host header', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/screenshot',
+        payload: {
+          url: fixtureUrl,
+          headers: { 'Host': 'evil.com' },
+        },
+      });
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.body);
+      expect(body.error.code).toBe('VALIDATION_ERROR');
+      expect(body.error.message).toContain('Host');
+    });
+
+    it('rejects blocked Content-Length header', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/screenshot',
+        payload: {
+          url: fixtureUrl,
+          headers: { 'content-length': '100' },
+        },
+      });
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.body);
+      expect(body.error.code).toBe('VALIDATION_ERROR');
+    });
+
+    it('allows custom Authorization header for screenshot', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/screenshot',
+        payload: {
+          url: authUrl,
+          headers: { 'Authorization': 'Bearer secret-token' },
+        },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.headers['content-type']).toBe('image/png');
+    });
+
+    it('allows custom cookies for screenshot', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/screenshot',
+        payload: {
+          url: authUrl,
+          cookies: [{ name: 'session', value: 'valid-session' }],
+        },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.headers['content-type']).toBe('image/png');
+    });
+
+    it('allows custom headers for PDF', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/pdf',
+        payload: {
+          url: authUrl,
+          headers: { 'Authorization': 'Bearer secret-token' },
+        },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.headers['content-type']).toBe('application/pdf');
+    });
+
+    it('allows custom cookies for PDF', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/pdf',
+        payload: {
+          url: authUrl,
+          cookies: [{ name: 'session', value: 'valid-session' }],
+        },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.headers['content-type']).toBe('application/pdf');
+    });
+  });
 });

@@ -6,6 +6,14 @@ import { RenderCache } from '../cache/index.js';
 import { getConfig } from '../config/index.js';
 import { isPrivateUrl } from '../renderer/schemas.js';
 import { sendError } from '../security/errors.js';
+import { sanitizeHeaders, sanitizeCookies, SanitizeError } from '../security/sanitize.js';
+
+const cookieSchema = z.object({
+  name: z.string(),
+  value: z.string(),
+  domain: z.string().optional(),
+  path: z.string().optional(),
+});
 
 const ogRequestSchema = z.object({
   url: z.string().url().optional(),
@@ -15,6 +23,8 @@ const ogRequestSchema = z.object({
   image: z.string().url().optional(),
   theme: z.enum(['light', 'dark']).default('light'),
   template: z.enum(['default', 'article', 'product']).default('default'),
+  headers: z.record(z.string(), z.string()).optional(),
+  cookies: z.array(cookieSchema).optional(),
 });
 
 export type OgRequest = z.infer<typeof ogRequestSchema>;
@@ -71,10 +81,50 @@ function generateOgHtml(data: OgRequest & { fetchedMeta?: { title?: string; desc
 </div></body></html>`;
 }
 
-async function fetchOgMeta(url: string, pool: BrowserPool, timeoutMs: number): Promise<{ title?: string; description?: string; siteName?: string; image?: string }> {
+async function fetchOgMeta(
+  url: string,
+  pool: BrowserPool,
+  timeoutMs: number,
+  headers?: Record<string, string>,
+  cookies?: Array<{ name: string; value: string; domain?: string; path?: string }>,
+): Promise<{ title?: string; description?: string; siteName?: string; image?: string }> {
   const context = await pool.acquire({ viewport: { width: 1200, height: 630 } });
   try {
     const page = await context.newPage();
+
+    // Apply custom headers if provided
+    if (headers && Object.keys(headers).length > 0) {
+      await page.setExtraHTTPHeaders(headers);
+    }
+
+    // Apply custom cookies if provided
+    if (cookies && cookies.length > 0) {
+      await context.addCookies(cookies.map(cookie => {
+        // Playwright requires either url or domain to be set
+        const cookieConfig: {
+          name: string;
+          value: string;
+          domain?: string;
+          path?: string;
+          url?: string;
+        } = {
+          name: cookie.name,
+          value: cookie.value,
+          path: cookie.path,
+        };
+
+        // If domain is provided, use it; otherwise derive from URL
+        if (cookie.domain) {
+          cookieConfig.domain = cookie.domain;
+        } else {
+          // Playwright requires url or domain; use url when domain not provided
+          cookieConfig.url = url;
+        }
+
+        return cookieConfig;
+      }));
+    }
+
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
 
     const meta: { title?: string; description?: string; siteName?: string; image?: string } = await page.evaluate(`
@@ -116,6 +166,25 @@ export async function ogRoutes(app: FastifyInstance, pool: BrowserPool, cache: R
           image: { type: 'string' },
           theme: { type: 'string', enum: ['light', 'dark'], default: 'light' },
           template: { type: 'string', enum: ['default', 'article', 'product'], default: 'default' },
+          headers: {
+            type: 'object',
+            description: 'Custom HTTP headers to send when fetching OG metadata',
+            additionalProperties: { type: 'string' },
+          },
+          cookies: {
+            type: 'array',
+            description: 'Custom cookies to set when fetching OG metadata',
+            items: {
+              type: 'object',
+              properties: {
+                name: { type: 'string', description: 'Cookie name' },
+                value: { type: 'string', description: 'Cookie value' },
+                domain: { type: 'string', description: 'Cookie domain (optional)' },
+                path: { type: 'string', description: 'Cookie path (optional)' },
+              },
+              required: ['name', 'value'],
+            },
+          },
         },
       },
     },
@@ -130,6 +199,18 @@ export async function ogRoutes(app: FastifyInstance, pool: BrowserPool, cache: R
     const data = parsed.data;
     const config = getConfig();
 
+    // Sanitize custom headers and cookies
+    try {
+      sanitizeHeaders(data.headers);
+      sanitizeCookies(data.cookies);
+    } catch (e) {
+      if (e instanceof SanitizeError) {
+        sendError(reply, req, 'VALIDATION_ERROR', { message: e.message });
+        return;
+      }
+      throw e;
+    }
+
     // Fetch OG metadata from URL if provided
     let fetchedMeta: { title?: string; description?: string; siteName?: string; image?: string } | undefined;
     if (data.url) {
@@ -137,7 +218,7 @@ export async function ogRoutes(app: FastifyInstance, pool: BrowserPool, cache: R
         sendError(reply, req, 'SSRF_BLOCKED');
         return;
       }
-      fetchedMeta = await fetchOgMeta(data.url, pool, config.NAVIGATION_TIMEOUT_MS);
+      fetchedMeta = await fetchOgMeta(data.url, pool, config.NAVIGATION_TIMEOUT_MS, data.headers, data.cookies);
     }
 
     if (!data.title && !data.url) {
@@ -148,8 +229,14 @@ export async function ogRoutes(app: FastifyInstance, pool: BrowserPool, cache: R
     // Generate OG card HTML
     const html = generateOgHtml({ ...data, fetchedMeta });
 
-    // Check cache
-    const cacheKey = RenderCache.hashOptions({ type: 'og', ...data, fetchedMeta } as unknown as Record<string, unknown>);
+    // Check cache (include headers/cookies in cache key to avoid auth context collision)
+    const cacheKey = RenderCache.hashOptions({
+      type: 'og',
+      ...data,
+      fetchedMeta,
+      headers: data.headers,
+      cookies: data.cookies,
+    } as unknown as Record<string, unknown>);
     const cached = await cache.get(cacheKey);
     if (cached) {
       const buffer = await cache.readFile(cached.filePath);

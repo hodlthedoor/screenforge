@@ -11,6 +11,15 @@ class Viewport(TypedDict, total=False):
     height: int
 
 
+class Cookie(TypedDict, total=False):
+    """Cookie configuration."""
+
+    name: str
+    value: str
+    domain: str
+    path: str
+
+
 class ScreenshotOptions(TypedDict, total=False):
     """Options for screenshot rendering."""
 
@@ -25,6 +34,8 @@ class ScreenshotOptions(TypedDict, total=False):
     darkMode: bool
     deviceScaleFactor: float
     callback_url: str
+    headers: Dict[str, str]
+    cookies: List[Cookie]
 
 
 class PdfMargins(TypedDict, total=False):
@@ -49,17 +60,22 @@ class PdfOptions(TypedDict, total=False):
     footerTemplate: str
     scale: float
     callback_url: str
+    headers: Dict[str, str]
+    cookies: List[Cookie]
 
 
 class OgOptions(TypedDict, total=False):
     """Options for OG image rendering."""
 
+    url: str
     title: str
     description: str
     siteName: str
     image: str
     theme: Literal["light", "dark"]
     template: Literal["default", "article", "product"]
+    headers: Dict[str, str]
+    cookies: List[Cookie]
 
 
 class BatchItem(TypedDict, total=False):

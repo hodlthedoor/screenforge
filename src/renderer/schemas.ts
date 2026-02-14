@@ -38,6 +38,18 @@ const contentFilterSchema = z.object({
   ).optional(),
 });
 
+const cookieSchema = z.object({
+  name: z.string(),
+  value: z.string(),
+  domain: z.string().optional(),
+  path: z.string().optional(),
+});
+
+const requestOverridesSchema = z.object({
+  headers: z.record(z.string(), z.string()).optional(),
+  cookies: z.array(cookieSchema).optional(),
+});
+
 export const viewportSchema = z.object({
   width: z.number().int().min(1).max(7680).default(1920),
   height: z.number().int().min(1).max(4320).default(1080),
@@ -69,6 +81,7 @@ export const screenshotOptionsSchema = z.object({
   }).optional(),
   ...screenshotBaseOptionsSchema.shape,
   ...contentFilterSchema.shape,
+  ...requestOverridesSchema.shape,
 }).refine((data) => (data.url && !data.html) || (!data.url && data.html), {
   message: 'Exactly one of url or html must be provided',
 }).refine((data) => !(data.selector && data.clip), {
@@ -101,6 +114,7 @@ export const pdfOptionsSchema = z.object({
   }).optional(),
   ...pdfBaseOptionsSchema.shape,
   ...contentFilterSchema.shape,
+  ...requestOverridesSchema.shape,
 }).refine((data) => (data.url && !data.html) || (!data.url && data.html), {
   message: 'Exactly one of url or html must be provided',
 });

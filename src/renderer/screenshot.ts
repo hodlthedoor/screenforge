@@ -19,6 +19,39 @@ export async function takeScreenshot(pool: BrowserPool, options: ScreenshotOptio
   try {
     const page = await context.newPage();
 
+    // Apply custom headers if provided
+    if (options.headers && Object.keys(options.headers).length > 0) {
+      await page.setExtraHTTPHeaders(options.headers);
+    }
+
+    // Apply custom cookies if provided
+    if (options.cookies && options.cookies.length > 0) {
+      await context.addCookies(options.cookies.map(cookie => {
+        // Playwright requires either url or domain to be set
+        const cookieConfig: {
+          name: string;
+          value: string;
+          domain?: string;
+          path?: string;
+          url?: string;
+        } = {
+          name: cookie.name,
+          value: cookie.value,
+          path: cookie.path,
+        };
+
+        // If domain is provided, use it; otherwise derive from URL if available
+        if (cookie.domain) {
+          cookieConfig.domain = cookie.domain;
+        } else if (options.url) {
+          // Playwright requires url or domain; use url when domain not provided
+          cookieConfig.url = options.url;
+        }
+
+        return cookieConfig;
+      }));
+    }
+
     await applyPreNavigationFilters(page, options);
 
     let response;

@@ -7,6 +7,11 @@ const MAX_URL_LENGTH = 2048;
 const MAX_CALLBACK_URL_LENGTH = 2048;
 const MAX_CUSTOM_CSS_LENGTH = 50 * 1024; // 50KB
 const MAX_CUSTOM_JS_LENGTH = 10 * 1024; // 10KB
+const MAX_HEADER_VALUE_LENGTH = 10_000;
+const MAX_COOKIE_NAME_LENGTH = 500;
+const MAX_COOKIE_VALUE_LENGTH = 5000;
+const MAX_COOKIE_DOMAIN_LENGTH = 500;
+const MAX_COOKIE_PATH_LENGTH = 500;
 
 const DANGEROUS_PATTERNS = [
   /<script[^>]*>/i,
@@ -96,6 +101,90 @@ export function sanitizeCustomCss(input: string): string {
     throw new SanitizeError('Custom CSS exceeds maximum length (50KB)');
   }
   return input;
+}
+
+const BLOCKED_HEADERS = ['host', 'content-length', 'transfer-encoding'];
+
+export function sanitizeHeaders(headers: Record<string, string> | undefined): Record<string, string> | undefined {
+  if (!headers) return undefined;
+
+  const sanitized: Record<string, string> = {};
+
+  for (const [key, value] of Object.entries(headers)) {
+    // Check for blocked headers (case-insensitive)
+    if (BLOCKED_HEADERS.includes(key.toLowerCase())) {
+      throw new SanitizeError(`Header "${key}" is not allowed`);
+    }
+
+    // Validate value is a string
+    if (typeof value !== 'string') {
+      throw new SanitizeError(`Header value for "${key}" must be a string`);
+    }
+
+    // Check length
+    if (value.length > MAX_HEADER_VALUE_LENGTH) {
+      throw new SanitizeError(`Header value for "${key}" exceeds maximum length`);
+    }
+
+    sanitized[key] = value;
+  }
+
+  return sanitized;
+}
+
+export interface Cookie {
+  name: string;
+  value: string;
+  domain?: string;
+  path?: string;
+}
+
+export function sanitizeCookies(cookies: Cookie[] | undefined): Cookie[] | undefined {
+  if (!cookies) return undefined;
+
+  const sanitized: Cookie[] = [];
+
+  for (const cookie of cookies) {
+    // Validate required fields
+    if (!cookie.name || typeof cookie.name !== 'string') {
+      throw new SanitizeError('Cookie name is required and must be a string');
+    }
+    if (!cookie.value || typeof cookie.value !== 'string') {
+      throw new SanitizeError('Cookie value is required and must be a string');
+    }
+
+    // Check name length
+    if (cookie.name.length === 0) {
+      throw new SanitizeError('Cookie name cannot be empty');
+    }
+    if (cookie.name.length > MAX_COOKIE_NAME_LENGTH) {
+      throw new SanitizeError('Cookie name exceeds maximum length');
+    }
+
+    // Check value length
+    if (cookie.value.length > MAX_COOKIE_VALUE_LENGTH) {
+      throw new SanitizeError('Cookie value exceeds maximum length');
+    }
+
+    // Check optional domain length
+    if (cookie.domain && cookie.domain.length > MAX_COOKIE_DOMAIN_LENGTH) {
+      throw new SanitizeError('Cookie domain exceeds maximum length');
+    }
+
+    // Check optional path length
+    if (cookie.path && cookie.path.length > MAX_COOKIE_PATH_LENGTH) {
+      throw new SanitizeError('Cookie path exceeds maximum length');
+    }
+
+    sanitized.push({
+      name: cookie.name,
+      value: cookie.value,
+      domain: cookie.domain,
+      path: cookie.path,
+    });
+  }
+
+  return sanitized;
 }
 
 export class SanitizeError extends Error {

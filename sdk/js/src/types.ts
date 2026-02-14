@@ -3,6 +3,13 @@ export interface Viewport {
   height: number;
 }
 
+export interface Cookie {
+  name: string;
+  value: string;
+  domain?: string;
+  path?: string;
+}
+
 export interface ScreenshotOptions {
   url?: string;
   html?: string;
@@ -15,6 +22,8 @@ export interface ScreenshotOptions {
   darkMode?: boolean;
   deviceScaleFactor?: number;
   callback_url?: string;
+  headers?: Record<string, string>;
+  cookies?: Cookie[];
 }
 
 export interface PdfMargins {
@@ -35,15 +44,20 @@ export interface PdfOptions {
   footerTemplate?: string;
   scale?: number;
   callback_url?: string;
+  headers?: Record<string, string>;
+  cookies?: Cookie[];
 }
 
 export interface OgOptions {
+  url?: string;
   title?: string;
   description?: string;
   siteName?: string;
   image?: string;
   theme?: 'light' | 'dark';
   template?: 'default' | 'article' | 'product';
+  headers?: Record<string, string>;
+  cookies?: Cookie[];
 }
 
 export interface BatchItem {
