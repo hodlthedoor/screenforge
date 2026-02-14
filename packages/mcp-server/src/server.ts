@@ -69,6 +69,14 @@ export interface SseServerOptions {
   messagesPath?: string;
 }
 
+export interface SseServerHandle {
+  port: number;
+  host: string;
+  ssePath: string;
+  messagesPath: string;
+  close: () => Promise<void>;
+}
+
 function writeJson(res: ServerResponse, statusCode: number, payload: Record<string, unknown>): void {
   if (res.writableEnded) {
     return;
@@ -81,8 +89,9 @@ function writeJson(res: ServerResponse, statusCode: number, payload: Record<stri
   res.end(JSON.stringify(payload));
 }
 
-export async function startSseServer(config: McpServerConfig, options: SseServerOptions): Promise<void> {
+export async function startSseServer(config: McpServerConfig, options: SseServerOptions): Promise<SseServerHandle> {
   const server = createScreenforgeMcpServer(config);
+  const host = options.host ?? '0.0.0.0';
   const ssePath = options.ssePath ?? '/sse';
   const messagesPath = options.messagesPath ?? '/messages';
   const transports = new Map<string, SSEServerTransport>();
@@ -146,6 +155,35 @@ export async function startSseServer(config: McpServerConfig, options: SseServer
   });
 
   await new Promise<void>((resolve) => {
-    httpServer.listen(options.port, options.host ?? '0.0.0.0', () => resolve());
+    httpServer.listen(options.port, host, () => resolve());
   });
+
+  const address =
+    typeof (httpServer as unknown as { address?: () => string | { port: number } | null }).address === 'function'
+      ? (httpServer as unknown as { address: () => string | { port: number } | null }).address()
+      : null;
+  const port = typeof address === 'object' && address !== null ? address.port : options.port;
+
+  return {
+    port,
+    host,
+    ssePath,
+    messagesPath,
+    close: () =>
+      new Promise<void>((resolve, reject) => {
+        if (typeof (httpServer as unknown as { close?: (cb: (error?: Error) => void) => void }).close !== 'function') {
+          resolve();
+          return;
+        }
+
+        (httpServer as unknown as { close: (cb: (error?: Error) => void) => void }).close((error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+
+          resolve();
+        });
+      }),
+  };
 }
