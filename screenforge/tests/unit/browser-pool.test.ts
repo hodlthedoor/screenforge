@@ -74,4 +74,47 @@ describe('BrowserPool', { timeout: 60_000 }, () => {
     await pool.init(); // Should not add more browsers
     expect(pool.stats().activeBrowsers).toBe(1);
   });
+
+  it('rejects acquire when circuit breaker is open', async () => {
+    pool = new BrowserPool(1, 100, 2); // threshold = 2
+    await pool.init();
+
+    // Simulate 2 failures to open circuit
+    pool.recordAcquireFailure();
+    pool.recordAcquireFailure();
+
+    await expect(pool.acquire()).rejects.toThrow('Circuit breaker is open');
+  });
+
+  it('records success on successful acquire', async () => {
+    pool = new BrowserPool(1, 100, 3);
+    await pool.init();
+
+    // Record a failure
+    pool.recordAcquireFailure();
+
+    // Successful acquire should record success
+    const ctx = await pool.acquire();
+    await ctx.close();
+
+    // Another failure should not open circuit (count reset)
+    pool.recordAcquireFailure();
+    pool.recordAcquireFailure();
+    const ctx2 = await pool.acquire();
+    await ctx2.close();
+  });
+
+  it('includes circuit breaker state in stats', async () => {
+    pool = new BrowserPool(1, 100, 2);
+    await pool.init();
+
+    let stats = pool.stats();
+    expect(stats.circuitBreakerState).toBe(0); // Closed
+
+    pool.recordAcquireFailure();
+    pool.recordAcquireFailure();
+
+    stats = pool.stats();
+    expect(stats.circuitBreakerState).toBe(2); // Open
+  });
 });

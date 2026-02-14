@@ -12,6 +12,12 @@ declare module 'fastify' {
   }
   interface FastifyRequest {
     dashboardUser?: User;
+    // eslint-disable-next-line no-undef
+    renderAbortController?: AbortController;
+    // eslint-disable-next-line no-undef
+    renderAbortSignal?: AbortSignal;
+    // eslint-disable-next-line no-undef
+    renderTimeoutId?: NodeJS.Timeout;
   }
   interface FastifyInstance {
     browserPool: BrowserPool;
