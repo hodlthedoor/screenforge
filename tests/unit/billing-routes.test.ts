@@ -727,6 +727,14 @@ describe('billing routes', () => {
       expect(subResult.rows[0].plan).toBe('pro');
       expect(subResult.rows[0].status).toBe('active');
 
+      // Verify sendEmail was called with the subscription changed template
+      expect(mockSendEmail).toHaveBeenCalledOnce();
+      const emailCall = mockSendEmail.mock.calls[0][0];
+      expect(emailCall.to).toBe(testEmail);
+      expect(emailCall.subject).toBe('ScreenForge: Your plan has changed');
+      expect(emailCall.html).toContain('Starter');
+      expect(emailCall.html).toContain('Pro');
+
       // Cleanup
       await pool.query("DELETE FROM subscriptions WHERE stripe_sub_id = 'sub_email_123'");
       await pool.query("UPDATE users SET stripe_customer_id = NULL, stripe_subscription_id = NULL WHERE id = $1", [userId]);

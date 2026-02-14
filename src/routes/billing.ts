@@ -309,6 +309,13 @@ export async function billingRoutes(app: FastifyInstance): Promise<void> {
           const status = subscription.status;
           const periodEnd = new Date(subscription.current_period_end * 1000);
 
+          // Read old plan BEFORE updating so we can detect plan changes for email
+          const oldSubResult = await pool.query(
+            'SELECT user_id, plan FROM subscriptions WHERE stripe_sub_id = $1',
+            [subscription.id],
+          );
+          const oldPlan = oldSubResult.rows[0]?.plan ?? 'free';
+
           // Update subscription record
           if (plan) {
             await pool.query(
@@ -325,25 +332,17 @@ export async function billingRoutes(app: FastifyInstance): Promise<void> {
           }
 
           // Update user tier if subscription is active
-          const subUser = await pool.query(
-            'SELECT user_id FROM subscriptions WHERE stripe_sub_id = $1',
-            [subscription.id],
-          );
-          if (subUser.rows.length > 0) {
+          if (oldSubResult.rows.length > 0) {
+            const userId = oldSubResult.rows[0].user_id;
             const tier = status === 'active' || status === 'trialing'
               ? (plan?.tier ?? 'free')
               : 'free';
-            await updateUserTier(subUser.rows[0].user_id, tier);
+            await updateUserTier(userId, tier);
 
             // Send subscription changed email
             if (plan) {
-              const user = await getUserById(subUser.rows[0].user_id);
+              const user = await getUserById(userId);
               if (user) {
-                const oldSub = await pool.query(
-                  'SELECT plan FROM subscriptions WHERE stripe_sub_id = $1',
-                  [subscription.id],
-                );
-                const oldPlan = oldSub.rows[0]?.plan ?? 'free';
                 const oldPlanName = PLANS[oldPlan]?.name ?? oldPlan;
                 const newPlanName = PLANS[plan.tier]?.name ?? plan.tier;
                 if (oldPlanName !== newPlanName) {

@@ -641,6 +641,48 @@ describe('signed URLs', () => {
       loadConfig();
     });
 
+    it('rejects signed URL with overly long selector (sanitization error)', async () => {
+      const longSelector = 'a'.repeat(501);
+      const options: SignedUrlOptions = {
+        type: 'screenshot',
+        url: 'https://example.com',
+        selector: longSelector,
+      };
+
+      const signedUrl = generateSignedUrl(testApiKeyId, testSigningSecret, options);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: signedUrl,
+      });
+
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.body);
+      expect(body.error).toHaveProperty('code', 'VALIDATION_ERROR');
+      expect(body.error.message).toContain('Selector');
+    });
+
+    it('rejects signed URL with overly long waitFor (sanitization error)', async () => {
+      const longWaitFor = 'div'.repeat(200); // 600 chars > 500 max
+      const options: SignedUrlOptions = {
+        type: 'screenshot',
+        url: 'https://example.com',
+        waitFor: longWaitFor,
+      };
+
+      const signedUrl = generateSignedUrl(testApiKeyId, testSigningSecret, options);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: signedUrl,
+      });
+
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.body);
+      expect(body.error).toHaveProperty('code', 'VALIDATION_ERROR');
+      expect(body.error.message).toContain('waitFor');
+    });
+
     it('rejects signed URL with private/SSRF URL when ALLOW_PRIVATE_URLS is false', async () => {
       // Temporarily set ALLOW_PRIVATE_URLS to "no"
       const originalValue = process.env.ALLOW_PRIVATE_URLS;

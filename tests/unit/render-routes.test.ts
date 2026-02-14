@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import { buildServer } from '../../src/index.js';
 import { getPool, closePool, resetPool } from '../../src/db/index.js';
 import { createApiKey } from '../../src/db/api-keys.js';
+import { Redis } from 'ioredis';
 import type { FastifyInstance } from 'fastify';
 
 // Mock renderers to avoid spinning up real browsers
@@ -189,6 +190,145 @@ describe('render routes', () => {
       const body = JSON.parse(res.body);
       expect(body.error).toBeDefined();
     });
+
+    it('returns X-Cache: HIT for cached screenshot', async () => {
+      // First request — populates the cache (default cache_ttl > 0)
+      mockTakeScreenshot.mockResolvedValueOnce({
+        buffer: Buffer.from('cached-ss'),
+        contentType: 'image/png',
+        durationMs: 200,
+        metadata: { title: 'Cached' },
+      });
+
+      const payload = { url: `https://cache-hit-ss-${Date.now()}.com` };
+      const first = await app.inject({
+        method: 'POST',
+        url: '/v1/screenshot',
+        headers: { 'x-api-key': rawKey, 'content-type': 'application/json' },
+        payload,
+      });
+      expect(first.statusCode).toBe(200);
+      expect(first.headers['x-cache']).toBe('MISS');
+
+      // Second request — should hit cache
+      const second = await app.inject({
+        method: 'POST',
+        url: '/v1/screenshot',
+        headers: { 'x-api-key': rawKey, 'content-type': 'application/json' },
+        payload,
+      });
+      expect(second.statusCode).toBe(200);
+      expect(second.headers['x-cache']).toBe('HIT');
+    });
+
+    it('returns X-Cache: HIT with metadata envelope for cached screenshot', async () => {
+      mockTakeScreenshot.mockResolvedValueOnce({
+        buffer: Buffer.from('cached-ss-meta'),
+        contentType: 'image/png',
+        durationMs: 120,
+        metadata: { title: 'CacheMeta' },
+      });
+
+      const payload = { url: `https://cache-hit-ss-meta-${Date.now()}.com` };
+      // Populate cache
+      await app.inject({
+        method: 'POST',
+        url: '/v1/screenshot',
+        headers: { 'x-api-key': rawKey, 'content-type': 'application/json' },
+        payload,
+      });
+
+      // Cache HIT with metadata
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/screenshot?metadata=true',
+        headers: { 'x-api-key': rawKey, 'content-type': 'application/json' },
+        payload,
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.headers['content-type']).toContain('application/json');
+      expect(res.headers['x-cache']).toBe('HIT');
+      const body = JSON.parse(res.body);
+      expect(body.data).toBeDefined();
+      expect(body.durationMs).toBe(0); // cache HIT duration is 0
+    });
+
+    it('returns 429 when rate limited', async () => {
+      const pool = getPool();
+      // Get the key ID
+      const keyResult = await pool.query(
+        'SELECT id FROM api_keys WHERE name = $1',
+        ['Render Routes Test Key'],
+      );
+      const keyId = keyResult.rows[0].id;
+
+      // Clear any existing rate limit entries from prior tests
+      const redis = new Redis('redis://127.0.0.1:6379/15', { maxRetriesPerRequest: 3 });
+      await redis.del(`screenforge:ratelimit:${keyId}`);
+      redis.disconnect();
+
+      // Set rate limit to 1
+      const origRateLimit = await pool.query('SELECT rate_limit FROM api_keys WHERE id = $1', [keyId]);
+      await pool.query('UPDATE api_keys SET rate_limit = 1 WHERE id = $1', [keyId]);
+
+      // First request succeeds (uses limit)
+      mockTakeScreenshot.mockResolvedValueOnce({
+        buffer: Buffer.from('rl1'),
+        contentType: 'image/png',
+        durationMs: 10,
+        metadata: null,
+      });
+      const first = await app.inject({
+        method: 'POST',
+        url: '/v1/screenshot',
+        headers: { 'x-api-key': rawKey, 'content-type': 'application/json' },
+        payload: { url: 'https://rate-limit-test.com', cache_ttl: 0 },
+      });
+      expect(first.statusCode).toBe(200);
+
+      // Second request should be rate limited
+      const second = await app.inject({
+        method: 'POST',
+        url: '/v1/screenshot',
+        headers: { 'x-api-key': rawKey, 'content-type': 'application/json' },
+        payload: { url: 'https://rate-limit-test-2.com', cache_ttl: 0 },
+      });
+      expect(second.statusCode).toBe(429);
+      const body = JSON.parse(second.body);
+      expect(body.error).toHaveProperty('code', 'RATE_LIMITED');
+
+      // Restore rate limit
+      await pool.query('UPDATE api_keys SET rate_limit = $1 WHERE id = $2', [origRateLimit.rows[0].rate_limit, keyId]);
+    });
+
+    it('returns 429 when monthly quota is exceeded', async () => {
+      const pool = getPool();
+      const keyResult = await pool.query(
+        'SELECT id, monthly_quota FROM api_keys WHERE name = $1',
+        ['Render Routes Test Key'],
+      );
+      const keyId = keyResult.rows[0].id;
+      const quota = keyResult.rows[0].monthly_quota;
+
+      // Set usage to quota limit
+      await pool.query(
+        'INSERT INTO usage_daily (api_key_id, date, count) VALUES ($1, CURRENT_DATE, $2) ON CONFLICT (api_key_id, date) DO UPDATE SET count = $2',
+        [keyId, quota],
+      );
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/screenshot',
+        headers: { 'x-api-key': rawKey, 'content-type': 'application/json' },
+        payload: { url: 'https://quota-test.com', cache_ttl: 0 },
+      });
+      expect(res.statusCode).toBe(429);
+      const body = JSON.parse(res.body);
+      expect(body.error).toHaveProperty('code', 'QUOTA_EXCEEDED');
+
+      // Cleanup
+      await pool.query('DELETE FROM usage_daily WHERE api_key_id = $1', [keyId]);
+    });
   });
 
   describe('POST /v1/pdf', () => {
@@ -238,6 +378,67 @@ describe('render routes', () => {
       expect(body.id).toBeDefined();
       expect(body.status).toBe('pending');
       expect(body.pollUrl).toContain('/v1/render/');
+    });
+
+    it('returns X-Cache: HIT for cached PDF', async () => {
+      mockRenderPdf.mockResolvedValueOnce({
+        buffer: Buffer.from('cached-pdf'),
+        contentType: 'application/pdf',
+        durationMs: 180,
+        metadata: null,
+      });
+
+      const payload = { url: `https://cache-hit-pdf-${Date.now()}.com` };
+      const first = await app.inject({
+        method: 'POST',
+        url: '/v1/pdf',
+        headers: { 'x-api-key': rawKey, 'content-type': 'application/json' },
+        payload,
+      });
+      expect(first.statusCode).toBe(200);
+      expect(first.headers['x-cache']).toBe('MISS');
+
+      // Second request — should hit cache
+      const second = await app.inject({
+        method: 'POST',
+        url: '/v1/pdf',
+        headers: { 'x-api-key': rawKey, 'content-type': 'application/json' },
+        payload,
+      });
+      expect(second.statusCode).toBe(200);
+      expect(second.headers['x-cache']).toBe('HIT');
+    });
+
+    it('returns X-Cache: HIT with metadata envelope for cached PDF', async () => {
+      mockRenderPdf.mockResolvedValueOnce({
+        buffer: Buffer.from('cached-pdf-meta'),
+        contentType: 'application/pdf',
+        durationMs: 160,
+        metadata: { title: 'PDF Cached' },
+      });
+
+      const payload = { url: `https://cache-hit-pdf-meta-${Date.now()}.com` };
+      // Populate cache
+      await app.inject({
+        method: 'POST',
+        url: '/v1/pdf',
+        headers: { 'x-api-key': rawKey, 'content-type': 'application/json' },
+        payload,
+      });
+
+      // Cache HIT with metadata
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/pdf?metadata=true',
+        headers: { 'x-api-key': rawKey, 'content-type': 'application/json' },
+        payload,
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.headers['content-type']).toContain('application/json');
+      expect(res.headers['x-cache']).toBe('HIT');
+      const body = JSON.parse(res.body);
+      expect(body.data).toBeDefined();
+      expect(body.durationMs).toBe(0); // cache HIT duration is 0
     });
 
     it('returns 400 for SSRF blocked private URL', async () => {
