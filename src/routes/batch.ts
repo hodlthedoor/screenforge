@@ -7,6 +7,7 @@ import { getConfig } from '../config/index.js';
 import { screenshotOptionsSchema, pdfOptionsSchema, isPrivateUrl } from '../renderer/schemas.js';
 import { sanitizeCallbackUrl, SanitizeError } from '../security/sanitize.js';
 import { sendError } from '../security/errors.js';
+import { getStorageBackend } from '../storage/index.js';
 
 const batchItemSchema = z.object({
   type: z.enum(['screenshot', 'pdf']).default('screenshot'),
@@ -187,7 +188,7 @@ export async function batchRoutes(app: FastifyInstance) {
     const batch = batchResult.rows[0];
 
     const jobsResult = await getPool().query(
-      `SELECT id, type, url, status, error, duration_ms, content_type, result_path,
+      `SELECT id, type, url, status, error, duration_ms, content_type, result_path, thumbnail_path,
               metadata_title, metadata_final_url, metadata_status_code, metadata_width, metadata_height,
               metadata_enhanced
        FROM render_jobs WHERE batch_id = $1 ORDER BY created_at`,
@@ -211,6 +212,7 @@ export async function batchRoutes(app: FastifyInstance) {
         duration_ms: number | null;
         content_type: string | null;
         result_path: string | null;
+        thumbnail_path: string | null;
         metadata_title: string | null;
         metadata_final_url: string | null;
         metadata_status_code: number | null;
@@ -232,6 +234,17 @@ export async function batchRoutes(app: FastifyInstance) {
           };
         }
 
+        // Build download URL for main result
+        const downloadUrl = j.result_path ? `${config.BASE_URL}/v1/render/${j.id}` : undefined;
+
+        // Build thumbnail URL if available
+        let thumbnailUrl: string | undefined;
+        if (j.thumbnail_path) {
+          const storage = getStorageBackend();
+          const storageUrl = storage.getUrl(j.thumbnail_path);
+          thumbnailUrl = storageUrl ?? `${config.BASE_URL}/v1/render/${j.id}/thumbnail`;
+        }
+
         return {
           id: j.id,
           type: j.type,
@@ -242,6 +255,8 @@ export async function batchRoutes(app: FastifyInstance) {
           durationMs: j.duration_ms ?? undefined,
           metadata,
           pollUrl: `${config.BASE_URL}/v1/render/${j.id}`,
+          downloadUrl,
+          thumbnailUrl,
         };
       }),
     });

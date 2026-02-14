@@ -123,7 +123,7 @@ describe('render routes', () => {
       expect(res.statusCode).toBe(200);
       expect(res.headers['content-type']).toContain('application/json');
       const body = JSON.parse(res.body);
-      expect(body.data).toBeDefined();
+      expect(body.image).toBeDefined();
       expect(body.contentType).toBe('image/png');
       expect(body.metadata).toEqual({ title: 'Meta Test' });
     });
@@ -249,7 +249,7 @@ describe('render routes', () => {
       expect(res.headers['content-type']).toContain('application/json');
       expect(res.headers['x-cache']).toBe('HIT');
       const body = JSON.parse(res.body);
-      expect(body.data).toBeDefined();
+      expect(body.image).toBeDefined();
       expect(body.durationMs).toBe(0); // cache HIT duration is 0
     });
 
@@ -361,7 +361,7 @@ describe('render routes', () => {
       expect(res.statusCode).toBe(200);
       expect(res.headers['content-type']).toContain('application/json');
       const body = JSON.parse(res.body);
-      expect(body.data).toBeDefined();
+      expect(body.image).toBeDefined();
       expect(body.contentType).toBe('application/pdf');
       expect(body.metadata).toEqual({ title: 'PDF Meta' });
     });
@@ -437,7 +437,7 @@ describe('render routes', () => {
       expect(res.headers['content-type']).toContain('application/json');
       expect(res.headers['x-cache']).toBe('HIT');
       const body = JSON.parse(res.body);
-      expect(body.data).toBeDefined();
+      expect(body.image).toBeDefined();
       expect(body.durationMs).toBe(0); // cache HIT duration is 0
     });
 

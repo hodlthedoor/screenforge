@@ -21,6 +21,7 @@ export interface RenderJobResult {
   resultPath: string;
   contentType: string;
   durationMs: number;
+  thumbnailPath?: string;
   metadata?: {
     title: string;
     finalUrl: string;
@@ -88,7 +89,8 @@ export function createWorker(
     await pool.query(
       `UPDATE render_jobs SET status = 'completed', result_path = $1, content_type = $2,
        duration_ms = $3, metadata_title = $4, metadata_final_url = $5, metadata_status_code = $6,
-       metadata_width = $7, metadata_height = $8, metadata_enhanced = $9, completed_at = NOW() WHERE id = $10`,
+       metadata_width = $7, metadata_height = $8, metadata_enhanced = $9, thumbnail_path = $10,
+       completed_at = NOW() WHERE id = $11`,
       [
         result.resultPath,
         result.contentType,
@@ -99,6 +101,7 @@ export function createWorker(
         result.metadata?.width ?? null,
         result.metadata?.height ?? null,
         hasEnhancedMetadata ? JSON.stringify(result.metadata) : null,
+        result.thumbnailPath ?? null,
         job.data.jobId,
       ],
     );

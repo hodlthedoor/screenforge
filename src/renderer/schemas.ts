@@ -131,6 +131,16 @@ export const actionSchema = z.object({
 
 export type Action = z.infer<typeof actionSchema>;
 
+export const thumbnailSchema = z.object({
+  width: z.number().int().min(1).max(2048).default(320),
+  height: z.number().int().min(1).max(2048).default(240),
+  fit: z.enum(['cover', 'contain', 'fill']).default('cover'),
+  format: z.enum(['png', 'jpeg', 'webp']).default('webp'),
+  quality: z.number().int().min(0).max(100).default(80),
+}).optional();
+
+export type ThumbnailOptions = z.infer<typeof thumbnailSchema>;
+
 const screenshotBaseOptionsSchema = z.object({
   viewport: viewportSchema.default({ width: 1920, height: 1080 }),
   format: z.enum(['png', 'jpeg', 'webp']).default('png'),
@@ -152,6 +162,7 @@ const screenshotBaseOptionsSchema = z.object({
   fail_if_contains: z.string().max(500).optional(),
   fail_if_missing: z.string().max(500).optional(),
   extract_metadata: z.boolean().default(false),
+  thumbnail: thumbnailSchema,
 });
 
 export const screenshotOptionsSchema = z.object({
@@ -300,4 +311,5 @@ export interface RenderResult {
   contentType: string;
   durationMs: number;
   metadata?: RenderMetadata;
+  thumbnailBuffer?: Buffer;
 }

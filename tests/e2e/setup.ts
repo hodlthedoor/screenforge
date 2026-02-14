@@ -28,6 +28,8 @@ beforeAll(async () => {
   // Use CI DATABASE_URL if set, otherwise fall back to local test DB
   process.env.DATABASE_URL ??= 'postgresql:///screenforge_test?host=/var/run/postgresql';
   process.env.STORAGE_PATH = TEST_STORAGE;
+  // Set BASE_URL placeholder - will be updated after server starts
+  process.env.BASE_URL = 'http://localhost:3000';
 
   await mkdir(TEST_STORAGE, { recursive: true });
 
@@ -74,7 +76,24 @@ beforeAll(async () => {
     const ext = getExtFromFormat(parsed.format);
     const filePath = join(config.STORAGE_PATH, `${job.data.jobId}.${ext}`);
     await writeFile(filePath, result.buffer);
-    return { resultPath: filePath, contentType: result.contentType, durationMs: result.durationMs, metadata: result.metadata };
+
+    // Handle thumbnail if generated
+    let thumbnailPath: string | undefined;
+    if (result.thumbnailBuffer && parsed.thumbnail) {
+      const thumbExt = parsed.thumbnail.format === 'png' ? 'png' : parsed.thumbnail.format === 'jpeg' ? 'jpg' : 'webp';
+      const thumbKey = `${job.data.jobId}-thumb.${thumbExt}`;
+      const fullPath = join(config.STORAGE_PATH, thumbKey);
+      await writeFile(fullPath, result.thumbnailBuffer);
+      thumbnailPath = thumbKey; // Store only the key, not the full path
+    }
+
+    return {
+      resultPath: filePath,
+      contentType: result.contentType,
+      durationMs: result.durationMs,
+      metadata: result.metadata,
+      thumbnailPath,
+    };
   });
 
   // Wait for worker to be ready before accepting requests
@@ -84,6 +103,9 @@ beforeAll(async () => {
   await app.listen({ port: 0, host: '127.0.0.1' });
   const addr = app.addresses()[0];
   baseUrl = `http://${addr.address}:${addr.port}`;
+
+  // Update config with actual BASE_URL
+  (config as any).BASE_URL = baseUrl;
 
   // Create a test API key directly in DB
   const result = await createApiKey('e2e-test-key', 'pro');

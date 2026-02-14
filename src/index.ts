@@ -440,11 +440,22 @@ export async function start() {
     const ext = getExtFromFormat(parsed.format);
     const key = `${job.data.jobId}.${ext}`;
     const resultPath = await storage.upload(key, result.buffer, result.contentType);
+
+    // Handle thumbnail if generated
+    let thumbnailPath: string | undefined;
+    if (result.thumbnailBuffer && parsed.thumbnail) {
+      const thumbExt = parsed.thumbnail.format === 'png' ? 'png' : parsed.thumbnail.format === 'jpeg' ? 'jpg' : 'webp';
+      const thumbContentType = parsed.thumbnail.format === 'png' ? 'image/png' : parsed.thumbnail.format === 'jpeg' ? 'image/jpeg' : 'image/webp';
+      const thumbKey = `${job.data.jobId}-thumb.${thumbExt}`;
+      thumbnailPath = await storage.upload(thumbKey, result.thumbnailBuffer, thumbContentType);
+    }
+
     return {
       resultPath,
       contentType: result.contentType,
       durationMs: Math.round(performance.now() - start),
       metadata: result.metadata,
+      thumbnailPath,
     };
   });
 

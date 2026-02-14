@@ -24,16 +24,29 @@ function sendMetadataEnvelope(
   durationMs: number,
   cacheStatus: 'HIT' | 'MISS',
   metadata: RenderMetadata | null,
+  thumbnailBuffer?: Buffer,
 ) {
+  const responseData: {
+    image: string;
+    contentType: string;
+    durationMs: number;
+    metadata: RenderMetadata | null;
+    thumbnail?: string;
+  } = {
+    image: buffer.toString('base64'),
+    contentType,
+    durationMs,
+    metadata,
+  };
+
+  if (thumbnailBuffer) {
+    responseData.thumbnail = thumbnailBuffer.toString('base64');
+  }
+
   return reply
     .header('Content-Type', 'application/json')
     .header('X-Cache', cacheStatus)
-    .send({
-      data: buffer.toString('base64'),
-      contentType,
-      durationMs,
-      metadata,
-    });
+    .send(responseData);
 }
 
 function sendBinaryResponse(
@@ -415,7 +428,7 @@ export async function renderRoutes(
         observeRenderDuration('screenshot', format, result.durationMs / 1000);
 
         if (wantsMetadata) {
-          return sendMetadataEnvelope(reply, result.buffer, result.contentType, result.durationMs, 'MISS', result.metadata ?? null);
+          return sendMetadataEnvelope(reply, result.buffer, result.contentType, result.durationMs, 'MISS', result.metadata ?? null, result.thumbnailBuffer);
         }
         return sendBinaryResponse(reply, result.buffer, result.contentType, result.durationMs, 'MISS');
       } finally {
@@ -447,7 +460,7 @@ export async function renderRoutes(
       observeRenderDuration('screenshot', format, result.durationMs / 1000);
 
       if (wantsMetadata) {
-        return sendMetadataEnvelope(reply, result.buffer, result.contentType, result.durationMs, 'MISS', result.metadata ?? null);
+        return sendMetadataEnvelope(reply, result.buffer, result.contentType, result.durationMs, 'MISS', result.metadata ?? null, result.thumbnailBuffer);
       }
       return sendBinaryResponse(reply, result.buffer, result.contentType, result.durationMs, 'MISS');
     } finally {
