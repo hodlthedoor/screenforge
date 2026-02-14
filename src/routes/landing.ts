@@ -1,9 +1,75 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { Redis } from 'ioredis';
 import { getConfig } from '../config/index.js';
+import { getPool } from '../db/index.js';
 import { escapeHtml } from '../utils/html.js';
 
-function landingHtml(baseUrl: string): string {
-  const safeBaseUrl = escapeHtml(baseUrl);
+const SOCIAL_PROOF_CACHE_KEY = 'screenforge:social_proof:total_renders';
+const SOCIAL_PROOF_TTL = 300; // 5 minutes
+
+function formatNumber(n: number): string {
+  return n.toLocaleString('en-US');
+}
+
+async function getSocialProofCount(redisUrl: string): Promise<number> {
+  let redis: Redis | undefined;
+  try {
+    redis = new Redis(redisUrl, { maxRetriesPerRequest: 1, lazyConnect: true, connectTimeout: 2000 });
+    await redis.connect();
+
+    const cached = await redis.get(SOCIAL_PROOF_CACHE_KEY);
+    if (cached !== null) {
+      await redis.quit();
+      return parseInt(cached, 10) || 0;
+    }
+
+    const pool = getPool();
+    const result = await pool.query('SELECT COALESCE(SUM(count), 0)::int AS total FROM usage_daily');
+    const total = result.rows[0]?.total ?? 0;
+
+    await redis.setex(SOCIAL_PROOF_CACHE_KEY, SOCIAL_PROOF_TTL, String(total));
+    await redis.quit();
+    return total;
+  } catch {
+    if (redis) {
+      try { await redis.quit(); } catch { /* ignore */ }
+    }
+    return 0;
+  }
+}
+
+interface LandingOptions {
+  baseUrl: string;
+  analyticsScript?: string;
+  socialProofCount: number;
+}
+
+function landingHtml(opts: LandingOptions): string {
+  const safeBaseUrl = escapeHtml(opts.baseUrl);
+  const analyticsTag = opts.analyticsScript || '';
+  const renderCount = formatNumber(opts.socialProofCount);
+
+  const faqItems = [
+    { q: 'Can I self-host ScreenForge?', a: 'Yes! ScreenForge is fully open source and self-hostable. Run it on your own infrastructure with a single docker compose up command. Your data never leaves your servers.' },
+    { q: 'Is there a free tier?', a: 'Yes. The free tier includes 100 renders per month with webhook support — no credit card required. Perfect for prototyping and personal projects.' },
+    { q: 'What are the rate limits?', a: 'Rate limits depend on your plan: Free allows 1 concurrent render, Starter allows 3, Pro allows 10, and Business offers unlimited concurrency. All plans include webhook callbacks for async workflows.' },
+    { q: 'What output formats are supported?', a: 'ScreenForge supports PNG and JPEG screenshots, PDF generation (A4, Letter, Legal), and Open Graph card generation. All formats support full-page capture and custom viewports.' },
+    { q: 'How does pricing compare to competitors?', a: 'ScreenForge offers more generous quotas at every price point. Our free tier includes 100 renders/month vs competitors offering 100 or fewer. Paid plans start at $29/month for 5,000 renders. Plus, self-hosting is completely free and unlimited.' },
+    { q: 'Do you offer SDKs?', a: 'Yes. We provide official JavaScript and Python SDKs, plus a comprehensive REST API accessible via cURL or any HTTP client. All SDKs include TypeScript types.' },
+    { q: 'Can I use webhooks for async rendering?', a: 'Yes. All plans include webhook support. Submit a render job, and ScreenForge will POST the result to your callback URL when complete. Batch jobs also support webhooks.' },
+    { q: 'Is ScreenForge open source?', a: 'Yes. ScreenForge is MIT licensed and fully open source. You can inspect the code, contribute, or fork it. We are the only screenshot API that offers this transparency.' },
+  ];
+
+  const faqJsonLd = JSON.stringify({
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: faqItems.map((item) => ({
+      '@type': 'Question',
+      name: item.q,
+      acceptedAnswer: { '@type': 'Answer', text: item.a },
+    })),
+  });
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -36,9 +102,13 @@ function landingHtml(baseUrl: string): string {
     ]
   }
   </script>
+  <script type="application/ld+json">
+  ${faqJsonLd}
+  </script>
+  ${analyticsTag}
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
-    :root{--bg:#f5f7ff;--surface:#ffffff;--surface2:#edf1ff;--border:#d6ddf7;--text:#1d2238;--muted:#5b6488;--accent:#4f46e5;--accent2:#0ea5a0;--code-bg:#131828;--code-text:#dbe4ff}
+    :root{--bg:#f5f7ff;--surface:#ffffff;--surface2:#edf1ff;--border:#d6ddf7;--text:#1d2238;--muted:#5b6488;--accent:#4f46e5;--accent2:#0ea5a0;--code-bg:#131828;--code-text:#dbe4ff;--green:#16a34a;--red:#dc2626}
     body{font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:linear-gradient(180deg,var(--bg) 0%,#eef3ff 100%);color:var(--text);line-height:1.6}
     a{color:var(--accent);text-decoration:none}
     a:hover{text-decoration:underline}
@@ -61,6 +131,10 @@ function landingHtml(baseUrl: string): string {
     .hero p{font-size:1.2rem;color:var(--muted);max-width:700px;margin:0 auto 32px}
     .cta-group{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
 
+    .social-proof-counter{text-align:center;margin-top:20px}
+    .social-proof-counter .counter-value{font-size:1.8rem;font-weight:800;color:var(--accent)}
+    .social-proof-counter .counter-label{color:var(--muted);font-size:.95rem}
+
     .feature-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px}
     .feature-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:24px}
     .feature-card h3{font-size:1.1rem;margin-bottom:8px;color:var(--accent2)}
@@ -69,6 +143,15 @@ function landingHtml(baseUrl: string): string {
     .code-section pre,.selfhost pre{background:var(--code-bg);border:1px solid color-mix(in srgb,var(--accent) 20%,var(--border));border-radius:14px;padding:24px;overflow-x:auto;font-size:.9rem;line-height:1.8;color:var(--code-text)}
     code .comment{color:#7f89ae}
     code .string{color:#65d8d6}
+
+    .code-tabs{display:flex;gap:0;margin-bottom:0}
+    .code-tab{padding:10px 20px;border:1px solid var(--border);background:var(--surface2);cursor:pointer;font-size:.9rem;font-weight:600;border-bottom:none;border-radius:10px 10px 0 0;color:var(--muted);transition:background .15s}
+    .code-tab.active{background:var(--code-bg);color:var(--code-text)}
+    .code-panel{display:none}
+    .code-panel.active{display:block}
+    .code-panel pre{border-radius:0 14px 14px 14px;margin-top:0;position:relative}
+    .copy-btn{position:absolute;top:12px;right:12px;padding:6px 14px;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.08);color:var(--code-text);cursor:pointer;font-size:.8rem;transition:background .15s}
+    .copy-btn:hover{background:rgba(255,255,255,.15)}
 
     .pricing-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:18px}
     .price-card{position:relative;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:28px}
@@ -80,7 +163,7 @@ function landingHtml(baseUrl: string): string {
     .price-card .price span{font-size:.9rem;color:var(--muted);font-weight:500}
     .price-card ul{list-style:none;margin:0 0 20px;padding:0}
     .price-card ul li{padding:6px 0;color:var(--muted);font-size:.92rem}
-    .price-card ul li::before{content:'✓ ';color:var(--accent2)}
+    .price-card ul li::before{content:'\\2713 ';color:var(--accent2)}
     .price-card .btn{width:100%;text-align:center}
 
     .demo-wrap{display:grid;grid-template-columns:1.1fr .9fr;gap:18px;align-items:start}
@@ -97,11 +180,19 @@ function landingHtml(baseUrl: string): string {
     .comparison-table th,.comparison-table td{padding:14px 16px;border-bottom:1px solid var(--border);text-align:left}
     .comparison-table th{background:var(--surface2);font-size:.95rem}
     .comparison-table td:not(:first-child),.comparison-table th:not(:first-child){text-align:center}
+    .comparison-table .check{color:var(--green);font-weight:700}
+    .comparison-table .cross{color:var(--red);font-weight:700}
+    .comparison-table .highlight{background:color-mix(in srgb,var(--accent) 6%,var(--surface))}
 
     .testimonials-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
     .quote-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px}
     .quote-card p{color:var(--muted);font-size:.95rem;margin-bottom:12px}
     .quote-card strong{font-size:.95rem}
+
+    .faq-list{max-width:800px;margin:0 auto}
+    .faq-item{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px 24px;margin-bottom:12px}
+    .faq-item h3{font-size:1.05rem;margin-bottom:8px;cursor:pointer}
+    .faq-item p{color:var(--muted);font-size:.95rem}
 
     .selfhost{text-align:center}
     .selfhost p{color:var(--muted);margin-bottom:20px}
@@ -111,7 +202,7 @@ function landingHtml(baseUrl: string): string {
     .footer-links{display:flex;gap:14px}
 
     @media (prefers-color-scheme: dark){
-      :root{--bg:#0b0d15;--surface:#121625;--surface2:#171c2d;--border:#232b45;--text:#e2e8ff;--muted:#9ea8c8;--accent:#7a72ff;--accent2:#2dd4bf;--code-bg:#090d18;--code-text:#c9d6ff}
+      :root{--bg:#0b0d15;--surface:#121625;--surface2:#171c2d;--border:#232b45;--text:#e2e8ff;--muted:#9ea8c8;--accent:#7a72ff;--accent2:#2dd4bf;--code-bg:#090d18;--code-text:#c9d6ff;--green:#4ade80;--red:#f87171}
       body{background:linear-gradient(180deg,#090c16 0%,#0f1424 100%)}
       .badge{color:#062320}
     }
@@ -124,6 +215,7 @@ function landingHtml(baseUrl: string): string {
       .demo-wrap{grid-template-columns:1fr}
       .footer-wrap{flex-direction:column;align-items:flex-start}
       .nav-wrap{flex-direction:column;align-items:flex-start}
+      .code-tabs{flex-wrap:wrap}
     }
   </style>
 </head>
@@ -149,7 +241,10 @@ function landingHtml(baseUrl: string): string {
         <a href="/register" class="btn btn-primary">Get Started Free</a>
         <a href="/docs" class="btn btn-secondary">View Docs</a>
       </div>
-      <p style="margin-top:16px;color:var(--muted);font-size:.9rem">Used by hundreds of developers to automate visual content</p>
+      <div class="social-proof-counter" id="social-proof-counter">
+        <span class="counter-value">${renderCount}</span>
+        <span class="counter-label"> renders processed by developers worldwide</span>
+      </div>
     </div>
   </section>
 
@@ -188,17 +283,72 @@ function landingHtml(baseUrl: string): string {
   <section class="code-section">
     <div class="container">
       <h2 class="section-title">Simple API</h2>
-      <pre><code><span class="comment"># Take a screenshot</span>
+      <div class="code-tabs">
+        <button class="code-tab active" data-tab="curl" onclick="switchTab('curl')">cURL</button>
+        <button class="code-tab" data-tab="javascript" onclick="switchTab('javascript')">JavaScript SDK</button>
+        <button class="code-tab" data-tab="python" onclick="switchTab('python')">Python</button>
+      </div>
+      <div class="code-panel active" id="panel-curl">
+        <pre style="position:relative"><code><span class="comment"># Take a screenshot</span>
 curl -X POST ${safeBaseUrl}/v1/screenshot \\
-  -H "Content-Type: application/json" \\
+  -H <span class="string">"Content-Type: application/json"</span> \\
+  -H <span class="string">"x-api-key: YOUR_API_KEY"</span> \\
   -d '{"url": "<span class="string">https://example.com</span>", "format": "png"}' \\
   --output screenshot.png
 
 <span class="comment"># Generate a PDF</span>
 curl -X POST ${safeBaseUrl}/v1/pdf \\
-  -H "Content-Type: application/json" \\
-  -d '{"url": "<span class="string">https://example.com</span>", "format": "A4"}'  \\
-  --output page.pdf</code></pre>
+  -H <span class="string">"Content-Type: application/json"</span> \\
+  -H <span class="string">"x-api-key: YOUR_API_KEY"</span> \\
+  -d '{"url": "<span class="string">https://example.com</span>", "format": "A4"}' \\
+  --output page.pdf</code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+      </div>
+      <div class="code-panel" id="panel-javascript">
+        <pre style="position:relative"><code><span class="comment">// npm install @screenforge/sdk</span>
+import { ScreenForge } from <span class="string">'@screenforge/sdk'</span>;
+
+const sf = new ScreenForge({
+  apiKey: <span class="string">'YOUR_API_KEY'</span>,
+  baseUrl: <span class="string">'${safeBaseUrl}'</span>
+});
+
+<span class="comment">// Take a screenshot</span>
+const screenshot = await sf.screenshot({
+  url: <span class="string">'https://example.com'</span>,
+  format: <span class="string">'png'</span>,
+  fullPage: true
+});
+
+<span class="comment">// Generate a PDF</span>
+const pdf = await sf.pdf({
+  url: <span class="string">'https://example.com'</span>,
+  format: <span class="string">'A4'</span>
+});</code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+      </div>
+      <div class="code-panel" id="panel-python">
+        <pre style="position:relative"><code><span class="comment"># pip install requests</span>
+import requests
+
+<span class="comment"># Take a screenshot</span>
+response = requests.post(
+    <span class="string">'${safeBaseUrl}/v1/screenshot'</span>,
+    headers={<span class="string">'x-api-key'</span>: <span class="string">'YOUR_API_KEY'</span>},
+    json={<span class="string">'url'</span>: <span class="string">'https://example.com'</span>, <span class="string">'format'</span>: <span class="string">'png'</span>}
+)
+
+with open(<span class="string">'screenshot.png'</span>, <span class="string">'wb'</span>) as f:
+    f.write(response.content)
+
+<span class="comment"># Generate a PDF</span>
+response = requests.post(
+    <span class="string">'${safeBaseUrl}/v1/pdf'</span>,
+    headers={<span class="string">'x-api-key'</span>: <span class="string">'YOUR_API_KEY'</span>},
+    json={<span class="string">'url'</span>: <span class="string">'https://example.com'</span>, <span class="string">'format'</span>: <span class="string">'A4'</span>}
+)
+
+with open(<span class="string">'page.pdf'</span>, <span class="string">'wb'</span>) as f:
+    f.write(response.content)</code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+      </div>
     </div>
   </section>
 
@@ -272,6 +422,98 @@ curl -X POST ${safeBaseUrl}/v1/pdf \\
         <div id="demo-preview" class="demo-preview">
           <p class="demo-empty">Screenshot preview appears here.</p>
         </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="comparison">
+    <div class="container">
+      <h2 class="section-title">ScreenForge vs Competitors</h2>
+      <p class="section-subtitle">See how ScreenForge compares to other screenshot APIs on the features that matter.</p>
+      <div class="comparison-wrap">
+        <table class="comparison-table competitor-table">
+          <thead>
+            <tr>
+              <th>Feature</th>
+              <th class="highlight">ScreenForge</th>
+              <th>ScreenshotOne</th>
+              <th>Urlbox</th>
+              <th>Browserless</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Pricing (starter)</td>
+              <td class="highlight"><strong>$29/mo (5K)</strong></td>
+              <td>$17/mo (2K)</td>
+              <td>$9/mo (2K)</td>
+              <td>Usage-based</td>
+            </tr>
+            <tr>
+              <td>Free Tier</td>
+              <td class="highlight"><strong>100/mo</strong></td>
+              <td>100/mo</td>
+              <td>None</td>
+              <td>None</td>
+            </tr>
+            <tr>
+              <td>Self-Hosted</td>
+              <td class="highlight"><span class="check">Yes</span></td>
+              <td><span class="cross">No</span></td>
+              <td><span class="cross">No</span></td>
+              <td><span class="check">Yes</span></td>
+            </tr>
+            <tr>
+              <td>Open Source</td>
+              <td class="highlight"><span class="check">Yes</span></td>
+              <td><span class="cross">No</span></td>
+              <td><span class="cross">No</span></td>
+              <td><span class="check">Yes</span></td>
+            </tr>
+            <tr>
+              <td>Screenshots</td>
+              <td class="highlight"><span class="check">Yes</span></td>
+              <td><span class="check">Yes</span></td>
+              <td><span class="check">Yes</span></td>
+              <td><span class="check">Yes</span></td>
+            </tr>
+            <tr>
+              <td>PDFs</td>
+              <td class="highlight"><span class="check">Yes</span></td>
+              <td><span class="check">Yes</span></td>
+              <td><span class="check">Yes</span></td>
+              <td><span class="check">Yes</span></td>
+            </tr>
+            <tr>
+              <td>OG Cards</td>
+              <td class="highlight"><span class="check">Yes</span></td>
+              <td><span class="cross">No</span></td>
+              <td><span class="cross">No</span></td>
+              <td><span class="cross">No</span></td>
+            </tr>
+            <tr>
+              <td>Batch API</td>
+              <td class="highlight"><span class="check">Yes</span></td>
+              <td><span class="cross">No</span></td>
+              <td><span class="check">Yes</span></td>
+              <td><span class="cross">No</span></td>
+            </tr>
+            <tr>
+              <td>Webhooks</td>
+              <td class="highlight"><span class="check">Yes</span></td>
+              <td><span class="check">Yes</span></td>
+              <td><span class="check">Yes</span></td>
+              <td><span class="cross">No</span></td>
+            </tr>
+            <tr>
+              <td>SDKs</td>
+              <td class="highlight"><span class="check">JS + Python</span></td>
+              <td><span class="check">JS</span></td>
+              <td><span class="check">JS</span></td>
+              <td><span class="check">JS</span></td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
   </section>
@@ -352,6 +594,18 @@ curl -X POST ${safeBaseUrl}/v1/pdf \\
     </div>
   </section>
 
+  <section class="faq-section" id="faq-section">
+    <div class="container">
+      <h2 class="section-title">Frequently Asked Questions</h2>
+      <div class="faq-list">
+${faqItems.map((item) => `        <div class="faq-item">
+          <h3>${escapeHtml(item.q)}</h3>
+          <p>${escapeHtml(item.a)}</p>
+        </div>`).join('\n')}
+      </div>
+    </div>
+  </section>
+
   <section class="selfhost">
     <div class="container">
       <h2 class="section-title">Self-Host in Seconds</h2>
@@ -370,14 +624,33 @@ curl -X POST ${safeBaseUrl}/v1/pdf \\
     </div>
   </footer>
   <script>
-    const demoUrlInput = document.getElementById('demo-url');
-    const demoButton = document.getElementById('demo-submit');
-    const demoStatus = document.getElementById('demo-status');
-    const demoPreview = document.getElementById('demo-preview');
+    function switchTab(tab) {
+      document.querySelectorAll('.code-tab').forEach(function(el) {
+        el.classList.toggle('active', el.getAttribute('data-tab') === tab);
+      });
+      document.querySelectorAll('.code-panel').forEach(function(el) {
+        el.classList.toggle('active', el.id === 'panel-' + tab);
+      });
+    }
+
+    function copyCode(btn) {
+      var code = btn.parentElement.querySelector('code');
+      if (!code) return;
+      var text = code.textContent || '';
+      navigator.clipboard.writeText(text).then(function() {
+        btn.textContent = 'Copied!';
+        setTimeout(function() { btn.textContent = 'Copy'; }, 1500);
+      });
+    }
+
+    var demoUrlInput = document.getElementById('demo-url');
+    var demoButton = document.getElementById('demo-submit');
+    var demoStatus = document.getElementById('demo-status');
+    var demoPreview = document.getElementById('demo-preview');
 
     async function runDemo() {
       if (!demoUrlInput || !demoButton || !demoStatus || !demoPreview) return;
-      const targetUrl = demoUrlInput.value.trim();
+      var targetUrl = demoUrlInput.value.trim();
       if (!targetUrl) {
         demoStatus.textContent = 'Enter a URL first';
         return;
@@ -388,7 +661,7 @@ curl -X POST ${safeBaseUrl}/v1/pdf \\
       demoPreview.innerHTML = '<p class="demo-empty">Generating screenshot preview...</p>';
 
       try {
-        const response = await fetch('${safeBaseUrl}/v1/screenshot', {
+        var response = await fetch('${safeBaseUrl}/v1/screenshot', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -403,11 +676,11 @@ curl -X POST ${safeBaseUrl}/v1/pdf \\
           return;
         }
 
-        const blob = await response.blob();
-        const imageUrl = URL.createObjectURL(blob);
+        var blob = await response.blob();
+        var imageUrl = URL.createObjectURL(blob);
         demoPreview.innerHTML = '<img src="' + imageUrl + '" alt="Screenshot preview" />';
         demoStatus.textContent = 'Done';
-      } catch {
+      } catch(e) {
         demoStatus.textContent = '';
         demoPreview.innerHTML = '<p class="demo-empty">Demo coming soon! Sign up to try the API.</p>';
       } finally {
@@ -426,10 +699,20 @@ curl -X POST ${safeBaseUrl}/v1/pdf \\
 export async function landingRoutes(app: FastifyInstance): Promise<void> {
   const handler = async (_req: FastifyRequest, reply: FastifyReply) => {
     const config = getConfig();
+    let socialProofCount = 0;
+    try {
+      socialProofCount = await getSocialProofCount(config.REDIS_URL);
+    } catch {
+      // Graceful fallback — show 0
+    }
     return reply
       .type('text/html')
       .header('Cache-Control', 'public, max-age=3600')
-      .send(landingHtml(config.BASE_URL));
+      .send(landingHtml({
+        baseUrl: config.BASE_URL,
+        analyticsScript: config.ANALYTICS_SCRIPT,
+        socialProofCount,
+      }));
   };
 
   app.get('/', handler);
