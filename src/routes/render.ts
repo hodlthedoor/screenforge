@@ -169,7 +169,55 @@ export async function renderRoutes(
             },
             required: ['x', 'y', 'width', 'height'],
           },
-          waitFor: { type: 'string', description: 'CSS selector to wait for' },
+          waitFor: { type: 'string', description: 'CSS selector to wait for (legacy - use wait for new features)' },
+          wait: {
+            type: 'object',
+            description: 'Advanced wait strategy after navigation. Use this instead of waitFor for flexible waiting.',
+            oneOf: [
+              {
+                type: 'object',
+                properties: { type: { type: 'string', enum: ['networkidle'] } },
+                required: ['type'],
+                description: 'Wait for network to be idle (no requests for 500ms)',
+              },
+              {
+                type: 'object',
+                properties: {
+                  type: { type: 'string', enum: ['delay'] },
+                  value: { type: 'integer', minimum: 0, maximum: 30000, description: 'Delay in milliseconds' },
+                },
+                required: ['type', 'value'],
+                description: 'Wait for a fixed delay',
+              },
+              {
+                type: 'object',
+                properties: {
+                  type: { type: 'string', enum: ['selector'] },
+                  value: { type: 'string', description: 'CSS selector' },
+                },
+                required: ['type', 'value'],
+                description: 'Wait for CSS selector to appear',
+              },
+              {
+                type: 'object',
+                properties: {
+                  type: { type: 'string', enum: ['function'] },
+                  value: { type: 'string', description: 'JavaScript expression returning truthy when ready' },
+                },
+                required: ['type', 'value'],
+                description: 'Wait for custom JavaScript expression to return truthy',
+              },
+              {
+                type: 'object',
+                properties: {
+                  type: { type: 'string', enum: ['hidden'] },
+                  value: { type: 'string', description: 'CSS selector that must disappear' },
+                },
+                required: ['type', 'value'],
+                description: 'Wait for element to disappear (e.g., loading spinner)',
+              },
+            ],
+          },
           darkMode: { type: 'boolean', default: false },
           deviceScaleFactor: { type: 'number', minimum: 0.5, maximum: 4, default: 1 },
           quality: { type: 'integer', minimum: 0, maximum: 100 },
@@ -349,6 +397,55 @@ export async function renderRoutes(
           headerTemplate: { type: 'string' },
           footerTemplate: { type: 'string' },
           scale: { type: 'number', minimum: 0.1, maximum: 2, default: 1 },
+          waitFor: { type: 'string', description: 'CSS selector to wait for (legacy - use wait for new features)' },
+          wait: {
+            type: 'object',
+            description: 'Advanced wait strategy after navigation. Use this instead of waitFor for flexible waiting.',
+            oneOf: [
+              {
+                type: 'object',
+                properties: { type: { type: 'string', enum: ['networkidle'] } },
+                required: ['type'],
+                description: 'Wait for network to be idle (no requests for 500ms)',
+              },
+              {
+                type: 'object',
+                properties: {
+                  type: { type: 'string', enum: ['delay'] },
+                  value: { type: 'integer', minimum: 0, maximum: 30000, description: 'Delay in milliseconds' },
+                },
+                required: ['type', 'value'],
+                description: 'Wait for a fixed delay',
+              },
+              {
+                type: 'object',
+                properties: {
+                  type: { type: 'string', enum: ['selector'] },
+                  value: { type: 'string', description: 'CSS selector' },
+                },
+                required: ['type', 'value'],
+                description: 'Wait for CSS selector to appear',
+              },
+              {
+                type: 'object',
+                properties: {
+                  type: { type: 'string', enum: ['function'] },
+                  value: { type: 'string', description: 'JavaScript expression returning truthy when ready' },
+                },
+                required: ['type', 'value'],
+                description: 'Wait for custom JavaScript expression to return truthy',
+              },
+              {
+                type: 'object',
+                properties: {
+                  type: { type: 'string', enum: ['hidden'] },
+                  value: { type: 'string', description: 'CSS selector that must disappear' },
+                },
+                required: ['type', 'value'],
+                description: 'Wait for element to disappear (e.g., loading spinner)',
+              },
+            ],
+          },
           callback_url: { type: 'string', description: 'Webhook callback URL (async only)' },
           block_ads: { type: 'boolean', default: false },
           hide_cookies: { type: 'boolean', default: false },

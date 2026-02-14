@@ -86,6 +86,17 @@ const clipSchema = z.object({
   height: z.number().min(1),
 });
 
+// Wait strategy union type for flexible waiting after navigation
+const waitStrategySchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('networkidle') }),
+  z.object({ type: z.literal('delay'), value: z.number().int().min(0).max(30_000) }),
+  z.object({ type: z.literal('selector'), value: z.string() }),
+  z.object({ type: z.literal('function'), value: z.string() }),
+  z.object({ type: z.literal('hidden'), value: z.string() }),
+]);
+
+export type WaitStrategy = z.infer<typeof waitStrategySchema>;
+
 const screenshotBaseOptionsSchema = z.object({
   viewport: viewportSchema.default({ width: 1920, height: 1080 }),
   format: z.enum(['png', 'jpeg']).default('png'),
@@ -94,6 +105,7 @@ const screenshotBaseOptionsSchema = z.object({
   selector: z.string().optional(),
   clip: clipSchema.optional(),
   waitFor: z.string().optional(),
+  wait: waitStrategySchema.optional(),
   darkMode: z.boolean().default(false),
   deviceScaleFactor: z.number().min(0.5).max(4).default(1),
 });
@@ -111,6 +123,8 @@ export const screenshotOptionsSchema = z.object({
   message: 'Exactly one of url or html must be provided',
 }).refine((data) => !(data.selector && data.clip), {
   message: 'clip and selector are mutually exclusive',
+}).refine((data) => !(data.waitFor && data.wait), {
+  message: 'waitFor and wait are mutually exclusive — use wait for new features, waitFor for backwards compatibility',
 });
 
 export type ScreenshotOptions = z.infer<typeof screenshotOptionsSchema>;
@@ -130,6 +144,8 @@ const pdfBaseOptionsSchema = z.object({
   headerTemplate: z.string().optional(),
   footerTemplate: z.string().optional(),
   scale: z.number().min(0.1).max(2).default(1),
+  waitFor: z.string().optional(),
+  wait: waitStrategySchema.optional(),
 });
 
 export const pdfOptionsSchema = z.object({
@@ -143,6 +159,8 @@ export const pdfOptionsSchema = z.object({
   ...emulationSchema.shape,
 }).refine((data) => (data.url && !data.html) || (!data.url && data.html), {
   message: 'Exactly one of url or html must be provided',
+}).refine((data) => !(data.waitFor && data.wait), {
+  message: 'waitFor and wait are mutually exclusive — use wait for new features, waitFor for backwards compatibility',
 });
 
 export type PdfOptions = z.infer<typeof pdfOptionsSchema>;

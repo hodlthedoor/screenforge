@@ -4,9 +4,19 @@ import { authMiddleware } from '../auth/middleware.js';
 import type { BrowserPool } from '../renderer/browser-pool.js';
 import { RenderCache } from '../cache/index.js';
 import { getConfig } from '../config/index.js';
-import { isPrivateUrl, cookieSchema, geolocationSchema, timezoneSchema, localeSchema } from '../renderer/schemas.js';
+import { isPrivateUrl, cookieSchema, geolocationSchema, timezoneSchema, localeSchema, type WaitStrategy } from '../renderer/schemas.js';
 import { sendError } from '../security/errors.js';
 import { sanitizeHeaders, sanitizeCookies, toPlaywrightCookies, SanitizeError } from '../security/sanitize.js';
+import type { Page } from 'playwright';
+
+// Wait strategy union type for flexible waiting after navigation
+const waitStrategySchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('networkidle') }),
+  z.object({ type: z.literal('delay'), value: z.number().int().min(0).max(30_000) }),
+  z.object({ type: z.literal('selector'), value: z.string() }),
+  z.object({ type: z.literal('function'), value: z.string() }),
+  z.object({ type: z.literal('hidden'), value: z.string() }),
+]);
 
 const ogRequestSchema = z.object({
   url: z.string().url().optional(),
@@ -21,6 +31,10 @@ const ogRequestSchema = z.object({
   geolocation: geolocationSchema.optional(),
   timezone: timezoneSchema.optional(),
   locale: localeSchema.optional(),
+  waitFor: z.string().optional(),
+  wait: waitStrategySchema.optional(),
+}).refine((data) => !(data.waitFor && data.wait), {
+  message: 'waitFor and wait are mutually exclusive — use wait for new features, waitFor for backwards compatibility',
 });
 
 export type OgRequest = z.infer<typeof ogRequestSchema>;
@@ -31,6 +45,39 @@ function escapeHtml(str: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+async function applyWaitStrategy(page: Page, wait: WaitStrategy | undefined, legacyWaitFor: string | undefined, timeoutMs: number): Promise<void> {
+  // New wait strategy takes precedence
+  if (wait) {
+    const waitTimeout = Math.min(timeoutMs, 30_000); // Cap wait at navigation timeout or 30s
+
+    switch (wait.type) {
+      case 'networkidle':
+        // Already waited during navigation, no additional action needed
+        break;
+
+      case 'delay':
+        await page.waitForTimeout(wait.value);
+        break;
+
+      case 'selector':
+        await page.waitForSelector(wait.value, { timeout: waitTimeout });
+        break;
+
+      case 'function':
+        // eslint-disable-next-line no-new-func
+        await page.waitForFunction(wait.value, { timeout: waitTimeout });
+        break;
+
+      case 'hidden':
+        await page.waitForSelector(wait.value, { state: 'hidden', timeout: waitTimeout });
+        break;
+    }
+  } else if (legacyWaitFor) {
+    // Backwards compatibility: treat legacy waitFor as selector wait
+    await page.waitForSelector(legacyWaitFor, { timeout: 10_000 });
+  }
 }
 
 function generateOgHtml(data: OgRequest & { fetchedMeta?: { title?: string; description?: string; siteName?: string; image?: string } }): string {
@@ -184,6 +231,55 @@ export async function ogRoutes(app: FastifyInstance, pool: BrowserPool, cache: R
             description: 'Locale to emulate (e.g., "en-US", "fr-FR")',
             pattern: '^[a-z]{2}(-[A-Z]{2})?$',
           },
+          waitFor: { type: 'string', description: 'CSS selector to wait for (legacy - use wait for new features)' },
+          wait: {
+            type: 'object',
+            description: 'Advanced wait strategy after navigation',
+            oneOf: [
+              {
+                type: 'object',
+                properties: { type: { type: 'string', enum: ['networkidle'] } },
+                required: ['type'],
+                description: 'Wait for network to be idle',
+              },
+              {
+                type: 'object',
+                properties: {
+                  type: { type: 'string', enum: ['delay'] },
+                  value: { type: 'integer', minimum: 0, maximum: 30000, description: 'Delay in milliseconds' },
+                },
+                required: ['type', 'value'],
+                description: 'Wait for a fixed delay',
+              },
+              {
+                type: 'object',
+                properties: {
+                  type: { type: 'string', enum: ['selector'] },
+                  value: { type: 'string', description: 'CSS selector' },
+                },
+                required: ['type', 'value'],
+                description: 'Wait for CSS selector to appear',
+              },
+              {
+                type: 'object',
+                properties: {
+                  type: { type: 'string', enum: ['function'] },
+                  value: { type: 'string', description: 'JavaScript expression returning truthy when ready' },
+                },
+                required: ['type', 'value'],
+                description: 'Wait for custom JavaScript expression to return truthy',
+              },
+              {
+                type: 'object',
+                properties: {
+                  type: { type: 'string', enum: ['hidden'] },
+                  value: { type: 'string', description: 'CSS selector that must disappear' },
+                },
+                required: ['type', 'value'],
+                description: 'Wait for element to disappear (e.g., loading spinner)',
+              },
+            ],
+          },
         },
       },
     },
@@ -258,6 +354,7 @@ export async function ogRoutes(app: FastifyInstance, pool: BrowserPool, cache: R
     try {
       const page = await context.newPage();
       await page.setContent(html, { waitUntil: 'networkidle' });
+      await applyWaitStrategy(page, data.wait, data.waitFor, config.NAVIGATION_TIMEOUT_MS);
       const buffer = Buffer.from(await page.screenshot({ type: 'png' }));
       const durationMs = Math.round(performance.now() - start);
 
