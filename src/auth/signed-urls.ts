@@ -12,6 +12,8 @@ export interface SignedUrlOptions {
   waitFor?: string;
   darkMode?: boolean;
   deviceScaleFactor?: number;
+  device?: string;
+  userAgent?: string;
   // PDF-specific options
   pageSize?: string;
   margins?: { top?: string; right?: string; bottom?: string; left?: string };

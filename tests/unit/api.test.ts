@@ -336,4 +336,74 @@ describe('API endpoints', { timeout: 120_000 }, () => {
       expect(res.headers['content-type']).toBe('application/pdf');
     });
   });
+
+  describe('GET /v1/devices', () => {
+    it('returns list of device presets without auth', async () => {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/v1/devices',
+      });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.devices).toBeDefined();
+      expect(Array.isArray(body.devices)).toBe(true);
+      expect(body.devices.length).toBeGreaterThan(0);
+
+      // Verify preset structure
+      const device = body.devices[0];
+      expect(device).toHaveProperty('id');
+      expect(device).toHaveProperty('name');
+      expect(device).toHaveProperty('width');
+      expect(device).toHaveProperty('height');
+      expect(device).toHaveProperty('deviceScaleFactor');
+      expect(device).toHaveProperty('isMobile');
+      expect(device).toHaveProperty('hasTouch');
+      expect(device).toHaveProperty('userAgent');
+    });
+
+    it('includes expected device presets', async () => {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/v1/devices',
+      });
+      const body = JSON.parse(res.body);
+      const deviceIds = body.devices.map((d: { id: string }) => d.id);
+
+      expect(deviceIds).toContain('iphone-14-pro');
+      expect(deviceIds).toContain('iphone-15-pro');
+      expect(deviceIds).toContain('galaxy-s24');
+      expect(deviceIds).toContain('desktop-1080p');
+      expect(deviceIds).toContain('desktop-4k');
+    });
+  });
+
+  describe('POST /v1/screenshot with device preset', () => {
+    it('accepts device preset', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/screenshot',
+        payload: {
+          url: fixtureUrl,
+          device: 'iphone-15-pro',
+        },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.headers['content-type']).toBe('image/png');
+    });
+
+    it('returns 400 for unknown device preset', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/screenshot',
+        payload: {
+          url: fixtureUrl,
+          device: 'unknown-device',
+        },
+      });
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.body);
+      expect(body.error).toBeDefined();
+      expect(body.error.code).toBe('VALIDATION_ERROR');
+    });
+  });
 });

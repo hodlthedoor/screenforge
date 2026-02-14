@@ -16,6 +16,7 @@ import { asyncRenderRoutes } from './routes/async-render.js';
 import { batchRoutes } from './routes/batch.js';
 import { ogRoutes } from './routes/og.js';
 import { signedRoutes } from './routes/signed.js';
+import { devicesRoutes } from './routes/devices.js';
 import { requestIdHook } from './security/request-id.js';
 import { requestTimeoutHook, requestTimeoutCleanupHook } from './renderer/timeout.js';
 import { getQueueMetrics, createWorker, type RenderJobData, type RenderJobResult } from './queue/render-queue.js';
@@ -244,6 +245,7 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
   // Register API routes
   await renderRoutes(app, pool, cache, rateLimiter);
   await signedRoutes(app, rateLimiter);
+  await devicesRoutes(app);
   await adminRoutes(app);
   await usageRoutes(app);
   await asyncRenderRoutes(app);

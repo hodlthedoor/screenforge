@@ -49,6 +49,70 @@ describe('screenshotOptionsSchema', () => {
     expect(result.success).toBe(false);
   });
 
+  describe('device presets', () => {
+    it('applies device preset to override viewport and deviceScaleFactor', () => {
+      const result = screenshotOptionsSchema.safeParse({
+        url: 'https://example.com',
+        device: 'iphone-15-pro',
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.viewport.width).toBe(393);
+        expect(result.data.viewport.height).toBe(659);
+        expect(result.data.deviceScaleFactor).toBe(3);
+        expect(result.data.userAgent).toBeDefined();
+        expect(result.data.userAgent).toContain('iPhone');
+      }
+    });
+
+    it('device preset overrides manual viewport', () => {
+      const result = screenshotOptionsSchema.safeParse({
+        url: 'https://example.com',
+        device: 'desktop-4k',
+        viewport: { width: 1920, height: 1080 }, // Should be overridden
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.viewport.width).toBe(3840);
+        expect(result.data.viewport.height).toBe(2160);
+      }
+    });
+
+    it('device preset overrides manual deviceScaleFactor', () => {
+      const result = screenshotOptionsSchema.safeParse({
+        url: 'https://example.com',
+        device: 'iphone-14-pro',
+        deviceScaleFactor: 1, // Should be overridden to 3
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.deviceScaleFactor).toBe(3);
+      }
+    });
+
+    it('rejects unknown device preset', () => {
+      const result = screenshotOptionsSchema.safeParse({
+        url: 'https://example.com',
+        device: 'unknown-device',
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues[0].message).toContain('Unknown device');
+      }
+    });
+
+    it('allows explicit userAgent without device', () => {
+      const result = screenshotOptionsSchema.safeParse({
+        url: 'https://example.com',
+        userAgent: 'Custom/1.0',
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.userAgent).toBe('Custom/1.0');
+      }
+    });
+  });
+
   it('rejects file:// URLs (non-http protocol)', () => {
     const result = screenshotOptionsSchema.safeParse({ url: 'file:///etc/passwd' });
     expect(result.success).toBe(false);
@@ -336,6 +400,31 @@ describe('pdfOptionsSchema', () => {
   it('rejects scale out of range', () => {
     const result = pdfOptionsSchema.safeParse({ url: 'https://example.com', scale: 5 });
     expect(result.success).toBe(false);
+  });
+
+  describe('device presets', () => {
+    it('applies device preset with userAgent for PDFs', () => {
+      const result = pdfOptionsSchema.safeParse({
+        url: 'https://example.com',
+        device: 'desktop-1080p',
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.userAgent).toBeDefined();
+        expect(result.data.userAgent).toContain('Chrome');
+      }
+    });
+
+    it('rejects unknown device preset', () => {
+      const result = pdfOptionsSchema.safeParse({
+        url: 'https://example.com',
+        device: 'invalid-device',
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues[0].message).toContain('Unknown device');
+      }
+    });
   });
 
   it('rejects file:// URLs (non-http protocol)', () => {

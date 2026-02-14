@@ -13,6 +13,9 @@ const FORMAT_SIZE: Record<string, { width: string; height: string }> = {
 export async function renderPdf(pool: BrowserPool, options: PdfOptions, timeoutMs = 30_000): Promise<RenderResult> {
   const start = performance.now();
   const context = await pool.acquire({
+    userAgent: options.userAgent,
+    isMobile: options.isMobile,
+    hasTouch: options.hasTouch,
     locale: options.locale,
     geolocation: options.geolocation,
     permissions: options.geolocation ? ['geolocation'] : undefined,

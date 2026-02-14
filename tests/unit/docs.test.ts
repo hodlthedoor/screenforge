@@ -39,7 +39,7 @@ describe('API documentation', () => {
       const tagNames = spec.tags?.map((t: { name: string }) => t.name) ?? [];
       const requiredTags = [
         'render', 'async', 'batch', 'og', 'admin', 'usage', 'health',
-        'signed', 'billing', 'webhooks', 'auth',
+        'signed', 'billing', 'webhooks', 'auth', 'devices',
       ];
       for (const tag of requiredTags) {
         expect(tagNames, `Missing tag: ${tag}`).toContain(tag);
@@ -62,6 +62,7 @@ describe('API documentation', () => {
         '/v1/render/{id}',
         '/v1/keys',
         '/v1/usage',
+        '/v1/devices',
         '/v1/signed/screenshot',
         '/v1/signed/pdf',
         '/v1/webhooks/deliveries',

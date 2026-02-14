@@ -220,6 +220,8 @@ export async function renderRoutes(
           },
           darkMode: { type: 'boolean', default: false },
           deviceScaleFactor: { type: 'number', minimum: 0.5, maximum: 4, default: 1 },
+          device: { type: 'string', description: 'Device preset ID (e.g., iphone-15-pro, desktop-4k). Overrides viewport, deviceScaleFactor, and userAgent. See GET /v1/devices for available presets.' },
+          userAgent: { type: 'string', description: 'Custom user agent string' },
           quality: { type: 'integer', minimum: 0, maximum: 100 },
           callback_url: { type: 'string', description: 'Webhook callback URL (async only)' },
           block_ads: { type: 'boolean', default: false },
@@ -397,6 +399,8 @@ export async function renderRoutes(
           headerTemplate: { type: 'string' },
           footerTemplate: { type: 'string' },
           scale: { type: 'number', minimum: 0.1, maximum: 2, default: 1 },
+          device: { type: 'string', description: 'Device preset ID (e.g., iphone-15-pro, desktop-4k). Sets userAgent and emulation flags. See GET /v1/devices for available presets.' },
+          userAgent: { type: 'string', description: 'Custom user agent string' },
           waitFor: { type: 'string', description: 'CSS selector to wait for (legacy - use wait for new features)' },
           wait: {
             type: 'object',

@@ -15,6 +15,9 @@ export async function takeScreenshot(pool: BrowserPool, options: ScreenshotOptio
   const context = await pool.acquire({
     viewport: { width: options.viewport.width, height: options.viewport.height },
     deviceScaleFactor: options.deviceScaleFactor,
+    userAgent: options.userAgent,
+    isMobile: options.isMobile,
+    hasTouch: options.hasTouch,
     colorScheme: options.darkMode ? 'dark' : undefined,
     locale: options.locale,
     geolocation: options.geolocation,

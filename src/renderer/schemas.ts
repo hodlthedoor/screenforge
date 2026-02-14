@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { getDevicePreset } from './devices.js';
 
 const httpUrlSchema = z.string().url().refine((url) => {
   try {
@@ -108,6 +109,10 @@ const screenshotBaseOptionsSchema = z.object({
   wait: waitStrategySchema.optional(),
   darkMode: z.boolean().default(false),
   deviceScaleFactor: z.number().min(0.5).max(4).default(1),
+  device: z.string().optional(),
+  userAgent: z.string().optional(),
+  isMobile: z.boolean().optional(),
+  hasTouch: z.boolean().optional(),
 });
 
 export const screenshotOptionsSchema = z.object({
@@ -125,6 +130,30 @@ export const screenshotOptionsSchema = z.object({
   message: 'clip and selector are mutually exclusive',
 }).refine((data) => !(data.waitFor && data.wait), {
   message: 'waitFor and wait are mutually exclusive — use wait for new features, waitFor for backwards compatibility',
+}).refine((data) => {
+  // Validate device preset exists if specified
+  if (data.device) {
+    return getDevicePreset(data.device) !== undefined;
+  }
+  return true;
+}, {
+  message: 'Unknown device preset',
+  path: ['device'],
+}).transform((data) => {
+  // Apply device preset if specified
+  if (data.device) {
+    const preset = getDevicePreset(data.device)!; // Safe because refine validates it exists
+    // Device preset overrides viewport, deviceScaleFactor, userAgent, isMobile, and hasTouch
+    return {
+      ...data,
+      viewport: { width: preset.width, height: preset.height },
+      deviceScaleFactor: preset.deviceScaleFactor,
+      userAgent: preset.userAgent,
+      isMobile: preset.isMobile,
+      hasTouch: preset.hasTouch,
+    };
+  }
+  return data;
 });
 
 export type ScreenshotOptions = z.infer<typeof screenshotOptionsSchema>;
@@ -146,6 +175,10 @@ const pdfBaseOptionsSchema = z.object({
   scale: z.number().min(0.1).max(2).default(1),
   waitFor: z.string().optional(),
   wait: waitStrategySchema.optional(),
+  device: z.string().optional(),
+  userAgent: z.string().optional(),
+  isMobile: z.boolean().optional(),
+  hasTouch: z.boolean().optional(),
 });
 
 export const pdfOptionsSchema = z.object({
@@ -161,6 +194,28 @@ export const pdfOptionsSchema = z.object({
   message: 'Exactly one of url or html must be provided',
 }).refine((data) => !(data.waitFor && data.wait), {
   message: 'waitFor and wait are mutually exclusive — use wait for new features, waitFor for backwards compatibility',
+}).refine((data) => {
+  // Validate device preset exists if specified
+  if (data.device) {
+    return getDevicePreset(data.device) !== undefined;
+  }
+  return true;
+}, {
+  message: 'Unknown device preset',
+  path: ['device'],
+}).transform((data) => {
+  // Apply device preset if specified
+  if (data.device) {
+    const preset = getDevicePreset(data.device)!; // Safe because refine validates it exists
+    // Device preset sets userAgent, isMobile, and hasTouch for PDFs (UA can affect rendering)
+    return {
+      ...data,
+      userAgent: preset.userAgent,
+      isMobile: preset.isMobile,
+      hasTouch: preset.hasTouch,
+    };
+  }
+  return data;
 });
 
 export type PdfOptions = z.infer<typeof pdfOptionsSchema>;

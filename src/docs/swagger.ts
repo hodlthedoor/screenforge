@@ -31,6 +31,7 @@ export async function registerDocs(app: FastifyInstance) {
         { name: 'async', description: 'Async render job management' },
         { name: 'batch', description: 'Batch rendering' },
         { name: 'og', description: 'OpenGraph card generation' },
+        { name: 'devices', description: 'Device emulation presets' },
         { name: 'admin', description: 'Admin API key management' },
         { name: 'usage', description: 'Usage and quota tracking' },
         { name: 'health', description: 'Health checks' },
