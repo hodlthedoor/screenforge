@@ -7,19 +7,25 @@ import { escapeHtml } from '../utils/html.js';
 const SOCIAL_PROOF_CACHE_KEY = 'screenforge:social_proof:total_renders';
 const SOCIAL_PROOF_TTL = 300; // 5 minutes
 
+let cachedRedis: Redis | undefined;
+
 function formatNumber(n: number): string {
   return n.toLocaleString('en-US');
 }
 
+function getRedis(redisUrl: string): Redis {
+  if (!cachedRedis || cachedRedis.status === 'end') {
+    cachedRedis = new Redis(redisUrl, { maxRetriesPerRequest: 1, connectTimeout: 2000 });
+  }
+  return cachedRedis;
+}
+
 async function getSocialProofCount(redisUrl: string): Promise<number> {
-  let redis: Redis | undefined;
   try {
-    redis = new Redis(redisUrl, { maxRetriesPerRequest: 1, lazyConnect: true, connectTimeout: 2000 });
-    await redis.connect();
+    const redis = getRedis(redisUrl);
 
     const cached = await redis.get(SOCIAL_PROOF_CACHE_KEY);
     if (cached !== null) {
-      await redis.quit();
       return parseInt(cached, 10) || 0;
     }
 
@@ -28,12 +34,8 @@ async function getSocialProofCount(redisUrl: string): Promise<number> {
     const total = result.rows[0]?.total ?? 0;
 
     await redis.setex(SOCIAL_PROOF_CACHE_KEY, SOCIAL_PROOF_TTL, String(total));
-    await redis.quit();
     return total;
   } catch {
-    if (redis) {
-      try { await redis.quit(); } catch { /* ignore */ }
-    }
     return 0;
   }
 }
@@ -44,9 +46,15 @@ interface LandingOptions {
   socialProofCount: number;
 }
 
+function sanitizeAnalyticsScript(raw: string): string {
+  // Only allow <script ...></script> or <script ... /> tags
+  const scriptPattern = /^<script\s[^>]*(?:src=["'][^"']+["'])[^>]*(?:\/>|><\/script>)$/i;
+  return scriptPattern.test(raw.trim()) ? raw.trim() : '';
+}
+
 function landingHtml(opts: LandingOptions): string {
   const safeBaseUrl = escapeHtml(opts.baseUrl);
-  const analyticsTag = opts.analyticsScript || '';
+  const analyticsTag = opts.analyticsScript ? sanitizeAnalyticsScript(opts.analyticsScript) : '';
   const renderCount = formatNumber(opts.socialProofCount);
 
   const faqItems = [
@@ -82,9 +90,13 @@ function landingHtml(opts: LandingOptions): string {
   <meta property="og:description" content="Capture screenshots, generate PDFs, and create OG cards with a single API call. Self-hostable, fast, and developer-friendly.">
   <meta property="og:url" content="${safeBaseUrl}/">
   <meta property="og:type" content="website">
-  <meta name="twitter:card" content="summary">
+  <meta property="og:image" content="${safeBaseUrl}/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="ScreenForge — Screenshot &amp; Render API">
   <meta name="twitter:description" content="Capture screenshots, generate PDFs, and create OG cards with a single API call.">
+  <meta name="twitter:image" content="${safeBaseUrl}/og-image.png">
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -217,10 +229,13 @@ function landingHtml(opts: LandingOptions): string {
       .nav-wrap{flex-direction:column;align-items:flex-start}
       .code-tabs{flex-wrap:wrap}
     }
+    .skip-link{position:absolute;top:-100%;left:50%;transform:translateX(-50%);background:var(--accent);color:#fff;padding:8px 20px;border-radius:0 0 8px 8px;z-index:9999;font-weight:600}
+    .skip-link:focus{top:0}
   </style>
 </head>
 <body>
-  <nav class="nav">
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+  <nav class="nav" aria-label="Main navigation">
     <div class="container nav-wrap">
       <strong style="font-size:1.2rem">ScreenForge</strong>
       <div class="nav-links">
@@ -233,6 +248,7 @@ function landingHtml(opts: LandingOptions): string {
     </div>
   </nav>
 
+  <main id="main-content">
   <section class="hero">
     <div class="container">
       <h1><span>ScreenForge</span><br>Screenshot &amp; Render API</h1>
@@ -614,6 +630,7 @@ ${faqItems.map((item) => `        <div class="faq-item">
     </div>
   </section>
 
+  </main>
   <footer>
     <div class="container footer-wrap">
       <p>ScreenForge v1.0.0 — Open Source Screenshot &amp; Render API</p>

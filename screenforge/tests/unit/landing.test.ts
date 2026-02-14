@@ -115,12 +115,15 @@ describe('landing page', () => {
       expect(body).toContain('<meta name="description"');
       expect(body).toContain('og:title');
       expect(body).toContain('og:description');
-      expect(body).not.toContain('og:image');
+      expect(body).toContain('og:image');
+      expect(body).toContain('og:image:width');
+      expect(body).toContain('og:image:height');
       expect(body).toContain('og:url');
       expect(body).toContain('twitter:card');
+      expect(body).toContain('summary_large_image');
       expect(body).toContain('twitter:title');
       expect(body).toContain('twitter:description');
-      expect(body).not.toContain('twitter:image');
+      expect(body).toContain('twitter:image');
     });
 
     it('contains JSON-LD structured data', async () => {
@@ -247,12 +250,47 @@ describe('landing page', () => {
     });
   });
 
+  describe('accessibility', () => {
+    it('contains skip-to-main-content link', async () => {
+      const res = await app.inject({ method: 'GET', url: '/' });
+      expect(res.body).toContain('skip-link');
+      expect(res.body).toContain('href="#main-content"');
+      expect(res.body).toContain('id="main-content"');
+    });
+
+    it('contains nav aria-label', async () => {
+      const res = await app.inject({ method: 'GET', url: '/' });
+      expect(res.body).toContain('aria-label="Main navigation"');
+    });
+
+    it('wraps content in main landmark', async () => {
+      const res = await app.inject({ method: 'GET', url: '/' });
+      expect(res.body).toContain('<main id="main-content">');
+      expect(res.body).toContain('</main>');
+    });
+  });
+
   describe('analytics snippet injection', () => {
     it('does not inject analytics when ANALYTICS_SCRIPT is not set', async () => {
       const res = await app.inject({ method: 'GET', url: '/' });
       // Should not contain any analytics script tag (beyond our own)
       expect(res.body).not.toContain('plausible');
       expect(res.body).not.toContain('googletagmanager');
+    });
+
+    it('rejects malicious analytics script with inline content', async () => {
+      const prevScript = process.env.ANALYTICS_SCRIPT;
+      process.env.ANALYTICS_SCRIPT = '<script>alert("xss")</script>';
+      let malApp: FastifyInstance | undefined;
+      try {
+        malApp = await buildServer({ skipBrowserInit: true });
+        const res = await malApp.inject({ method: 'GET', url: '/' });
+        expect(res.body).not.toContain('alert("xss")');
+      } finally {
+        if (malApp) await malApp.close();
+        if (prevScript === undefined) delete process.env.ANALYTICS_SCRIPT;
+        else process.env.ANALYTICS_SCRIPT = prevScript;
+      }
     });
 
     it('injects analytics script when ANALYTICS_SCRIPT is set', async () => {
