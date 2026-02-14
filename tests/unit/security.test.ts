@@ -227,6 +227,7 @@ describe('security', () => {
         RENDER_TIMEOUT: 504,
         RENDER_FAILED: 500,
         JOB_NOT_FOUND: 404,
+        SCHEDULE_NOT_FOUND: 404,
         BATCH_NOT_FOUND: 404,
         BATCH_TOO_LARGE: 400,
         ADMIN_NOT_CONFIGURED: 503,

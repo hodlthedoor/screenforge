@@ -163,6 +163,7 @@ function docsHtml(baseUrl: string): string {
     <a href="#async-rendering">Async Rendering</a>
     <a href="#webhooks">Webhooks</a>
     <a href="#visual-diff">Visual Diff</a>
+    <a href="#schedules">Schedules</a>
     <div class="nav-label">Resources</div>
     <a href="#sdks">SDKs</a>
     <a href="#rate-limits">Rate Limits</a>
@@ -858,6 +859,115 @@ diff = resp.json()</code></pre></div>
 </section>
 
 <!-- ════════════════════════════════════════════ -->
+<!-- SCHEDULES -->
+<!-- ════════════════════════════════════════════ -->
+<section id="schedules">
+<h2>Schedules</h2>
+
+<p>Create recurring render jobs that execute on a cron schedule. ScreenForge automatically captures screenshots, PDFs, or OG cards at your specified intervals.</p>
+
+<h3>Create a Schedule</h3>
+<div class="endpoint"><span class="method method-post">POST</span> /v1/schedules</div>
+
+<h4>Parameters</h4>
+<div style="overflow-x:auto">
+<table class="param-table">
+  <thead><tr><th>Name</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td class="param-name">name</td><td class="param-type">string</td><td class="param-req">*</td><td>Human-readable name for the schedule (1&ndash;255 chars).</td></tr>
+    <tr><td class="param-name">cron_expression</td><td class="param-type">string</td><td class="param-req">*</td><td>Cron expression defining the schedule (e.g. <code>"0 */6 * * *"</code> for every 6 hours). Minimum interval depends on your plan.</td></tr>
+    <tr><td class="param-name">render_type</td><td class="param-type">string</td><td class="param-req">*</td><td><code>screenshot</code>, <code>pdf</code>, or <code>og</code>.</td></tr>
+    <tr><td class="param-name">render_config</td><td class="param-type">object</td><td class="param-req">*</td><td>Render options (same as the corresponding render endpoint). Must include <code>url</code> for screenshot/pdf types.</td></tr>
+    <tr><td class="param-name">enabled</td><td class="param-type">boolean</td><td></td><td>Whether the schedule is active (default <code>true</code>).</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="code-group" data-tabs>
+  <div class="code-tabs">
+    <button class="code-tab active" data-tab="curl">curl</button>
+    <button class="code-tab" data-tab="js">JavaScript</button>
+    <button class="code-tab" data-tab="py">Python</button>
+  </div>
+  <div class="code-panel active" data-panel="curl"><pre><code class="language-bash">curl -X POST ${safeBaseUrl}/v1/schedules \\
+  -H "x-api-key: sf_live_your_key_here" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "name": "Homepage daily screenshot",
+    "cron_expression": "0 9 * * *",
+    "render_type": "screenshot",
+    "render_config": {
+      "url": "https://example.com",
+      "viewport": {"width": 1280, "height": 720},
+      "fullPage": true
+    }
+  }'</code></pre></div>
+  <div class="code-panel" data-panel="js"><pre><code class="language-javascript">const res = await fetch("${safeBaseUrl}/v1/schedules", {
+  method: "POST",
+  headers: {
+    "x-api-key": "sf_live_your_key_here",
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    name: "Homepage daily screenshot",
+    cron_expression: "0 9 * * *",
+    render_type: "screenshot",
+    render_config: {
+      url: "https://example.com",
+      viewport: { width: 1280, height: 720 },
+      fullPage: true,
+    },
+  }),
+});
+const { schedule } = await res.json();</code></pre></div>
+  <div class="code-panel" data-panel="py"><pre><code class="language-python">resp = requests.post(
+    "${safeBaseUrl}/v1/schedules",
+    headers={"x-api-key": "sf_live_your_key_here"},
+    json={
+        "name": "Homepage daily screenshot",
+        "cron_expression": "0 9 * * *",
+        "render_type": "screenshot",
+        "render_config": {
+            "url": "https://example.com",
+            "viewport": {"width": 1280, "height": 720},
+            "fullPage": True,
+        },
+    },
+)
+schedule = resp.json()["schedule"]</code></pre></div>
+</div>
+
+<h3>List Schedules</h3>
+<div class="endpoint"><span class="method method-get">GET</span> /v1/schedules</div>
+<p>Returns all schedules for the authenticated API key.</p>
+
+<h3>Get Schedule Detail</h3>
+<div class="endpoint"><span class="method method-get">GET</span> /v1/schedules/:id</div>
+<p>Returns the schedule details along with the last 10 render job results.</p>
+
+<h3>Update a Schedule</h3>
+<div class="endpoint"><span class="method method-post">PATCH</span> /v1/schedules/:id</div>
+<p>Update any combination of <code>name</code>, <code>cron_expression</code>, <code>render_type</code>, <code>render_config</code>, or <code>enabled</code>. The next run time is automatically recomputed.</p>
+
+<h3>Delete a Schedule</h3>
+<div class="endpoint"><span class="method method-post">DELETE</span> /v1/schedules/:id</div>
+<p>Permanently remove a schedule. Existing render jobs from previous runs are not deleted.</p>
+
+<h4>Cron limits by plan</h4>
+<div style="overflow-x:auto">
+<table class="param-table">
+  <thead><tr><th>Plan</th><th>Min Interval</th><th>Max Schedules</th></tr></thead>
+  <tbody>
+    <tr><td>Free</td><td>24 hours</td><td>2</td></tr>
+    <tr><td>Starter</td><td>1 hour</td><td>10</td></tr>
+    <tr><td>Pro</td><td>15 minutes</td><td>50</td></tr>
+    <tr><td>Business</td><td>5 minutes</td><td>200</td></tr>
+  </tbody>
+</table>
+</div>
+</section>
+
+<!-- ════════════════════════════════════════════ -->
 <!-- SDKs -->
 <!-- ════════════════════════════════════════════ -->
 <section id="sdks">
@@ -1001,6 +1111,8 @@ og = sf.og(title="Hello World", template="default")
     <tr><td class="err-code">RATE_LIMITED</td><td class="err-status">429</td><td>Too many requests in the current window.</td><td>Yes &mdash; wait for reset</td></tr>
     <tr><td class="err-code">RENDER_TIMEOUT</td><td class="err-status">504</td><td>Page did not load within the timeout period.</td><td>Yes &mdash; try again or increase delay</td></tr>
     <tr><td class="err-code">RENDER_FAILED</td><td class="err-status">500</td><td>An internal error occurred during rendering.</td><td>Yes &mdash; retry with backoff</td></tr>
+    <tr><td class="err-code">JOB_NOT_FOUND</td><td class="err-status">404</td><td>The requested render job was not found.</td><td>No &mdash; check job ID</td></tr>
+    <tr><td class="err-code">SCHEDULE_NOT_FOUND</td><td class="err-status">404</td><td>The requested schedule was not found.</td><td>No &mdash; check schedule ID</td></tr>
   </tbody>
 </table>
 </section>

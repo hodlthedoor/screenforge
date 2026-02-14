@@ -198,6 +198,7 @@ describe('error response format', () => {
         'RENDER_TIMEOUT',
         'RENDER_FAILED',
         'JOB_NOT_FOUND',
+        'SCHEDULE_NOT_FOUND',
         'BATCH_NOT_FOUND',
         'BATCH_TOO_LARGE',
         'ADMIN_NOT_CONFIGURED',

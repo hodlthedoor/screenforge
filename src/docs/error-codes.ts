@@ -65,6 +65,10 @@ const ERROR_DOCUMENTATION: Record<string, Omit<ErrorCodeDoc, 'code' | 'http_stat
     description: 'The requested render job was not found.',
     retry_guidance: 'Check the job ID and ensure the job exists.',
   },
+  SCHEDULE_NOT_FOUND: {
+    description: 'The requested schedule was not found.',
+    retry_guidance: 'Check the schedule ID and ensure it belongs to your API key.',
+  },
   BATCH_NOT_FOUND: {
     description: 'The requested batch was not found.',
     retry_guidance: 'Check the batch ID and ensure the batch exists.',

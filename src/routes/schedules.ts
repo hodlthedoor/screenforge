@@ -148,7 +148,7 @@ export async function schedulesRoutes(app: FastifyInstance) {
       );
 
       if (scheduleResult.rows.length === 0) {
-        const err = createError('JOB_NOT_FOUND', 'Schedule not found');
+        const err = createError('SCHEDULE_NOT_FOUND');
         return reply.status(err.statusCode).send(err);
       }
 
@@ -222,7 +222,7 @@ export async function schedulesRoutes(app: FastifyInstance) {
         [id, apiKeyId],
       );
       if (existing.rows.length === 0) {
-        const err = createError('JOB_NOT_FOUND', 'Schedule not found');
+        const err = createError('SCHEDULE_NOT_FOUND');
         return reply.status(err.statusCode).send(err);
       }
 
@@ -319,7 +319,7 @@ export async function schedulesRoutes(app: FastifyInstance) {
       );
 
       if (result.rows.length === 0) {
-        const err = createError('JOB_NOT_FOUND', 'Schedule not found');
+        const err = createError('SCHEDULE_NOT_FOUND');
         return reply.status(err.statusCode).send(err);
       }
 

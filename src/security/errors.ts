@@ -17,6 +17,7 @@ export const ERROR_CODES = {
   RENDER_TIMEOUT: { status: 504, message: 'Render timed out' },
   RENDER_FAILED: { status: 500, message: 'Render failed' },
   JOB_NOT_FOUND: { status: 404, message: 'Job not found' },
+  SCHEDULE_NOT_FOUND: { status: 404, message: 'Schedule not found' },
   THUMBNAIL_NOT_FOUND: { status: 404, message: 'Thumbnail not found' },
   BATCH_NOT_FOUND: { status: 404, message: 'Batch not found' },
   BATCH_TOO_LARGE: { status: 400, message: 'Batch exceeds maximum of 50 requests' },
