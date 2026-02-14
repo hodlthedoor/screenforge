@@ -26,6 +26,9 @@ export default [
         URL: 'readonly',
         fetch: 'readonly',
         AbortController: 'readonly',
+        Response: 'readonly',
+        Headers: 'readonly',
+        Request: 'readonly',
       },
     },
     plugins: {
