@@ -42,6 +42,21 @@ function consumeFlash(req: FastifyRequest, key: string): string | undefined {
   return value;
 }
 
+const TYPE_COLORS: Record<string, string> = { screenshot: '#6c63ff', pdf: '#00d4aa', og: '#ffaa33' };
+
+async function queryTypeBreakdown(userId: string): Promise<Array<{ type: string; count: number }>> {
+  const result = await getPool().query(
+    `SELECT rj.type, COUNT(*)::int as count
+     FROM render_jobs rj
+     JOIN user_api_keys uak ON uak.api_key_id = rj.api_key_id
+     WHERE uak.user_id = $1 AND rj.created_at >= date_trunc('month', CURRENT_DATE)
+     GROUP BY rj.type
+     ORDER BY count DESC`,
+    [userId],
+  );
+  return result.rows.map((r: { type: string; count: number }) => ({ type: r.type, count: Number(r.count) }));
+}
+
 function dashboardLayout(title: string, nav: string, content: string, csrfToken: string): string {
   return `<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
@@ -278,30 +293,20 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
       [user.id],
     );
 
-    // Usage by render type
-    const typeResult = await pool.query(
-      `SELECT rj.type, COUNT(*)::int as count
-       FROM render_jobs rj
-       JOIN user_api_keys uak ON uak.api_key_id = rj.api_key_id
-       WHERE uak.user_id = $1 AND rj.created_at >= date_trunc('month', CURRENT_DATE)
-       GROUP BY rj.type`,
-      [user.id],
-    );
-
-    // Recent errors (last 10 failed renders)
-    const errorsResult = await pool.query(
-      `SELECT rj.url, rj.error, rj.created_at
-       FROM render_jobs rj
-       JOIN user_api_keys uak ON uak.api_key_id = rj.api_key_id
-       WHERE uak.user_id = $1 AND rj.status = 'failed'
-       ORDER BY rj.created_at DESC LIMIT 10`,
-      [user.id],
-    );
+    const [typeBreakdown, errorsResult] = await Promise.all([
+      queryTypeBreakdown(user.id),
+      pool.query(
+        `SELECT rj.url, rj.error, rj.created_at
+         FROM render_jobs rj
+         JOIN user_api_keys uak ON uak.api_key_id = rj.api_key_id
+         WHERE uak.user_id = $1 AND rj.status = 'failed'
+         ORDER BY rj.created_at DESC LIMIT 10`,
+        [user.id],
+      ),
+    ]);
 
     const dailyData = JSON.stringify(dailyResult.rows.map((r: { date: string; total: number | string }) => ({ date: r.date, count: Number(r.total) })));
-    const typeData = JSON.stringify(typeResult.rows.map((r: { type: string; count: number | string }) => ({ type: r.type, count: Number(r.count) })));
-
-    const typeColors: Record<string, string> = { screenshot: '#6c63ff', pdf: '#00d4aa', og: '#ffaa33' };
+    const typeData = JSON.stringify(typeBreakdown);
 
     const statCards = await Promise.all(keys.map(async (k: { id: string; name: string; monthlyQuota: number }) => {
       const stats = await getUsageStats(k.id);
@@ -351,7 +356,7 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
       <script>
         const dailyData = ${dailyData};
         const typeData = ${typeData};
-        const typeColors = ${JSON.stringify(typeColors)};
+        const typeColors = ${JSON.stringify(TYPE_COLORS)};
 
         // Line chart for daily renders
         if (dailyData.length > 0) {
@@ -405,14 +410,8 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
 
         function startAutoRefresh() {
           if (refreshInterval) clearInterval(refreshInterval);
-          refreshInterval = setInterval(async () => {
-            try {
-              const res = await fetch('/v1/analytics', { credentials: 'same-origin' });
-              if (res.ok) {
-                // Reload page to update charts with fresh data
-                window.location.reload();
-              }
-            } catch (e) { /* ignore fetch errors */ }
+          refreshInterval = setInterval(() => {
+            window.location.reload();
           }, 30000);
         }
 
@@ -868,17 +867,8 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
       [user.id],
     );
 
-    // Type breakdown (this month)
-    const typeResult = await pool.query(
-      `SELECT rj.type, COUNT(*)::int AS count
-       FROM render_jobs rj
-       JOIN user_api_keys uak ON uak.api_key_id = rj.api_key_id
-       WHERE uak.user_id = $1
-         AND rj.created_at >= date_trunc('month', CURRENT_DATE)
-       GROUP BY rj.type
-       ORDER BY count DESC`,
-      [user.id],
-    );
+    // Type breakdown (this month) — uses shared query
+    const typeBreakdownAnalytics = await queryTypeBreakdown(user.id);
 
     // Top 10 URLs
     const topUrlsResult = await pool.query(
@@ -916,10 +906,7 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
       avgDurationMs: r.avg_duration_ms,
     })));
 
-    const typeData = JSON.stringify(typeResult.rows.map((r: { type: string; count: number }) => ({
-      type: r.type,
-      count: r.count,
-    })));
+    const typeData = JSON.stringify(typeBreakdownAnalytics);
 
     const topUrlRows = topUrlsResult.rows.map((r: { url: string; count: number; avg_duration_ms: number }) =>
       `<tr>
@@ -928,12 +915,6 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
         <td>${r.avg_duration_ms}ms</td>
       </tr>`
     ).join('');
-
-    const typeColors: Record<string, string> = {
-      screenshot: '#6c63ff',
-      pdf: '#00d4aa',
-      og: '#ffaa33',
-    };
 
     const html = `
       <h1>Analytics</h1>
@@ -944,11 +925,11 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
       </div>
       <div class="card">
         <h2 style="margin-bottom:16px">Daily Renders (Last 30 Days)</h2>
-        <canvas id="dailyChart" height="220"></canvas>
+        <canvas id="dailyChart" style="width:100%;display:block" height="220"></canvas>
       </div>
       <div class="card">
         <h2 style="margin-bottom:16px">Render Type Breakdown</h2>
-        <canvas id="typeChart" height="180"></canvas>
+        <canvas id="typeChart" style="width:100%;display:block" height="180"></canvas>
       </div>
       <div class="card">
         <h2 style="margin-bottom:16px">Top Rendered URLs</h2>
@@ -959,14 +940,25 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
       <script>
         const dailyData = ${dailyData};
         const typeData = ${typeData};
-        const typeColors = ${JSON.stringify(typeColors)};
+        const typeColors = ${JSON.stringify(TYPE_COLORS)};
+
+        function setupCanvas(canvasId) {
+          const canvas = document.getElementById(canvasId);
+          if (!canvas) return null;
+          const dpr = window.devicePixelRatio || 1;
+          const rect = canvas.parentElement.getBoundingClientRect();
+          canvas.width = rect.width * dpr;
+          canvas.height = canvas.getAttribute('height') * dpr;
+          canvas.style.height = canvas.getAttribute('height') + 'px';
+          const ctx = canvas.getContext('2d');
+          ctx.scale(dpr, dpr);
+          return { canvas, ctx, W: rect.width, H: parseInt(canvas.getAttribute('height')) };
+        }
 
         function drawLineChart(canvasId, data) {
-          const canvas = document.getElementById(canvasId);
-          if (!canvas || !data.length) return;
-          const ctx = canvas.getContext('2d');
-          const W = canvas.width = canvas.offsetWidth;
-          const H = canvas.height;
+          const setup = setupCanvas(canvasId);
+          if (!setup || !data.length) return;
+          const { ctx, W, H } = setup;
           const pad = { top: 20, right: 20, bottom: 40, left: 50 };
           const cW = W - pad.left - pad.right;
           const cH = H - pad.top - pad.bottom;
@@ -975,7 +967,6 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
           ctx.fillStyle = '#12121a';
           ctx.fillRect(0, 0, W, H);
 
-          // Grid lines
           ctx.strokeStyle = '#1e1e2e';
           ctx.lineWidth = 1;
           for (let i = 0; i <= 4; i++) {
@@ -990,7 +981,6 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
             ctx.fillText(String(Math.round(max * (4 - i) / 4)), pad.left - 8, y + 4);
           }
 
-          // Line
           ctx.strokeStyle = '#6c63ff';
           ctx.lineWidth = 2;
           ctx.beginPath();
@@ -1001,7 +991,6 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
           });
           ctx.stroke();
 
-          // Fill area under line
           const lastX = pad.left + ((data.length - 1) / Math.max(data.length - 1, 1)) * cW;
           ctx.lineTo(lastX, pad.top + cH);
           ctx.lineTo(pad.left, pad.top + cH);
@@ -1009,7 +998,6 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
           ctx.fillStyle = 'rgba(108, 99, 255, 0.1)';
           ctx.fill();
 
-          // X-axis labels (show every 5th)
           ctx.fillStyle = '#8888a0';
           ctx.font = '10px sans-serif';
           ctx.textAlign = 'center';
@@ -1023,15 +1011,12 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
         }
 
         function drawStackedBar(canvasId, data) {
-          const canvas = document.getElementById(canvasId);
-          if (!canvas || !data.length) return;
-          const ctx = canvas.getContext('2d');
-          const W = canvas.width = canvas.offsetWidth;
-          const H = canvas.height;
+          const setup = setupCanvas(canvasId);
+          if (!setup || !data.length) return;
+          const { ctx, W, H } = setup;
           const pad = { top: 20, right: 20, bottom: 40, left: 50 };
           const cW = W - pad.left - pad.right;
           const cH = H - pad.top - pad.bottom;
-          const total = data.reduce((s, d) => s + d.count, 0);
           const max = Math.max(...data.map(d => d.count), 1);
 
           ctx.fillStyle = '#12121a';
@@ -1046,7 +1031,6 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
             ctx.fillStyle = typeColors[d.type] || '#6c63ff';
             ctx.fillRect(x, pad.top + cH - h, barW, h);
 
-            // Label
             ctx.fillStyle = '#e0e0e8';
             ctx.font = '12px sans-serif';
             ctx.textAlign = 'center';
@@ -1055,8 +1039,12 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
           });
         }
 
-        drawLineChart('dailyChart', dailyData);
-        drawStackedBar('typeChart', typeData);
+        function renderCharts() {
+          drawLineChart('dailyChart', dailyData);
+          drawStackedBar('typeChart', typeData);
+        }
+        renderCharts();
+        window.addEventListener('resize', renderCharts);
       </script>`;
 
     await req.session.save();
