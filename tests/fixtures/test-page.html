@@ -7,6 +7,8 @@
     body { margin: 0; padding: 20px; font-family: sans-serif; background: #fff; color: #333; height: 2000px; }
     h1 { color: #2563eb; }
     #target { width: 200px; height: 100px; background: #ef4444; color: white; display: flex; align-items: center; justify-content: center; }
+    #hideable { width: 100px; height: 50px; background: #10b981; color: white; display: flex; align-items: center; justify-content: center; margin-top: 10px; }
+    #removable { width: 100px; height: 50px; background: #f59e0b; color: white; display: flex; align-items: center; justify-content: center; margin-top: 10px; }
     @media (prefers-color-scheme: dark) {
       body { background: #1a1a1a; color: #eee; }
     }
@@ -16,6 +18,8 @@
   <h1>ScreenForge Test</h1>
   <p>This is a test page for rendering.</p>
   <div id="target">Target Element</div>
+  <div id="hideable">Hideable</div>
+  <div id="removable">Removable</div>
   <button id="test-button">Click Me</button>
   <input id="test-input" type="text" placeholder="Type here" />
 </body>

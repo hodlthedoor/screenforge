@@ -174,6 +174,56 @@ describe('schema content filtering options', () => {
       });
       expect(result.success).toBe(false);
     });
+
+    it('accepts hide_selectors array', () => {
+      const result = screenshotOptionsSchema.safeParse({
+        url: 'https://example.com',
+        hide_selectors: ['.cookie-banner', '#ad', 'nav.header'],
+      });
+      expect(result.success).toBe(true);
+      if (result.success) expect(result.data.hide_selectors).toEqual(['.cookie-banner', '#ad', 'nav.header']);
+    });
+
+    it('accepts remove_selectors array', () => {
+      const result = screenshotOptionsSchema.safeParse({
+        url: 'https://example.com',
+        remove_selectors: ['#popup', '.overlay'],
+      });
+      expect(result.success).toBe(true);
+      if (result.success) expect(result.data.remove_selectors).toEqual(['#popup', '.overlay']);
+    });
+
+    it('rejects hide_selectors with more than 20 items', () => {
+      const result = screenshotOptionsSchema.safeParse({
+        url: 'https://example.com',
+        hide_selectors: Array(21).fill('.item'),
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects remove_selectors with more than 20 items', () => {
+      const result = screenshotOptionsSchema.safeParse({
+        url: 'https://example.com',
+        remove_selectors: Array(21).fill('.item'),
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('allows exactly 20 hide_selectors', () => {
+      const result = screenshotOptionsSchema.safeParse({
+        url: 'https://example.com',
+        hide_selectors: Array(20).fill('.item'),
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('allows exactly 20 remove_selectors', () => {
+      const result = screenshotOptionsSchema.safeParse({
+        url: 'https://example.com',
+        remove_selectors: Array(20).fill('.item'),
+      });
+      expect(result.success).toBe(true);
+    });
   });
 
   describe('pdfOptionsSchema', () => {
@@ -192,6 +242,24 @@ describe('schema content filtering options', () => {
         expect(result.data.custom_css).toBe('body { margin: 0; }');
         expect(result.data.custom_js).toBe('document.title = "pdf"');
       }
+    });
+
+    it('accepts hide_selectors array', () => {
+      const result = pdfOptionsSchema.safeParse({
+        url: 'https://example.com',
+        hide_selectors: ['.cookie-banner', '#ad'],
+      });
+      expect(result.success).toBe(true);
+      if (result.success) expect(result.data.hide_selectors).toEqual(['.cookie-banner', '#ad']);
+    });
+
+    it('accepts remove_selectors array', () => {
+      const result = pdfOptionsSchema.safeParse({
+        url: 'https://example.com',
+        remove_selectors: ['#popup'],
+      });
+      expect(result.success).toBe(true);
+      if (result.success) expect(result.data.remove_selectors).toEqual(['#popup']);
     });
   });
 });

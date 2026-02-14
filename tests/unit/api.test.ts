@@ -137,6 +137,72 @@ describe('API endpoints', { timeout: 120_000 }, () => {
       expect(body.error.code).toBe('VALIDATION_ERROR');
     });
 
+    it('returns 400 for hide_selectors with >20 items', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/screenshot',
+        payload: { url: fixtureUrl, hide_selectors: Array(21).fill('.item') },
+      });
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.body);
+      expect(body.error.code).toBe('VALIDATION_ERROR');
+    });
+
+    it('returns 400 for remove_selectors with >20 items', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/screenshot',
+        payload: { url: fixtureUrl, remove_selectors: Array(21).fill('.item') },
+      });
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.body);
+      expect(body.error.code).toBe('VALIDATION_ERROR');
+    });
+
+    it('returns 400 for hide_selectors containing <', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/screenshot',
+        payload: { url: fixtureUrl, hide_selectors: ['.valid', '<script>'] },
+      });
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.body);
+      expect(body.error.code).toBe('VALIDATION_ERROR');
+    });
+
+    it('returns 400 for hide_selectors containing javascript:', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/screenshot',
+        payload: { url: fixtureUrl, hide_selectors: ['javascript:alert(1)'] },
+      });
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.body);
+      expect(body.error.code).toBe('VALIDATION_ERROR');
+    });
+
+    it('returns 400 for remove_selectors with empty string', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/screenshot',
+        payload: { url: fixtureUrl, remove_selectors: ['', '.valid'] },
+      });
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.body);
+      expect(body.error.code).toBe('VALIDATION_ERROR');
+    });
+
+    it('returns 400 for hide_selectors with selector exceeding 500 chars', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/screenshot',
+        payload: { url: fixtureUrl, hide_selectors: ['a'.repeat(501)] },
+      });
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.body);
+      expect(body.error.code).toBe('VALIDATION_ERROR');
+    });
+
     it('cache_ttl=0 bypasses cache (always returns MISS)', async () => {
       const payload = { url: fixtureUrl, cache_ttl: 0, format: 'png' };
 

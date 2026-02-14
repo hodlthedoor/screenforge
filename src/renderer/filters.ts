@@ -10,6 +10,8 @@ export interface ContentFilterOptions {
   block_resources?: BlockableResourceType[];
   custom_css?: string;
   custom_js?: string;
+  hide_selectors?: string[];
+  remove_selectors?: string[];
 }
 
 /** Set up request-level filters (ad blocking, resource blocking) — must be called BEFORE navigation. */
@@ -49,6 +51,24 @@ export async function applyPreNavigationFilters(page: Page, options: ContentFilt
 export async function applyPostNavigationFilters(page: Page, options: ContentFilterOptions): Promise<void> {
   if (options.hide_cookies) {
     await page.addStyleTag({ content: buildCookieHidingCss() });
+  }
+
+  if (options.hide_selectors && options.hide_selectors.length > 0) {
+    const hideRule = `${options.hide_selectors.join(', ')} { display: none !important; }`;
+    await page.addStyleTag({ content: hideRule });
+  }
+
+  if (options.remove_selectors && options.remove_selectors.length > 0) {
+    await page.evaluate((selectors: string[]) => {
+      selectors.forEach((selector: string) => {
+        try {
+          // @ts-expect-error - document is available in browser evaluate context but not in Node types
+          document.querySelectorAll(selector).forEach((el: any) => el.remove()); // eslint-disable-line no-undef
+        } catch (e) {
+          // Invalid selector — skip silently
+        }
+      });
+    }, options.remove_selectors);
   }
 
   if (options.custom_css) {

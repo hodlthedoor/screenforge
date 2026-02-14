@@ -11,7 +11,7 @@ import type { SlidingWindowRateLimiter } from '../auth/rate-limiter.js';
 import { incrementRenderCounter, observeRenderDuration } from '../metrics/index.js';
 import { getQueue, type RenderJobData } from '../queue/render-queue.js';
 import { getPool } from '../db/index.js';
-import { sanitizeUrl, sanitizeSelector, sanitizeWaitFor, sanitizeTemplate, sanitizeCallbackUrl, sanitizeHeaders, sanitizeCookies, SanitizeError } from '../security/sanitize.js';
+import { sanitizeUrl, sanitizeSelector, sanitizeWaitFor, sanitizeTemplate, sanitizeCallbackUrl, sanitizeHeaders, sanitizeCookies, sanitizeSelectorList, SanitizeError } from '../security/sanitize.js';
 import { sendError } from '../security/errors.js';
 import type { RenderMetadata } from '../renderer/schemas.js';
 
@@ -233,6 +233,18 @@ export async function renderRoutes(
             default: [],
             description: 'Resource types to block during page load for faster captures and reduced bandwidth'
           },
+          hide_selectors: {
+            type: 'array',
+            items: { type: 'string' },
+            maxItems: 20,
+            description: 'CSS selectors to hide via display:none before capture (e.g., cookie banners, ads)'
+          },
+          remove_selectors: {
+            type: 'array',
+            items: { type: 'string' },
+            maxItems: 20,
+            description: 'CSS selectors to remove from DOM before capture (e.g., overlays, popups)'
+          },
           custom_css: { type: 'string' },
           custom_js: { type: 'string' },
           headers: {
@@ -341,6 +353,8 @@ export async function renderRoutes(
         sanitizeUrl(options.url);
         sanitizeSelector(options.selector);
         sanitizeWaitFor(options.waitFor);
+        sanitizeSelectorList(options.hide_selectors as string[] | undefined, 'hide_selectors');
+        sanitizeSelectorList(options.remove_selectors as string[] | undefined, 'remove_selectors');
       } catch (e) {
         if (e instanceof SanitizeError) {
           sendError(reply, req, 'VALIDATION_ERROR', { message: e.message });
@@ -358,6 +372,8 @@ export async function renderRoutes(
       try {
         sanitizeSelector(options.selector);
         sanitizeWaitFor(options.waitFor);
+        sanitizeSelectorList(options.hide_selectors as string[] | undefined, 'hide_selectors');
+        sanitizeSelectorList(options.remove_selectors as string[] | undefined, 'remove_selectors');
       } catch (e) {
         if (e instanceof SanitizeError) {
           sendError(reply, req, 'VALIDATION_ERROR', { message: e.message });
@@ -525,6 +541,18 @@ export async function renderRoutes(
             default: [],
             description: 'Resource types to block during page load for faster captures and reduced bandwidth'
           },
+          hide_selectors: {
+            type: 'array',
+            items: { type: 'string' },
+            maxItems: 20,
+            description: 'CSS selectors to hide via display:none before capture (e.g., cookie banners, ads)'
+          },
+          remove_selectors: {
+            type: 'array',
+            items: { type: 'string' },
+            maxItems: 20,
+            description: 'CSS selectors to remove from DOM before capture (e.g., overlays, popups)'
+          },
           custom_css: { type: 'string' },
           custom_js: { type: 'string' },
           headers: {
@@ -633,6 +661,8 @@ export async function renderRoutes(
         sanitizeUrl(options.url);
         sanitizeTemplate(options.headerTemplate);
         sanitizeTemplate(options.footerTemplate);
+        sanitizeSelectorList(options.hide_selectors as string[] | undefined, 'hide_selectors');
+        sanitizeSelectorList(options.remove_selectors as string[] | undefined, 'remove_selectors');
       } catch (e) {
         if (e instanceof SanitizeError) {
           sendError(reply, req, 'VALIDATION_ERROR', { message: e.message });
@@ -650,6 +680,8 @@ export async function renderRoutes(
       try {
         sanitizeTemplate(options.headerTemplate);
         sanitizeTemplate(options.footerTemplate);
+        sanitizeSelectorList(options.hide_selectors as string[] | undefined, 'hide_selectors');
+        sanitizeSelectorList(options.remove_selectors as string[] | undefined, 'remove_selectors');
       } catch (e) {
         if (e instanceof SanitizeError) {
           sendError(reply, req, 'VALIDATION_ERROR', { message: e.message });

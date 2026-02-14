@@ -8,6 +8,7 @@ import {
   sanitizeTemplate,
   sanitizeUrl,
   sanitizeCallbackUrl,
+  sanitizeSelectorList,
   SanitizeError,
 } from '../../src/security/sanitize.js';
 import { createError, type ErrorCode } from '../../src/security/errors.js';
@@ -47,6 +48,55 @@ describe('security', () => {
     it('throws for waitFor exceeding 500 chars', () => {
       expect(() => sanitizeWaitFor('a'.repeat(501))).toThrow(SanitizeError);
       expect(() => sanitizeWaitFor('a'.repeat(501))).toThrow('waitFor selector exceeds maximum length');
+    });
+  });
+
+  describe('sanitizeSelectorList', () => {
+    it('returns undefined for falsy input', () => {
+      expect(sanitizeSelectorList(undefined, 'hide_selectors')).toBeUndefined();
+    });
+
+    it('returns undefined for empty array', () => {
+      expect(sanitizeSelectorList([], 'hide_selectors')).toBeUndefined();
+    });
+
+    it('passes valid selectors through', () => {
+      expect(sanitizeSelectorList(['.cookie-banner', '#ad', 'nav.header'], 'hide_selectors')).toEqual(['.cookie-banner', '#ad', 'nav.header']);
+    });
+
+    it('throws for empty string selectors', () => {
+      expect(() => sanitizeSelectorList(['', '.valid'], 'hide_selectors')).toThrow(SanitizeError);
+      expect(() => sanitizeSelectorList(['', '.valid'], 'hide_selectors')).toThrow('hide_selectors contains empty selector');
+    });
+
+    it('throws for whitespace-only selectors', () => {
+      expect(() => sanitizeSelectorList(['   ', '.valid'], 'remove_selectors')).toThrow(SanitizeError);
+      expect(() => sanitizeSelectorList(['   ', '.valid'], 'remove_selectors')).toThrow('remove_selectors contains empty selector');
+    });
+
+    it('throws for selectors containing <', () => {
+      expect(() => sanitizeSelectorList(['.valid', '<script>'], 'hide_selectors')).toThrow(SanitizeError);
+      expect(() => sanitizeSelectorList(['.valid', '<script>'], 'hide_selectors')).toThrow('hide_selectors contains dangerous characters');
+    });
+
+    it('throws for selectors containing javascript: (case-insensitive)', () => {
+      expect(() => sanitizeSelectorList(['javascript:alert(1)', '.valid'], 'remove_selectors')).toThrow(SanitizeError);
+      expect(() => sanitizeSelectorList(['JAVASCRIPT:void(0)', '.valid'], 'remove_selectors')).toThrow('remove_selectors contains dangerous characters');
+    });
+
+    it('throws for selectors exceeding 500 chars', () => {
+      const longSelector = 'a'.repeat(501);
+      expect(() => sanitizeSelectorList([longSelector], 'hide_selectors')).toThrow(SanitizeError);
+      expect(() => sanitizeSelectorList([longSelector], 'hide_selectors')).toThrow('hide_selectors selector exceeds maximum length');
+    });
+
+    it('allows selectors exactly 500 chars', () => {
+      const maxSelector = 'a'.repeat(500);
+      expect(sanitizeSelectorList([maxSelector], 'hide_selectors')).toEqual([maxSelector]);
+    });
+
+    it('trims whitespace from selectors', () => {
+      expect(sanitizeSelectorList(['  .cookie-banner  ', ' #ad'], 'hide_selectors')).toEqual(['.cookie-banner', '#ad']);
     });
   });
 

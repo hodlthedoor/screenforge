@@ -43,6 +43,8 @@ const contentFilterSchema = z.object({
     (s) => Buffer.byteLength(s, 'utf-8') <= MAX_CUSTOM_JS_SIZE,
     { message: 'custom_js must not exceed 10KB' },
   ).optional(),
+  hide_selectors: z.array(z.string()).max(20).optional(),
+  remove_selectors: z.array(z.string()).max(20).optional(),
 });
 
 export const cookieSchema = z.object({

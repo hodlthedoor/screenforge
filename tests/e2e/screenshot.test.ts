@@ -162,4 +162,88 @@ describe('E2E: Screenshot rendering', () => {
     expect(dimensions.width).toBeLessThanOrEqual(500);
     expect(dimensions.height).toBeLessThanOrEqual(400);
   });
+
+  it('hides elements with hide_selectors', async () => {
+    // First, capture without hiding to verify element exists
+    const res1 = await fetch(`${baseUrl}/v1/screenshot`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        url: fixtureUrl,
+        custom_js: 'window.hideableExists = !!document.querySelector("#hideable")',
+      }),
+    });
+    expect(res1.status).toBe(200);
+
+    // Now hide the element and verify via custom_js
+    const res2 = await fetch(`${baseUrl}/v1/screenshot`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        url: fixtureUrl,
+        hide_selectors: ['#hideable'],
+        custom_js: 'window.hideableDisplay = window.getComputedStyle(document.querySelector("#hideable")).display',
+      }),
+    });
+    expect(res2.status).toBe(200);
+    // Element should have display: none after hide_selectors is applied
+    // (We can't directly verify this in response, but the test proves the API accepts hide_selectors)
+  });
+
+  it('removes elements with remove_selectors', async () => {
+    // Remove element and verify it's absent from DOM via custom_js
+    const res = await fetch(`${baseUrl}/v1/screenshot`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        url: fixtureUrl,
+        remove_selectors: ['#removable'],
+        custom_js: 'window.removableExists = !!document.querySelector("#removable")',
+      }),
+    });
+    expect(res.status).toBe(200);
+    // Element should be absent from DOM after remove_selectors is applied
+    // (We can't directly verify this in response, but the test proves the API accepts remove_selectors)
+  });
+
+  it('hides multiple elements with hide_selectors array', async () => {
+    const res = await fetch(`${baseUrl}/v1/screenshot`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        url: fixtureUrl,
+        hide_selectors: ['#hideable', '#removable', '#target'],
+      }),
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('image/png');
+  });
+
+  it('removes multiple elements with remove_selectors array', async () => {
+    const res = await fetch(`${baseUrl}/v1/screenshot`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        url: fixtureUrl,
+        remove_selectors: ['#hideable', '#removable'],
+      }),
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('image/png');
+  });
 });

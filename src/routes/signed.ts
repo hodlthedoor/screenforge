@@ -6,7 +6,7 @@ import { getQueue, type RenderJobData } from '../queue/render-queue.js';
 import { getPool } from '../db/index.js';
 import { getConfig } from '../config/index.js';
 import { sendError } from '../security/errors.js';
-import { sanitizeUrl, sanitizeSelector, sanitizeWaitFor, SanitizeError } from '../security/sanitize.js';
+import { sanitizeUrl, sanitizeSelector, sanitizeWaitFor, sanitizeSelectorList, SanitizeError } from '../security/sanitize.js';
 import type { SlidingWindowRateLimiter } from '../auth/rate-limiter.js';
 
 export async function signedRoutes(
@@ -123,6 +123,12 @@ export async function signedRoutes(
         }
         if ('waitFor' in validatedOptions) {
           sanitizeWaitFor(validatedOptions.waitFor);
+        }
+        if ('hide_selectors' in validatedOptions) {
+          sanitizeSelectorList(validatedOptions.hide_selectors as string[] | undefined, 'hide_selectors');
+        }
+        if ('remove_selectors' in validatedOptions) {
+          sanitizeSelectorList(validatedOptions.remove_selectors as string[] | undefined, 'remove_selectors');
         }
       } catch (e) {
         if (e instanceof SanitizeError) {

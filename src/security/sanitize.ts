@@ -28,6 +28,35 @@ export function sanitizeSelector(input: string | undefined): string | undefined 
   return input;
 }
 
+export function sanitizeSelectorList(input: string[] | undefined, fieldName: string): string[] | undefined {
+  if (!input || input.length === 0) return undefined;
+
+  const sanitized: string[] = [];
+
+  for (const selector of input) {
+    const trimmed = selector.trim();
+
+    // Reject empty strings
+    if (trimmed.length === 0) {
+      throw new SanitizeError(`${fieldName} contains empty selector`);
+    }
+
+    // Reject selectors exceeding max length
+    if (trimmed.length > MAX_SELECTOR_LENGTH) {
+      throw new SanitizeError(`${fieldName} selector exceeds maximum length`);
+    }
+
+    // Reject dangerous characters
+    if (trimmed.includes('<') || /javascript:/i.test(trimmed)) {
+      throw new SanitizeError(`${fieldName} contains dangerous characters`);
+    }
+
+    sanitized.push(trimmed);
+  }
+
+  return sanitized;
+}
+
 export function sanitizeWaitFor(input: string | undefined): string | undefined {
   if (!input) return undefined;
   if (input.length > MAX_WAIT_FOR_LENGTH) {
