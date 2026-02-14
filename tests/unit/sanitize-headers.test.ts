@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sanitizeHeaders, sanitizeCookies, SanitizeError } from '../../src/security/sanitize.js';
+import { sanitizeHeaders, sanitizeCookies, toPlaywrightCookies, SanitizeError } from '../../src/security/sanitize.js';
 
 describe('sanitizeHeaders', () => {
   it('allows valid custom headers', () => {
@@ -87,5 +87,37 @@ describe('sanitizeCookies', () => {
   it('rejects cookies with excessively long path', () => {
     const longPath = 'x'.repeat(501);
     expect(() => sanitizeCookies([{ name: 'test', value: 'val', path: longPath }])).toThrow(SanitizeError);
+  });
+});
+
+describe('toPlaywrightCookies', () => {
+  it('maps cookies with domain', () => {
+    const result = toPlaywrightCookies(
+      [{ name: 'sid', value: 'abc', domain: '.example.com', path: '/' }],
+    );
+    expect(result).toEqual([{ name: 'sid', value: 'abc', domain: '.example.com', path: '/' }]);
+  });
+
+  it('uses fallbackUrl when domain is not provided', () => {
+    const result = toPlaywrightCookies(
+      [{ name: 'sid', value: 'abc', path: '/' }],
+      'https://example.com/page',
+    );
+    expect(result).toEqual([{ name: 'sid', value: 'abc', path: '/', url: 'https://example.com/page' }]);
+  });
+
+  it('omits url when neither domain nor fallbackUrl provided', () => {
+    const result = toPlaywrightCookies([{ name: 'sid', value: 'abc' }]);
+    expect(result).toEqual([{ name: 'sid', value: 'abc', path: undefined }]);
+    expect(result[0]).not.toHaveProperty('url');
+  });
+
+  it('prefers domain over fallbackUrl', () => {
+    const result = toPlaywrightCookies(
+      [{ name: 'sid', value: 'abc', domain: '.example.com' }],
+      'https://other.com',
+    );
+    expect(result[0].domain).toBe('.example.com');
+    expect(result[0]).not.toHaveProperty('url');
   });
 });

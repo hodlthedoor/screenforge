@@ -187,6 +187,34 @@ export function sanitizeCookies(cookies: Cookie[] | undefined): Cookie[] | undef
   return sanitized;
 }
 
+export interface PlaywrightCookie {
+  name: string;
+  value: string;
+  domain?: string;
+  path?: string;
+  url?: string;
+}
+
+/** Convert sanitized cookies to Playwright-compatible format, resolving domain/url fields. */
+export function toPlaywrightCookies(
+  cookies: Cookie[],
+  fallbackUrl?: string,
+): PlaywrightCookie[] {
+  return cookies.map(cookie => {
+    const pw: PlaywrightCookie = {
+      name: cookie.name,
+      value: cookie.value,
+      path: cookie.path,
+    };
+    if (cookie.domain) {
+      pw.domain = cookie.domain;
+    } else if (fallbackUrl) {
+      pw.url = fallbackUrl;
+    }
+    return pw;
+  });
+}
+
 export class SanitizeError extends Error {
   constructor(message: string) {
     super(message);

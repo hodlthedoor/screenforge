@@ -210,10 +210,10 @@ export async function renderRoutes(
 
     const options = parsed.data;
 
-    // Sanitize custom headers and cookies
+    // Sanitize custom headers and cookies (use sanitized values)
     try {
-      sanitizeHeaders(options.headers);
-      sanitizeCookies(options.cookies);
+      options.headers = sanitizeHeaders(options.headers);
+      options.cookies = sanitizeCookies(options.cookies);
     } catch (e) {
       if (e instanceof SanitizeError) {
         sendError(reply, req, 'VALIDATION_ERROR', { message: e.message });
@@ -367,10 +367,10 @@ export async function renderRoutes(
 
     const options = parsed.data;
 
-    // Sanitize custom headers and cookies
+    // Sanitize custom headers and cookies (use sanitized values)
     try {
-      sanitizeHeaders(options.headers);
-      sanitizeCookies(options.cookies);
+      options.headers = sanitizeHeaders(options.headers);
+      options.cookies = sanitizeCookies(options.cookies);
     } catch (e) {
       if (e instanceof SanitizeError) {
         sendError(reply, req, 'VALIDATION_ERROR', { message: e.message });

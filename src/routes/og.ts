@@ -4,16 +4,9 @@ import { authMiddleware } from '../auth/middleware.js';
 import type { BrowserPool } from '../renderer/browser-pool.js';
 import { RenderCache } from '../cache/index.js';
 import { getConfig } from '../config/index.js';
-import { isPrivateUrl } from '../renderer/schemas.js';
+import { isPrivateUrl, cookieSchema } from '../renderer/schemas.js';
 import { sendError } from '../security/errors.js';
-import { sanitizeHeaders, sanitizeCookies, SanitizeError } from '../security/sanitize.js';
-
-const cookieSchema = z.object({
-  name: z.string(),
-  value: z.string(),
-  domain: z.string().optional(),
-  path: z.string().optional(),
-});
+import { sanitizeHeaders, sanitizeCookies, toPlaywrightCookies, SanitizeError } from '../security/sanitize.js';
 
 const ogRequestSchema = z.object({
   url: z.string().url().optional(),
@@ -92,37 +85,12 @@ async function fetchOgMeta(
   try {
     const page = await context.newPage();
 
-    // Apply custom headers if provided
     if (headers && Object.keys(headers).length > 0) {
       await page.setExtraHTTPHeaders(headers);
     }
 
-    // Apply custom cookies if provided
     if (cookies && cookies.length > 0) {
-      await context.addCookies(cookies.map(cookie => {
-        // Playwright requires either url or domain to be set
-        const cookieConfig: {
-          name: string;
-          value: string;
-          domain?: string;
-          path?: string;
-          url?: string;
-        } = {
-          name: cookie.name,
-          value: cookie.value,
-          path: cookie.path,
-        };
-
-        // If domain is provided, use it; otherwise derive from URL
-        if (cookie.domain) {
-          cookieConfig.domain = cookie.domain;
-        } else {
-          // Playwright requires url or domain; use url when domain not provided
-          cookieConfig.url = url;
-        }
-
-        return cookieConfig;
-      }));
+      await context.addCookies(toPlaywrightCookies(cookies, url));
     }
 
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
@@ -199,10 +167,10 @@ export async function ogRoutes(app: FastifyInstance, pool: BrowserPool, cache: R
     const data = parsed.data;
     const config = getConfig();
 
-    // Sanitize custom headers and cookies
+    // Sanitize custom headers and cookies (use sanitized values)
     try {
-      sanitizeHeaders(data.headers);
-      sanitizeCookies(data.cookies);
+      data.headers = sanitizeHeaders(data.headers);
+      data.cookies = sanitizeCookies(data.cookies);
     } catch (e) {
       if (e instanceof SanitizeError) {
         sendError(reply, req, 'VALIDATION_ERROR', { message: e.message });

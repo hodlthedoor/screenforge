@@ -38,7 +38,7 @@ const contentFilterSchema = z.object({
   ).optional(),
 });
 
-const cookieSchema = z.object({
+export const cookieSchema = z.object({
   name: z.string(),
   value: z.string(),
   domain: z.string().optional(),
