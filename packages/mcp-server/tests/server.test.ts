@@ -214,6 +214,35 @@ describe('startSseServer', () => {
     expect(postRes.statusCode).toBe(404);
   });
 
+  it('returns 409 when a second SSE session is requested while one is active', async () => {
+    const { startSseServer } = await import('../src/server');
+    await startSseServer(
+      { apiKey: 'sk_test', apiUrl: 'http://localhost:3100', inlineDataLimitBytes: 1024 },
+      { port: 3333, host: '127.0.0.1', ssePath: '/sse', messagesPath: '/messages' },
+    );
+
+    const handler = requestHandler;
+    expect(handler).toBeTruthy();
+
+    const firstSseRes = new MockResponse();
+    await handler!(
+      { method: 'GET', url: '/sse', headers: { host: 'localhost:3333' } } as IncomingMessage,
+      firstSseRes as unknown as ServerResponse,
+    );
+    expect(firstSseRes.statusCode).toBe(200);
+    expect(MockMcpServer.connectCalls).toBe(1);
+
+    const secondSseRes = new MockResponse();
+    await handler!(
+      { method: 'GET', url: '/sse', headers: { host: 'localhost:3333' } } as IncomingMessage,
+      secondSseRes as unknown as ServerResponse,
+    );
+
+    expect(secondSseRes.statusCode).toBe(409);
+    expect(secondSseRes.body).toContain('SSE concurrency is not supported');
+    expect(MockMcpServer.connectCalls).toBe(1);
+  });
+
   it('does not crash when an error occurs after response headers were sent', async () => {
     MockSSETransport.throwAfterSend = true;
     const { startSseServer } = await import('../src/server');

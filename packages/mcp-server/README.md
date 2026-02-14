@@ -66,6 +66,11 @@ SSE endpoints:
 - `POST /messages?sessionId=<id>` (use the `sessionId` from the SSE `endpoint` event)
 - `GET /health`
 
+SSE concurrency policy:
+
+- One active SSE session is supported at a time.
+- A second `GET /sse` while a session is active returns `409` with code `SSE_CONCURRENCY_UNSUPPORTED`.
+
 ## Claude Desktop config example
 
 ```json

@@ -106,6 +106,14 @@ export async function startSseServer(config: McpServerConfig, options: SseServer
       }
 
       if (req.method === 'GET' && requestUrl.pathname === ssePath) {
+        if (transports.size > 0) {
+          writeJson(res, 409, {
+            error: 'SSE concurrency is not supported; close the active session first',
+            code: 'SSE_CONCURRENCY_UNSUPPORTED',
+          });
+          return;
+        }
+
         const transport = new SSEServerTransport(messagesPath, res);
         transports.set(transport.sessionId, transport);
         transport.onclose = () => {
