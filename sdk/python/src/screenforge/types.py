@@ -1,7 +1,7 @@
 """ScreenForge SDK type definitions."""
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Literal, Optional, TypedDict
+from typing import Any, Dict, List, Literal, Optional, TypedDict, Union
 
 
 class Viewport(TypedDict, total=False):
@@ -23,14 +23,14 @@ class Cookie(TypedDict, total=False):
 class _ActionRequired(TypedDict):
     """Required fields for Action."""
 
-    type: Literal["click", "scroll", "type", "hover", "wait"]
+    type: Literal["click", "scroll", "type", "hover", "wait", "delay"]
 
 
 class Action(_ActionRequired, total=False):
     """Pre-capture interaction action. `type` is required."""
 
     selector: str
-    value: str
+    value: Union[str, int]
     x: int
     y: int
 

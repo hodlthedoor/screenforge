@@ -11,9 +11,9 @@ export interface Cookie {
 }
 
 export interface Action {
-  type: 'click' | 'scroll' | 'type' | 'hover' | 'wait';
+  type: 'click' | 'scroll' | 'type' | 'hover' | 'wait' | 'delay';
   selector?: string;
-  value?: string;
+  value?: string | number;
   x?: number;
   y?: number;
 }

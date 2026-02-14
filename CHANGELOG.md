@@ -32,7 +32,7 @@ All notable changes to ScreenForge are documented here.
 - **Graceful shutdown** — health degradation and clean shutdown with inflight request tracking
 - **Automated SDK publishing** — GitHub Actions workflows for npm and PyPI SDK releases
 
-### Fixes
+### Fixed
 
 - Hardened CI workflows for SDK publishing and conditional Docker Hub tags
 - Fixed landing page analytics injection, Redis leak, accessibility, and social meta tags
