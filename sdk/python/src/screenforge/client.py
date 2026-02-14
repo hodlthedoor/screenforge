@@ -26,11 +26,16 @@ from .types import (
     BatchJob,
     BatchJobItem,
     BatchRenderResponse,
+    DiffOptions,
     ExtractOptions,
     ExtractResult,
+    GifOptions,
     OgOptions,
     PdfOptions,
     RenderJob,
+    Schedule,
+    ScheduleCreate,
+    ScheduleUpdate,
     ScreenshotOptions,
     UsageStats,
 )
@@ -550,6 +555,142 @@ class ScreenForgeClient(_ClientMixin):
         result = self._request("POST", "/v1/accessibility", body)
         return self._normalize_accessibility_response(result)
 
+    def gif(self, options: GifOptions) -> bytes:
+        """Render an animated GIF from a webpage.
+
+        Args:
+            options: GIF rendering options
+
+        Returns:
+            GIF image data as bytes
+        """
+        return self._request("POST", "/v1/gif", options, expect_binary=True)
+
+    def gif_async(self, options: GifOptions) -> AsyncRenderResponse:
+        """Queue an async GIF render job.
+
+        Args:
+            options: GIF rendering options
+
+        Returns:
+            AsyncRenderResponse with jobId and pollUrl
+        """
+        result = self._request("POST", "/v1/gif?async=true", options)
+        job_id = self._normalize_non_empty_string(result.get("jobId") or result.get("id"))
+        poll_url = self._normalize_non_empty_string(result.get("pollUrl"))
+        if not job_id or not poll_url:
+            raise ScreenForgeError(
+                "Malformed API response: expected jobId/id and pollUrl",
+                code="MALFORMED_RESPONSE",
+                details=result,
+            )
+        return AsyncRenderResponse(jobId=job_id, pollUrl=poll_url)
+
+    def diff(self, options: DiffOptions) -> bytes:
+        """Generate a visual diff between two screenshots.
+
+        Args:
+            options: Diff options with URL pairs or job ID pairs
+
+        Returns:
+            Diff image data as bytes
+        """
+        return self._request("POST", "/v1/diff", options, expect_binary=True)
+
+    def create_schedule(self, options: ScheduleCreate) -> Schedule:
+        """Create a recurring render schedule.
+
+        Args:
+            options: Schedule creation options
+
+        Returns:
+            Created Schedule object
+        """
+        result = self._request("POST", "/v1/schedules", options)
+        if not result.get("schedule") or not self._normalize_non_empty_string(result["schedule"].get("id")):
+            raise ScreenForgeError(
+                "Malformed API response: expected schedule object with id",
+                code="MALFORMED_RESPONSE",
+                details=result,
+            )
+        return self._dict_to_schedule(result["schedule"])
+
+    def list_schedules(self) -> List[Schedule]:
+        """List all schedules for the authenticated API key.
+
+        Returns:
+            List of Schedule objects
+        """
+        result = self._request("GET", "/v1/schedules")
+        if not isinstance(result.get("schedules"), list):
+            raise ScreenForgeError(
+                "Malformed API response: expected schedules array",
+                code="MALFORMED_RESPONSE",
+                details=result,
+            )
+        return [self._dict_to_schedule(s) for s in result["schedules"]]
+
+    def get_schedule(self, schedule_id: str) -> Schedule:
+        """Get a specific schedule by ID.
+
+        Args:
+            schedule_id: Schedule ID
+
+        Returns:
+            Schedule object
+        """
+        result = self._request("GET", f"/v1/schedules/{quote(schedule_id, safe='')}")
+        if not result.get("schedule") or not self._normalize_non_empty_string(result["schedule"].get("id")):
+            raise ScreenForgeError(
+                "Malformed API response: expected schedule object with id",
+                code="MALFORMED_RESPONSE",
+                details=result,
+            )
+        return self._dict_to_schedule(result["schedule"])
+
+    def update_schedule(self, schedule_id: str, options: ScheduleUpdate) -> Schedule:
+        """Update a schedule.
+
+        Args:
+            schedule_id: Schedule ID
+            options: Fields to update
+
+        Returns:
+            Updated Schedule object
+        """
+        result = self._request("PATCH", f"/v1/schedules/{quote(schedule_id, safe='')}", options)
+        if not result.get("schedule") or not self._normalize_non_empty_string(result["schedule"].get("id")):
+            raise ScreenForgeError(
+                "Malformed API response: expected schedule object with id",
+                code="MALFORMED_RESPONSE",
+                details=result,
+            )
+        return self._dict_to_schedule(result["schedule"])
+
+    def delete_schedule(self, schedule_id: str) -> None:
+        """Delete a schedule.
+
+        Args:
+            schedule_id: Schedule ID
+        """
+        self._request("DELETE", f"/v1/schedules/{quote(schedule_id, safe='')}")
+
+    @staticmethod
+    def _dict_to_schedule(data: Dict[str, Any]) -> Schedule:
+        """Convert API dict to Schedule dataclass."""
+        return Schedule(
+            id=data["id"],
+            name=data["name"],
+            cron_expression=data["cron_expression"],
+            render_type=data["render_type"],
+            render_config=data["render_config"],
+            enabled=data["enabled"],
+            created_at=data["created_at"],
+            updated_at=data["updated_at"],
+            next_run_at=data.get("next_run_at"),
+            last_run_at=data.get("last_run_at"),
+        )
+
     def _request(
         self,
         method: str,
@@ -812,6 +953,126 @@ class AsyncScreenForgeClient(_ClientMixin):
         body = self._build_accessibility_body(url, standard, screenshot_options, include_screenshot)
         result = await self._request("POST", "/v1/accessibility", body)
         return self._normalize_accessibility_response(result)
+
+    async def gif(self, options: GifOptions) -> bytes:
+        """Render an animated GIF from a webpage (async).
+
+        Args:
+            options: GIF rendering options
+
+        Returns:
+            GIF image data as bytes
+        """
+        return await self._request("POST", "/v1/gif", options, expect_binary=True)
+
+    async def gif_async(self, options: GifOptions) -> AsyncRenderResponse:
+        """Queue an async GIF render job.
+
+        Args:
+            options: GIF rendering options
+
+        Returns:
+            AsyncRenderResponse with jobId and pollUrl
+        """
+        result = await self._request("POST", "/v1/gif?async=true", options)
+        job_id = self._normalize_non_empty_string(result.get("jobId") or result.get("id"))
+        poll_url = self._normalize_non_empty_string(result.get("pollUrl"))
+        if not job_id or not poll_url:
+            raise ScreenForgeError(
+                "Malformed API response: expected jobId/id and pollUrl",
+                code="MALFORMED_RESPONSE",
+                details=result,
+            )
+        return AsyncRenderResponse(jobId=job_id, pollUrl=poll_url)
+
+    async def diff(self, options: DiffOptions) -> bytes:
+        """Generate a visual diff between two screenshots (async).
+
+        Args:
+            options: Diff options with URL pairs or job ID pairs
+
+        Returns:
+            Diff image data as bytes
+        """
+        return await self._request("POST", "/v1/diff", options, expect_binary=True)
+
+    async def create_schedule(self, options: ScheduleCreate) -> Schedule:
+        """Create a recurring render schedule (async).
+
+        Args:
+            options: Schedule creation options
+
+        Returns:
+            Created Schedule object
+        """
+        result = await self._request("POST", "/v1/schedules", options)
+        if not result.get("schedule") or not self._normalize_non_empty_string(result["schedule"].get("id")):
+            raise ScreenForgeError(
+                "Malformed API response: expected schedule object with id",
+                code="MALFORMED_RESPONSE",
+                details=result,
+            )
+        return self._dict_to_schedule(result["schedule"])
+
+    async def list_schedules(self) -> List[Schedule]:
+        """List all schedules for the authenticated API key (async).
+
+        Returns:
+            List of Schedule objects
+        """
+        result = await self._request("GET", "/v1/schedules")
+        if not isinstance(result.get("schedules"), list):
+            raise ScreenForgeError(
+                "Malformed API response: expected schedules array",
+                code="MALFORMED_RESPONSE",
+                details=result,
+            )
+        return [self._dict_to_schedule(s) for s in result["schedules"]]
+
+    async def get_schedule(self, schedule_id: str) -> Schedule:
+        """Get a specific schedule by ID (async).
+
+        Args:
+            schedule_id: Schedule ID
+
+        Returns:
+            Schedule object
+        """
+        result = await self._request("GET", f"/v1/schedules/{quote(schedule_id, safe='')}")
+        if not result.get("schedule") or not self._normalize_non_empty_string(result["schedule"].get("id")):
+            raise ScreenForgeError(
+                "Malformed API response: expected schedule object with id",
+                code="MALFORMED_RESPONSE",
+                details=result,
+            )
+        return self._dict_to_schedule(result["schedule"])
+
+    async def update_schedule(self, schedule_id: str, options: ScheduleUpdate) -> Schedule:
+        """Update a schedule (async).
+
+        Args:
+            schedule_id: Schedule ID
+            options: Fields to update
+
+        Returns:
+            Updated Schedule object
+        """
+        result = await self._request("PATCH", f"/v1/schedules/{quote(schedule_id, safe='')}", options)
+        if not result.get("schedule") or not self._normalize_non_empty_string(result["schedule"].get("id")):
+            raise ScreenForgeError(
+                "Malformed API response: expected schedule object with id",
+                code="MALFORMED_RESPONSE",
+                details=result,
+            )
+        return self._dict_to_schedule(result["schedule"])
+
+    async def delete_schedule(self, schedule_id: str) -> None:
+        """Delete a schedule (async).
+
+        Args:
+            schedule_id: Schedule ID
+        """
+        await self._request("DELETE", f"/v1/schedules/{quote(schedule_id, safe='')}")
 
     async def _request(
         self,

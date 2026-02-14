@@ -565,6 +565,162 @@ if (report.screenshotPath) {
 
 ---
 
+### `gif(options)` — `Promise<Buffer>`
+
+Render an animated GIF by scrolling through a webpage or playing a sequence of interactions.
+
+```ts
+const gif = await client.gif({
+  url: 'https://example.com',
+  duration: 5000,  // 5 seconds
+  fps: 30,
+  scrollDistance: 1000,
+});
+writeFileSync('animation.gif', gif);
+```
+
+**Options (`GifOptions`):**
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `url` | `string` | URL to render |
+| `duration` | `number` | Animation duration in ms (default: 5000) |
+| `fps` | `number` | Frames per second (default: 30) |
+| `scrollDistance` | `number` | Vertical scroll distance in pixels |
+| `viewport` | `Viewport` | Viewport dimensions |
+| `waitFor` | `string` | CSS selector to wait for before starting |
+| `headers` | `Record<string, string>` | Custom HTTP headers |
+| `cookies` | `Cookie[]` | Cookies to set |
+| `actions` | `Action[]` | Pre-capture interactions |
+
+### `gifAsync(options)` — `Promise<AsyncRenderResponse>`
+
+Queue a GIF render job asynchronously.
+
+```ts
+const { jobId, pollUrl } = await client.gifAsync({
+  url: 'https://example.com',
+  duration: 10000,
+});
+
+const result = await client.pollJob(jobId);
+```
+
+---
+
+### `diff(options)` — `Promise<Buffer>`
+
+Generate a visual diff image comparing two screenshots.
+
+```ts
+// Compare two URLs
+const diffImage = await client.diff({
+  url_a: 'https://example.com/old',
+  url_b: 'https://example.com/new',
+  threshold: 0.1,  // 10% tolerance
+});
+writeFileSync('diff.png', diffImage);
+
+// Compare two existing render jobs
+const diffFromJobs = await client.diff({
+  job_id_a: 'job_123',
+  job_id_b: 'job_456',
+});
+```
+
+**Options (`DiffOptions`):**
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `url_a` | `string` | First URL to compare |
+| `url_b` | `string` | Second URL to compare |
+| `job_id_a` | `string` | First job ID to compare (alternative to `url_a`) |
+| `job_id_b` | `string` | Second job ID to compare (alternative to `url_b`) |
+| `threshold` | `number` | Diff sensitivity (0-1, default: 0.1) |
+| `screenshot_options` | `DiffScreenshotOptions` | Screenshot capture settings |
+
+**Response:** Binary PNG image with differences highlighted. Metadata headers `x-diff-mismatch-count` and `x-diff-threshold` provide additional context.
+
+---
+
+### `createSchedule(options)` — `Promise<Schedule>`
+
+Create a recurring render schedule using cron expressions.
+
+```ts
+const schedule = await client.createSchedule({
+  name: 'Daily homepage screenshot',
+  cron_expression: '0 9 * * *',  // Every day at 9 AM
+  render_type: 'screenshot',
+  render_config: {
+    url: 'https://example.com',
+    fullPage: true,
+  },
+  enabled: true,
+});
+
+console.log(`Created schedule: ${schedule.id}`);
+console.log(`Next run: ${schedule.next_run_at}`);
+```
+
+### `listSchedules()` — `Promise<Schedule[]>`
+
+List all schedules for the authenticated API key.
+
+```ts
+const schedules = await client.listSchedules();
+for (const s of schedules) {
+  console.log(`${s.id}: ${s.name} (${s.cron_expression})`);
+}
+```
+
+### `getSchedule(id)` — `Promise<Schedule>`
+
+Get a specific schedule by ID.
+
+```ts
+const schedule = await client.getSchedule('sched_123');
+console.log(schedule.name);
+```
+
+### `updateSchedule(id, options)` — `Promise<Schedule>`
+
+Update an existing schedule.
+
+```ts
+const updated = await client.updateSchedule('sched_123', {
+  name: 'Updated name',
+  enabled: false,
+});
+```
+
+### `deleteSchedule(id)` — `Promise<void>`
+
+Delete a schedule.
+
+```ts
+await client.deleteSchedule('sched_123');
+```
+
+**Schedule object shape:**
+
+```ts
+{
+  id: string;
+  name: string;
+  cron_expression: string;        // Unix cron format
+  render_type: 'screenshot' | 'pdf' | 'og';
+  render_config: Record<string, unknown>;  // Render options
+  enabled: boolean;
+  next_run_at: string | null;     // ISO 8601 timestamp
+  last_run_at: string | null;     // ISO 8601 timestamp
+  created_at: string;             // ISO 8601 timestamp
+  updated_at: string;             // ISO 8601 timestamp
+}
+```
+
+---
+
 ### `listWebhookDeliveries(opts?)` — `Promise<WebhookDelivery[]>`
 
 Lists webhook delivery attempts for your API key, with pagination.
@@ -703,6 +859,13 @@ import type {
   AccessibilityScreenshotOptions,
   AccessibilityViolation,
   AccessibilityViolationNode,
+  GifOptions,
+  DiffOptions,
+  DiffScreenshotOptions,
+  ScheduleRenderType,
+  CreateScheduleOptions,
+  UpdateScheduleOptions,
+  Schedule,
 } from '@screenforge/sdk';
 ```
 
@@ -721,6 +884,13 @@ import type {
 | `AsyncRenderResponse` | Return type of `screenshotAsync()` and `pdfAsync()` |
 | `BatchRenderResponse` | Return type of `batchRender()` |
 | `ExtractOptions` | Options for `extract()` — CSS selectors, metadata, and screenshot |
+| `GifOptions` | Options for `gif()` and `gifAsync()` |
+| `DiffOptions` | Options for `diff()` — URL or job ID pairs for comparison |
+| `DiffScreenshotOptions` | Screenshot options specific to `diff()` |
+| `ScheduleRenderType` | Schedule render type: `'screenshot' | 'pdf' | 'og'` |
+| `CreateScheduleOptions` | Options for `createSchedule()` |
+| `UpdateScheduleOptions` | Options for `updateSchedule()` |
+| `Schedule` | Schedule object with cron and render config |
 | `ExtractResult` | Return type of `extract()` — extracted text, metadata, links |
 | `ExtractScreenshotOptions` | Screenshot options specific to `extract()` |
 | `AccessibilityOptions` | Options for `accessibility()` — standard, screenshot |

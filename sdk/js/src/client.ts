@@ -6,13 +6,18 @@ import type {
   BatchItem,
   BatchJob,
   BatchRenderResponse,
+  CreateScheduleOptions,
+  DiffOptions,
   ExtractOptions,
   ExtractResult,
+  GifOptions,
   ListWebhookDeliveriesOptions,
   OgOptions,
   PdfOptions,
   RenderJob,
+  Schedule,
   ScreenshotOptions,
+  UpdateScheduleOptions,
   UsageStats,
   WebhookDelivery,
 } from './types';
@@ -271,6 +276,85 @@ export class ScreenForge {
     return result;
   }
 
+  async gif(options: GifOptions): Promise<Buffer> {
+    return this.request<Buffer>('POST', '/v1/gif', options, { expectBinary: true });
+  }
+
+  async gifAsync(options: GifOptions): Promise<AsyncRenderResponse> {
+    const result = await this.request<{ id?: string; jobId?: string; pollUrl?: string }>('POST', '/v1/gif?async=true', options);
+
+    const jobId = normalizeNonEmptyString(result.jobId ?? result.id);
+    const pollUrl = normalizeNonEmptyString(result.pollUrl);
+    if (!jobId || !pollUrl) {
+      throw new ScreenForgeError('Malformed API response: expected jobId/id and pollUrl', {
+        code: 'MALFORMED_RESPONSE',
+        details: result,
+      });
+    }
+
+    return { jobId, pollUrl };
+  }
+
+  async diff(options: DiffOptions): Promise<Buffer> {
+    return this.request<Buffer>('POST', '/v1/diff', options, { expectBinary: true });
+  }
+
+  async createSchedule(options: CreateScheduleOptions): Promise<Schedule> {
+    const result = await this.request<{ schedule?: Schedule }>('POST', '/v1/schedules', options);
+
+    if (!result.schedule || !normalizeNonEmptyString(result.schedule.id)) {
+      throw new ScreenForgeError('Malformed API response: expected schedule object with id', {
+        code: 'MALFORMED_RESPONSE',
+        details: result,
+      });
+    }
+
+    return result.schedule;
+  }
+
+  async listSchedules(): Promise<Schedule[]> {
+    const result = await this.request<{ schedules?: Schedule[] }>('GET', '/v1/schedules');
+
+    if (!Array.isArray(result.schedules)) {
+      throw new ScreenForgeError('Malformed API response: expected schedules array', {
+        code: 'MALFORMED_RESPONSE',
+        details: result,
+      });
+    }
+
+    return result.schedules;
+  }
+
+  async getSchedule(id: string): Promise<Schedule> {
+    const result = await this.request<{ schedule?: Schedule }>('GET', `/v1/schedules/${encodeURIComponent(id)}`);
+
+    if (!result.schedule || !normalizeNonEmptyString(result.schedule.id)) {
+      throw new ScreenForgeError('Malformed API response: expected schedule object with id', {
+        code: 'MALFORMED_RESPONSE',
+        details: result,
+      });
+    }
+
+    return result.schedule;
+  }
+
+  async updateSchedule(id: string, options: UpdateScheduleOptions): Promise<Schedule> {
+    const result = await this.request<{ schedule?: Schedule }>('PATCH', `/v1/schedules/${encodeURIComponent(id)}`, options);
+
+    if (!result.schedule || !normalizeNonEmptyString(result.schedule.id)) {
+      throw new ScreenForgeError('Malformed API response: expected schedule object with id', {
+        code: 'MALFORMED_RESPONSE',
+        details: result,
+      });
+    }
+
+    return result.schedule;
+  }
+
+  async deleteSchedule(id: string): Promise<void> {
+    await this.request('DELETE', `/v1/schedules/${encodeURIComponent(id)}`);
+  }
+
   private async request<T>(method: string, path: string, body?: unknown, options: RequestOptions = {}): Promise<T> {
     const url = `${this.baseUrl}${path}`;
 
@@ -297,7 +381,11 @@ export class ScreenForge {
             const arrayBuffer = await response.arrayBuffer();
             return Buffer.from(arrayBuffer) as T;
           }
-          return (await response.json()) as T;
+          const text = await response.text();
+          if (!text || text.trim().length === 0) {
+            return undefined as T;
+          }
+          return JSON.parse(text) as T;
         }
 
         const parsed = await this.parseErrorResponse(response);

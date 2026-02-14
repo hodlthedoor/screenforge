@@ -509,3 +509,228 @@ def test_accessibility_malformed_response():
         client.accessibility("https://example.com")
 
     assert exc_info.value.code == "MALFORMED_RESPONSE"
+
+
+# GIF tests
+
+def test_gif():
+    """Test gif() rendering."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v1/gif"
+        body = json.loads(request.content)
+        assert body["url"] == "https://example.com"
+        assert body["duration"] == 5000
+        assert body["fps"] == 30
+        return httpx.Response(200, content=b"\x47\x49\x46", headers={"content-type": "image/gif"})
+
+    transport = httpx.MockTransport(handler)
+    client = ScreenForgeClient(api_key="test-key", transport=transport)
+
+    result = client.gif({"url": "https://example.com", "duration": 5000, "fps": 30})
+
+    assert result == b"\x47\x49\x46"
+
+
+def test_gif_async():
+    """Test gif_async() returns job ID and poll URL."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v1/gif"
+        assert "async=true" in str(request.url)
+        return httpx.Response(200, json={"jobId": "job_gif_123", "pollUrl": "/v1/render/job_gif_123"})
+
+    transport = httpx.MockTransport(handler)
+    client = ScreenForgeClient(api_key="test-key", transport=transport)
+
+    result = client.gif_async({"url": "https://example.com"})
+
+    assert result.jobId == "job_gif_123"
+    assert result.pollUrl == "/v1/render/job_gif_123"
+
+
+def test_gif_async_normalizes_id():
+    """Test gif_async() normalizes id to jobId."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"id": "job_gif_456", "pollUrl": "/v1/render/job_gif_456"})
+
+    transport = httpx.MockTransport(handler)
+    client = ScreenForgeClient(api_key="test-key", transport=transport)
+
+    result = client.gif_async({"url": "https://example.com"})
+
+    assert result.jobId == "job_gif_456"
+
+
+# Diff tests
+
+def test_diff():
+    """Test diff() with URL comparison."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v1/diff"
+        body = json.loads(request.content)
+        assert body["url_a"] == "https://example.com/v1"
+        assert body["url_b"] == "https://example.com/v2"
+        assert body["threshold"] == 0.1
+        return httpx.Response(200, content=b"\x89PNG", headers={"content-type": "image/png"})
+
+    transport = httpx.MockTransport(handler)
+    client = ScreenForgeClient(api_key="test-key", transport=transport)
+
+    result = client.diff({"url_a": "https://example.com/v1", "url_b": "https://example.com/v2", "threshold": 0.1})
+
+    assert result == b"\x89PNG"
+
+
+# Schedule tests
+
+def test_create_schedule():
+    """Test create_schedule()."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v1/schedules"
+        body = json.loads(request.content)
+        assert body["name"] == "Daily screenshot"
+        assert body["cron_expression"] == "0 9 * * *"
+        return httpx.Response(201, json={
+            "schedule": {
+                "id": "sched_123",
+                "name": "Daily screenshot",
+                "cron_expression": "0 9 * * *",
+                "render_type": "screenshot",
+                "render_config": {"url": "https://example.com"},
+                "enabled": True,
+                "next_run_at": "2026-02-15T09:00:00Z",
+                "last_run_at": None,
+                "created_at": "2026-02-14T12:00:00Z",
+                "updated_at": "2026-02-14T12:00:00Z",
+            }
+        })
+
+    transport = httpx.MockTransport(handler)
+    client = ScreenForgeClient(api_key="test-key", transport=transport)
+
+    result = client.create_schedule({
+        "name": "Daily screenshot",
+        "cron_expression": "0 9 * * *",
+        "render_type": "screenshot",
+        "render_config": {"url": "https://example.com"},
+    })
+
+    assert result.id == "sched_123"
+    assert result.name == "Daily screenshot"
+    assert result.cron_expression == "0 9 * * *"
+
+
+def test_list_schedules():
+    """Test list_schedules()."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v1/schedules"
+        return httpx.Response(200, json={
+            "schedules": [
+                {
+                    "id": "sched_1",
+                    "name": "Schedule 1",
+                    "cron_expression": "0 9 * * *",
+                    "render_type": "screenshot",
+                    "render_config": {},
+                    "enabled": True,
+                    "next_run_at": "2026-02-15T09:00:00Z",
+                    "last_run_at": None,
+                    "created_at": "2026-02-14T12:00:00Z",
+                    "updated_at": "2026-02-14T12:00:00Z",
+                },
+                {
+                    "id": "sched_2",
+                    "name": "Schedule 2",
+                    "cron_expression": "0 18 * * *",
+                    "render_type": "pdf",
+                    "render_config": {},
+                    "enabled": False,
+                    "next_run_at": None,
+                    "last_run_at": "2026-02-14T18:00:00Z",
+                    "created_at": "2026-02-13T12:00:00Z",
+                    "updated_at": "2026-02-14T12:00:00Z",
+                },
+            ]
+        })
+
+    transport = httpx.MockTransport(handler)
+    client = ScreenForgeClient(api_key="test-key", transport=transport)
+
+    result = client.list_schedules()
+
+    assert len(result) == 2
+    assert result[0].id == "sched_1"
+    assert result[1].id == "sched_2"
+
+
+def test_get_schedule():
+    """Test get_schedule()."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v1/schedules/sched_123"
+        return httpx.Response(200, json={
+            "schedule": {
+                "id": "sched_123",
+                "name": "Test schedule",
+                "cron_expression": "0 9 * * *",
+                "render_type": "screenshot",
+                "render_config": {},
+                "enabled": True,
+                "next_run_at": "2026-02-15T09:00:00Z",
+                "last_run_at": None,
+                "created_at": "2026-02-14T12:00:00Z",
+                "updated_at": "2026-02-14T12:00:00Z",
+            }
+        })
+
+    transport = httpx.MockTransport(handler)
+    client = ScreenForgeClient(api_key="test-key", transport=transport)
+
+    result = client.get_schedule("sched_123")
+
+    assert result.id == "sched_123"
+    assert result.name == "Test schedule"
+
+
+def test_update_schedule():
+    """Test update_schedule()."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v1/schedules/sched_123"
+        assert request.method == "PATCH"
+        body = json.loads(request.content)
+        assert body["name"] == "Updated name"
+        assert body["enabled"] is False
+        return httpx.Response(200, json={
+            "schedule": {
+                "id": "sched_123",
+                "name": "Updated name",
+                "cron_expression": "0 10 * * *",
+                "render_type": "screenshot",
+                "render_config": {},
+                "enabled": False,
+                "next_run_at": None,
+                "last_run_at": None,
+                "created_at": "2026-02-14T12:00:00Z",
+                "updated_at": "2026-02-14T13:00:00Z",
+            }
+        })
+
+    transport = httpx.MockTransport(handler)
+    client = ScreenForgeClient(api_key="test-key", transport=transport)
+
+    result = client.update_schedule("sched_123", {"name": "Updated name", "enabled": False})
+
+    assert result.id == "sched_123"
+    assert result.name == "Updated name"
+    assert result.enabled is False
+
+
+def test_delete_schedule():
+    """Test delete_schedule()."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v1/schedules/sched_123"
+        assert request.method == "DELETE"
+        return httpx.Response(200, json={})
+
+    transport = httpx.MockTransport(handler)
+    client = ScreenForgeClient(api_key="test-key", transport=transport)
+
+    client.delete_schedule("sched_123")  # Should not raise

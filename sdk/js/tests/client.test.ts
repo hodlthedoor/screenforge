@@ -595,4 +595,325 @@ describe('ScreenForge client', () => {
       code: 'MALFORMED_RESPONSE',
     });
   });
+
+  // GIF tests
+
+  it('gif() renders animated GIF', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(new Uint8Array([0x47, 0x49, 0x46]), {
+        status: 200,
+        headers: { 'content-type': 'image/gif' },
+      }),
+    );
+
+    const result = await client.gif({ url: 'https://example.com', duration: 5000, fps: 30 });
+
+    expect(Buffer.isBuffer(result)).toBe(true);
+    expect(result[0]).toBe(0x47);
+    expect(result[1]).toBe(0x49);
+    expect(result[2]).toBe(0x46);
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`${baseUrl}/v1/gif`);
+    const body = JSON.parse(String(init.body));
+    expect(body.url).toBe('https://example.com');
+    expect(body.duration).toBe(5000);
+    expect(body.fps).toBe(30);
+  });
+
+  it('gifAsync() returns job ID and poll URL', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      jsonResponse({
+        jobId: 'job_gif_123',
+        pollUrl: '/v1/render/job_gif_123',
+      }),
+    );
+
+    const result = await client.gifAsync({ url: 'https://example.com' });
+
+    expect(result.jobId).toBe('job_gif_123');
+    expect(result.pollUrl).toBe('/v1/render/job_gif_123');
+
+    const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`${baseUrl}/v1/gif?async=true`);
+  });
+
+  it('gifAsync() normalizes id to jobId', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      jsonResponse({
+        id: 'job_gif_456',
+        pollUrl: '/v1/render/job_gif_456',
+      }),
+    );
+
+    const result = await client.gifAsync({ url: 'https://example.com' });
+
+    expect(result.jobId).toBe('job_gif_456');
+    expect(result.pollUrl).toBe('/v1/render/job_gif_456');
+  });
+
+  it('gifAsync() throws on malformed response', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      jsonResponse({
+        jobId: '',
+        pollUrl: '',
+      }),
+    );
+
+    await expect(client.gifAsync({ url: 'https://example.com' })).rejects.toMatchObject({
+      name: 'ScreenForgeError',
+      code: 'MALFORMED_RESPONSE',
+    });
+  });
+
+  // Diff tests
+
+  it('diff() compares two URLs', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(new Uint8Array([0x89, 0x50, 0x4e, 0x47]), {
+        status: 200,
+        headers: {
+          'content-type': 'image/png',
+          'x-diff-mismatch-count': '42',
+          'x-diff-threshold': '0.1',
+        },
+      }),
+    );
+
+    const result = await client.diff({
+      url_a: 'https://example.com/v1',
+      url_b: 'https://example.com/v2',
+      threshold: 0.1,
+    });
+
+    expect(Buffer.isBuffer(result)).toBe(true);
+    expect(result[0]).toBe(0x89);
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(String(init.body));
+    expect(body.url_a).toBe('https://example.com/v1');
+    expect(body.url_b).toBe('https://example.com/v2');
+    expect(body.threshold).toBe(0.1);
+  });
+
+  it('diff() compares two job IDs', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(new Uint8Array([0x89, 0x50, 0x4e, 0x47]), {
+        status: 200,
+        headers: { 'content-type': 'image/png' },
+      }),
+    );
+
+    await client.diff({
+      job_id_a: 'job_123',
+      job_id_b: 'job_456',
+    });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(String(init.body));
+    expect(body.job_id_a).toBe('job_123');
+    expect(body.job_id_b).toBe('job_456');
+  });
+
+  // Schedule tests
+
+  it('createSchedule() creates a new schedule', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      jsonResponse({
+        schedule: {
+          id: 'sched_123',
+          name: 'Daily screenshot',
+          cron_expression: '0 9 * * *',
+          render_type: 'screenshot',
+          render_config: { url: 'https://example.com' },
+          enabled: true,
+          next_run_at: '2026-02-15T09:00:00Z',
+          last_run_at: null,
+          created_at: '2026-02-14T12:00:00Z',
+          updated_at: '2026-02-14T12:00:00Z',
+        },
+      }, 201),
+    );
+
+    const result = await client.createSchedule({
+      name: 'Daily screenshot',
+      cron_expression: '0 9 * * *',
+      render_type: 'screenshot',
+      render_config: { url: 'https://example.com' },
+    });
+
+    expect(result.id).toBe('sched_123');
+    expect(result.name).toBe('Daily screenshot');
+    expect(result.cron_expression).toBe('0 9 * * *');
+    expect(result.render_type).toBe('screenshot');
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(String(init.body));
+    expect(body.name).toBe('Daily screenshot');
+    expect(body.cron_expression).toBe('0 9 * * *');
+  });
+
+  it('createSchedule() throws on malformed response', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      jsonResponse({ schedule: { id: '' } }),
+    );
+
+    await expect(client.createSchedule({
+      name: 'Test',
+      cron_expression: '* * * * *',
+      render_type: 'screenshot',
+      render_config: { url: 'https://example.com' },
+    })).rejects.toMatchObject({
+      name: 'ScreenForgeError',
+      code: 'MALFORMED_RESPONSE',
+    });
+  });
+
+  it('listSchedules() returns array of schedules', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      jsonResponse({
+        schedules: [
+          {
+            id: 'sched_1',
+            name: 'Schedule 1',
+            cron_expression: '0 9 * * *',
+            render_type: 'screenshot',
+            render_config: {},
+            enabled: true,
+            next_run_at: '2026-02-15T09:00:00Z',
+            last_run_at: null,
+            created_at: '2026-02-14T12:00:00Z',
+            updated_at: '2026-02-14T12:00:00Z',
+          },
+          {
+            id: 'sched_2',
+            name: 'Schedule 2',
+            cron_expression: '0 18 * * *',
+            render_type: 'pdf',
+            render_config: {},
+            enabled: false,
+            next_run_at: null,
+            last_run_at: '2026-02-14T18:00:00Z',
+            created_at: '2026-02-13T12:00:00Z',
+            updated_at: '2026-02-14T12:00:00Z',
+          },
+        ],
+      }),
+    );
+
+    const result = await client.listSchedules();
+
+    expect(result).toHaveLength(2);
+    expect(result[0].id).toBe('sched_1');
+    expect(result[1].id).toBe('sched_2');
+  });
+
+  it('listSchedules() throws on malformed response', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      jsonResponse({ schedules: 'not-an-array' }),
+    );
+
+    await expect(client.listSchedules()).rejects.toMatchObject({
+      name: 'ScreenForgeError',
+      code: 'MALFORMED_RESPONSE',
+    });
+  });
+
+  it('getSchedule() returns single schedule', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      jsonResponse({
+        schedule: {
+          id: 'sched_123',
+          name: 'Test schedule',
+          cron_expression: '0 9 * * *',
+          render_type: 'screenshot',
+          render_config: {},
+          enabled: true,
+          next_run_at: '2026-02-15T09:00:00Z',
+          last_run_at: null,
+          created_at: '2026-02-14T12:00:00Z',
+          updated_at: '2026-02-14T12:00:00Z',
+        },
+      }),
+    );
+
+    const result = await client.getSchedule('sched_123');
+
+    expect(result.id).toBe('sched_123');
+    expect(result.name).toBe('Test schedule');
+
+    const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`${baseUrl}/v1/schedules/sched_123`);
+  });
+
+  it('getSchedule() URL-encodes schedule ID', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      jsonResponse({
+        schedule: {
+          id: 'sched/123',
+          name: 'Test',
+          cron_expression: '* * * * *',
+          render_type: 'screenshot',
+          render_config: {},
+          enabled: true,
+          next_run_at: null,
+          last_run_at: null,
+          created_at: '2026-02-14T12:00:00Z',
+          updated_at: '2026-02-14T12:00:00Z',
+        },
+      }),
+    );
+
+    await client.getSchedule('sched/123');
+
+    const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`${baseUrl}/v1/schedules/sched%2F123`);
+  });
+
+  it('updateSchedule() updates a schedule', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      jsonResponse({
+        schedule: {
+          id: 'sched_123',
+          name: 'Updated name',
+          cron_expression: '0 10 * * *',
+          render_type: 'screenshot',
+          render_config: {},
+          enabled: false,
+          next_run_at: null,
+          last_run_at: null,
+          created_at: '2026-02-14T12:00:00Z',
+          updated_at: '2026-02-14T13:00:00Z',
+        },
+      }),
+    );
+
+    const result = await client.updateSchedule('sched_123', {
+      name: 'Updated name',
+      enabled: false,
+    });
+
+    expect(result.id).toBe('sched_123');
+    expect(result.name).toBe('Updated name');
+    expect(result.enabled).toBe(false);
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`${baseUrl}/v1/schedules/sched_123`);
+    expect(init.method).toBe('PATCH');
+    const body = JSON.parse(String(init.body));
+    expect(body.name).toBe('Updated name');
+    expect(body.enabled).toBe(false);
+  });
+
+  it('deleteSchedule() deletes a schedule', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(null, { status: 200 }),
+    );
+
+    await client.deleteSchedule('sched_123');
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`${baseUrl}/v1/schedules/sched_123`);
+    expect(init.method).toBe('DELETE');
+  });
 });

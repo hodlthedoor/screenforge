@@ -27,9 +27,16 @@ from .types import (
     AccessibilityScreenshotOptions,
     AccessibilityViolation,
     AccessibilityViolationNode,
+    GifOptions,
+    DiffOptions,
+    DiffScreenshotOptions,
+    ScheduleRenderType,
+    ScheduleCreate,
+    ScheduleUpdate,
+    Schedule,
 )
 
-__version__ = "1.4.0"
+__version__ = "1.5.0"
 
 __all__ = [
     # Clients
@@ -60,4 +67,11 @@ __all__ = [
     "AccessibilityScreenshotOptions",
     "AccessibilityViolation",
     "AccessibilityViolationNode",
+    "GifOptions",
+    "DiffOptions",
+    "DiffScreenshotOptions",
+    "ScheduleRenderType",
+    "ScheduleCreate",
+    "ScheduleUpdate",
+    "Schedule",
 ]

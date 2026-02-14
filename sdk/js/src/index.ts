@@ -32,4 +32,11 @@ export type {
   AccessibilityScreenshotOptions,
   AccessibilityViolation,
   AccessibilityViolationNode,
+  GifOptions,
+  DiffOptions,
+  DiffScreenshotOptions,
+  ScheduleRenderType,
+  CreateScheduleOptions,
+  UpdateScheduleOptions,
+  Schedule,
 } from './types';

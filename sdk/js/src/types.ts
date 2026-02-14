@@ -269,3 +269,71 @@ export interface AccessibilityReport {
   durationMs: number;
   timestamp: string;
 }
+
+// GIF API types
+
+export interface GifOptions {
+  url?: string;
+  html?: string;
+  viewport?: Viewport;
+  duration?: number;
+  fps?: number;
+  scrollDistance?: number;
+  waitFor?: string;
+  callback_url?: string;
+  headers?: Record<string, string>;
+  cookies?: Cookie[];
+  actions?: Action[];
+}
+
+// Diff API types
+
+export interface DiffScreenshotOptions {
+  viewport_width?: number;
+  viewport_height?: number;
+  format?: 'png' | 'jpeg' | 'webp';
+  full_page?: boolean;
+  delay_ms?: number;
+}
+
+export interface DiffOptions {
+  url_a?: string;
+  url_b?: string;
+  job_id_a?: string;
+  job_id_b?: string;
+  threshold?: number;
+  screenshot_options?: DiffScreenshotOptions;
+}
+
+// Schedule API types
+
+export type ScheduleRenderType = 'screenshot' | 'pdf' | 'og';
+
+export interface CreateScheduleOptions {
+  name: string;
+  cron_expression: string;
+  render_type: ScheduleRenderType;
+  render_config: Record<string, unknown>;
+  enabled?: boolean;
+}
+
+export interface UpdateScheduleOptions {
+  name?: string;
+  cron_expression?: string;
+  render_type?: ScheduleRenderType;
+  render_config?: Record<string, unknown>;
+  enabled?: boolean;
+}
+
+export interface Schedule {
+  id: string;
+  name: string;
+  cron_expression: string;
+  render_type: ScheduleRenderType;
+  render_config: Record<string, unknown>;
+  enabled: boolean;
+  next_run_at: string | null;
+  last_run_at: string | null;
+  created_at: string;
+  updated_at: string;
+}

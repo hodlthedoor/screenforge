@@ -292,3 +292,92 @@ class AccessibilityReport:
     timestamp: str
     screenshotPath: Optional[str] = None
     annotatedScreenshotPath: Optional[str] = None
+
+
+# GIF API types
+
+
+class GifOptions(TypedDict, total=False):
+    """Options for GIF rendering."""
+
+    url: str
+    html: str
+    viewport: Viewport
+    duration: int
+    fps: int
+    scrollDistance: int
+    waitFor: str
+    callback_url: str
+    headers: Dict[str, str]
+    cookies: List[Cookie]
+    actions: List[Action]
+
+
+# Diff API types
+
+
+class DiffScreenshotOptions(TypedDict, total=False):
+    """Screenshot options for diff comparison."""
+
+    viewport_width: int
+    viewport_height: int
+    format: Literal["png", "jpeg", "webp"]
+    full_page: bool
+    delay_ms: int
+
+
+class DiffOptions(TypedDict, total=False):
+    """Options for diff comparison."""
+
+    url_a: str
+    url_b: str
+    job_id_a: str
+    job_id_b: str
+    threshold: float
+    screenshot_options: DiffScreenshotOptions
+
+
+# Schedule API types
+
+ScheduleRenderType = Literal["screenshot", "pdf", "og"]
+
+
+class _ScheduleCreateRequired(TypedDict):
+    """Required fields for ScheduleCreate."""
+
+    name: str
+    cron_expression: str
+    render_type: ScheduleRenderType
+    render_config: Dict[str, Any]
+
+
+class ScheduleCreate(_ScheduleCreateRequired, total=False):
+    """Options for creating a schedule. name, cron_expression, render_type, and render_config are required."""
+
+    enabled: bool
+
+
+class ScheduleUpdate(TypedDict, total=False):
+    """Options for updating a schedule."""
+
+    name: str
+    cron_expression: str
+    render_type: ScheduleRenderType
+    render_config: Dict[str, Any]
+    enabled: bool
+
+
+@dataclass
+class Schedule:
+    """Recurring render schedule."""
+
+    id: str
+    name: str
+    cron_expression: str
+    render_type: ScheduleRenderType
+    render_config: Dict[str, Any]
+    enabled: bool
+    created_at: str
+    updated_at: str
+    next_run_at: Optional[str] = None
+    last_run_at: Optional[str] = None

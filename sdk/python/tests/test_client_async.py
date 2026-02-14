@@ -236,3 +236,173 @@ async def test_async_accessibility_malformed():
 
     assert exc_info.value.code == "MALFORMED_RESPONSE"
     await client.close()
+
+
+# GIF tests
+
+@pytest.mark.asyncio
+async def test_async_gif():
+    """Test async gif() rendering."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v1/gif"
+        return httpx.Response(200, content=b"\x47\x49\x46", headers={"content-type": "image/gif"})
+
+    transport = httpx.MockTransport(handler)
+    client = AsyncScreenForgeClient(api_key="test-key", transport=transport)
+
+    result = await client.gif({"url": "https://example.com", "duration": 5000})
+
+    assert result == b"\x47\x49\x46"
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_async_gif_async():
+    """Test async gif_async() returns job ID."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert "async=true" in str(request.url)
+        return httpx.Response(200, json={"jobId": "job_gif_async", "pollUrl": "/v1/render/job_gif_async"})
+
+    transport = httpx.MockTransport(handler)
+    client = AsyncScreenForgeClient(api_key="test-key", transport=transport)
+
+    result = await client.gif_async({"url": "https://example.com"})
+
+    assert result.jobId == "job_gif_async"
+    await client.close()
+
+
+# Diff tests
+
+@pytest.mark.asyncio
+async def test_async_diff():
+    """Test async diff()."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v1/diff"
+        return httpx.Response(200, content=b"\x89PNG", headers={"content-type": "image/png"})
+
+    transport = httpx.MockTransport(handler)
+    client = AsyncScreenForgeClient(api_key="test-key", transport=transport)
+
+    result = await client.diff({"url_a": "https://example.com/v1", "url_b": "https://example.com/v2"})
+
+    assert result == b"\x89PNG"
+    await client.close()
+
+
+# Schedule tests
+
+@pytest.mark.asyncio
+async def test_async_create_schedule():
+    """Test async create_schedule()."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v1/schedules"
+        return httpx.Response(201, json={
+            "schedule": {
+                "id": "sched_async_123",
+                "name": "Async schedule",
+                "cron_expression": "0 9 * * *",
+                "render_type": "screenshot",
+                "render_config": {"url": "https://example.com"},
+                "enabled": True,
+                "next_run_at": "2026-02-15T09:00:00Z",
+                "last_run_at": None,
+                "created_at": "2026-02-14T12:00:00Z",
+                "updated_at": "2026-02-14T12:00:00Z",
+            }
+        })
+
+    transport = httpx.MockTransport(handler)
+    client = AsyncScreenForgeClient(api_key="test-key", transport=transport)
+
+    result = await client.create_schedule({
+        "name": "Async schedule",
+        "cron_expression": "0 9 * * *",
+        "render_type": "screenshot",
+        "render_config": {"url": "https://example.com"},
+    })
+
+    assert result.id == "sched_async_123"
+    assert result.name == "Async schedule"
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_async_list_schedules():
+    """Test async list_schedules()."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={
+            "schedules": [
+                {
+                    "id": "sched_1",
+                    "name": "Schedule 1",
+                    "cron_expression": "0 9 * * *",
+                    "render_type": "screenshot",
+                    "render_config": {},
+                    "enabled": True,
+                    "next_run_at": "2026-02-15T09:00:00Z",
+                    "last_run_at": None,
+                    "created_at": "2026-02-14T12:00:00Z",
+                    "updated_at": "2026-02-14T12:00:00Z",
+                },
+            ]
+        })
+
+    transport = httpx.MockTransport(handler)
+    client = AsyncScreenForgeClient(api_key="test-key", transport=transport)
+
+    result = await client.list_schedules()
+
+    assert len(result) == 1
+    assert result[0].id == "sched_1"
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_async_update_schedule():
+    """Test async update_schedule()."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "PATCH"
+        return httpx.Response(200, json={
+            "schedule": {
+                "id": "sched_123",
+                "name": "Updated async",
+                "cron_expression": "0 10 * * *",
+                "render_type": "screenshot",
+                "render_config": {},
+                "enabled": False,
+                "next_run_at": None,
+                "last_run_at": None,
+                "created_at": "2026-02-14T12:00:00Z",
+                "updated_at": "2026-02-14T13:00:00Z",
+            }
+        })
+
+    transport = httpx.MockTransport(handler)
+    client = AsyncScreenForgeClient(api_key="test-key", transport=transport)
+
+    result = await client.update_schedule("sched_123", {"name": "Updated async"})
+
+    assert result.name == "Updated async"
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_async_delete_schedule():
+    """Test async delete_schedule()."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "DELETE"
+        return httpx.Response(200, json={})
+
+    transport = httpx.MockTransport(handler)
+    client = AsyncScreenForgeClient(api_key="test-key", transport=transport)
+
+    await client.delete_schedule("sched_123")  # Should not raise
+    await client.close()
