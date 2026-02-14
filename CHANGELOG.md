@@ -19,10 +19,6 @@ All notable changes to ScreenForge are documented here.
 - Expanded README with Advanced Capture Controls section and curl examples for Phase 2 features
 - Updated SDK documentation with Phase 2 option examples
 
-### Fixed
-
-- None
-
 ## [1.1.0] - 2026-02-14
 
 ### Features
