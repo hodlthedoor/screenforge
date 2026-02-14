@@ -4,6 +4,7 @@ import { getPool } from '../db/index.js';
 import { enqueueWebhook } from '../webhooks/delivery.js';
 import { getWebhookConfig } from '../db/api-keys.js';
 import { incrementRenderCounter, observeRenderDuration } from '../metrics/index.js';
+import { getConfig } from '../config/index.js';
 
 export interface RenderJobData {
   jobId: string;
@@ -38,10 +39,11 @@ export function createWorker(
 ): Worker<RenderJobData, RenderJobResult> {
   if (worker) return worker;
 
+  const config = getConfig();
   const connection = new Redis(redisUrl, { maxRetriesPerRequest: null });
   worker = new Worker('screenforge-renders', processor, {
     connection,
-    concurrency: 3,
+    concurrency: config.WORKER_CONCURRENCY,
   });
 
   worker.on('completed', async (job) => {

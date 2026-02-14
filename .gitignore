@@ -11,3 +11,4 @@ playwright-report/
 storage/
 storage-test/
 .DS_Store
+tests/load/results.json

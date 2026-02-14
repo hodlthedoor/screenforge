@@ -8,7 +8,7 @@ let pool: pg.Pool | undefined;
 export function getPool(): pg.Pool {
   if (!pool) {
     const config = getConfig();
-    pool = new Pool({ connectionString: config.DATABASE_URL, max: 10 });
+    pool = new Pool({ connectionString: config.DATABASE_URL, max: config.DB_POOL_MAX });
   }
   return pool;
 }

@@ -13,6 +13,8 @@ const envSchema = z.object({
   MAX_RENDERS_PER_CONTEXT: z.coerce.number().int().min(1).default(100),
   CACHE_TTL_SECONDS: z.coerce.number().int().min(0).default(3600),
   NAVIGATION_TIMEOUT_MS: z.coerce.number().int().min(1000).max(120_000).default(30_000),
+  WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(50).default(3),
+  DB_POOL_MAX: z.coerce.number().int().min(1).max(100).default(10),
   ALLOW_PRIVATE_URLS: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
   REQUIRE_AUTH: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
   MAX_CONTENT_SIZE_MB: z.coerce.number().int().min(1).max(100).default(50),
