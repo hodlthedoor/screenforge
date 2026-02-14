@@ -119,8 +119,8 @@ export type WaitStrategy = z.infer<typeof waitStrategySchema>;
 // Pre-capture interaction actions
 export const actionSchema = z.object({
   type: z.enum(['click', 'scroll', 'type', 'hover', 'wait']),
-  selector: z.string().optional(),
-  value: z.string().optional(),
+  selector: z.string().max(500).optional(),
+  value: z.string().max(500).optional(),
   x: z.number().optional(),
   y: z.number().optional(),
 });

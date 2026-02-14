@@ -31,8 +31,8 @@ describe('executeActions', { timeout: 60_000 }, () => {
 
     await executeActions(page, actions);
 
-    // Should not throw
-    expect(true).toBe(true);
+    const tag = await page.$eval('#test-button', (el) => el.tagName);
+    expect(tag).toBe('BUTTON');
   });
 
   it('executes scroll action successfully', async () => {
@@ -42,19 +42,21 @@ describe('executeActions', { timeout: 60_000 }, () => {
 
     await executeActions(page, actions);
 
-    // Should not throw
-    expect(true).toBe(true);
+    const isVisible = await page.isVisible('h1');
+    expect(isVisible).toBe(true);
   });
 
   it('executes type action successfully', async () => {
+    await page.$eval('#test-input', (el) => { (el as HTMLInputElement).value = ''; }); // eslint-disable-line no-undef
+
     const actions = [
       { type: 'type' as const, selector: '#test-input', value: 'test text' },
     ];
 
     await executeActions(page, actions);
 
-    // Should not throw
-    expect(true).toBe(true);
+    const value = await page.$eval('#test-input', (el) => (el as HTMLInputElement).value); // eslint-disable-line no-undef
+    expect(value).toContain('test text');
   });
 
   it('executes hover action successfully', async () => {
@@ -64,8 +66,8 @@ describe('executeActions', { timeout: 60_000 }, () => {
 
     await executeActions(page, actions);
 
-    // Should not throw
-    expect(true).toBe(true);
+    const isVisible = await page.isVisible('#test-button');
+    expect(isVisible).toBe(true);
   });
 
   it('executes wait action with max 5000ms cap', async () => {
@@ -115,8 +117,8 @@ describe('executeActions', { timeout: 60_000 }, () => {
 
     await executeActions(page, actions);
 
-    // Should not throw
-    expect(true).toBe(true);
+    const isVisible = await page.isVisible('h1');
+    expect(isVisible).toBe(true);
   });
 
   it('scrolls to coordinates when x and y provided', async () => {
@@ -188,5 +190,38 @@ describe('actions schema validation', () => {
     });
 
     expect(result.success).toBe(false);
+  });
+
+  it('rejects action selector exceeding 500 chars', () => {
+    const result = screenshotOptionsSchema.safeParse({
+      url: 'https://example.com',
+      actions: [
+        { type: 'click', selector: 'a'.repeat(501) },
+      ],
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects action value exceeding 500 chars', () => {
+    const result = screenshotOptionsSchema.safeParse({
+      url: 'https://example.com',
+      actions: [
+        { type: 'type', selector: 'input', value: 'a'.repeat(501) },
+      ],
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts action selector at exactly 500 chars', () => {
+    const result = screenshotOptionsSchema.safeParse({
+      url: 'https://example.com',
+      actions: [
+        { type: 'click', selector: 'a'.repeat(500) },
+      ],
+    });
+
+    expect(result.success).toBe(true);
   });
 });
