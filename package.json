@@ -21,6 +21,14 @@
     "playwright"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hodlthedoor/screenforge.git"
+  },
+  "homepage": "https://github.com/hodlthedoor/screenforge#readme",
+  "bugs": {
+    "url": "https://github.com/hodlthedoor/screenforge/issues"
+  },
   "engines": {
     "node": ">=22"
   },

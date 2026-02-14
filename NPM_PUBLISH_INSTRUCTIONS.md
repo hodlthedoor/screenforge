@@ -3,7 +3,7 @@
 ## Status
 
 ✅ **Package prepared and ready to publish**
-✅ **GitHub release v1.0.0 created**: https://github.com/hodlthedoor/atlas-project/releases/tag/v1.0.0
+✅ **GitHub release v1.0.0 created**: https://github.com/hodlthedoor/screenforge/releases/tag/v1.0.0
 ❌ **npm publish requires authentication**
 
 ## Prerequisites
@@ -36,7 +36,7 @@ You'll be prompted for:
 
 3. **Navigate to SDK directory**:
    ```bash
-   cd /home/sam/atlas-project/screenforge/sdk/js
+   cd sdk/js
    ```
 
 4. **Verify package builds**:
@@ -86,8 +86,8 @@ node -e "const m = require('@screenforge/sdk'); console.log('CJS works:', Object
 - **Name**: `@screenforge/sdk`
 - **Version**: `1.0.0`
 - **License**: MIT
-- **Repository**: https://github.com/hodlthedoor/atlas-project
-- **Homepage**: https://github.com/hodlthedoor/atlas-project/tree/main/sdk/js#readme
+- **Repository**: https://github.com/hodlthedoor/screenforge
+- **Homepage**: https://github.com/hodlthedoor/screenforge#readme
 - **Keywords**: screenshot, api, pdf, og-image, puppeteer, playwright, render, screenforge
 
 ## What's Included in the Package

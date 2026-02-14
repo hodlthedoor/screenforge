@@ -14,8 +14,8 @@ Thanks for your interest in contributing! This guide covers everything you need 
 
 ```bash
 # Clone and install
-git clone https://github.com/hodlthedoor/atlas-project.git
-cd atlas-project/screenforge
+git clone https://github.com/hodlthedoor/screenforge.git
+cd screenforge
 npm install --include=dev
 
 # Install Playwright browsers
