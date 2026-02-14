@@ -156,6 +156,133 @@ describe('landing page', () => {
     });
   });
 
+  describe('competitor comparison table', () => {
+    it('contains competitor comparison section with all competitors', async () => {
+      const res = await app.inject({ method: 'GET', url: '/' });
+      const body = res.body;
+      expect(body).toContain('ScreenForge vs Competitors');
+      expect(body).toContain('ScreenshotOne');
+      expect(body).toContain('Urlbox');
+      expect(body).toContain('Browserless');
+    });
+
+    it('contains comparison columns for key features', async () => {
+      const res = await app.inject({ method: 'GET', url: '/' });
+      const body = res.body;
+      expect(body).toContain('Self-Hosted');
+      expect(body).toContain('Open Source');
+      expect(body).toContain('Batch API');
+    });
+
+    it('highlights ScreenForge advantages', async () => {
+      const res = await app.inject({ method: 'GET', url: '/' });
+      const body = res.body;
+      // ScreenForge should have checkmarks for self-hosted and open source
+      // while competitors should not
+      expect(body).toContain('competitor-table');
+    });
+  });
+
+  describe('tabbed code examples', () => {
+    it('contains tabbed code section with JS SDK, Python SDK, and cURL tabs', async () => {
+      const res = await app.inject({ method: 'GET', url: '/' });
+      const body = res.body;
+      expect(body).toContain('data-tab="curl"');
+      expect(body).toContain('data-tab="javascript"');
+      expect(body).toContain('data-tab="python"');
+    });
+
+    it('contains copy button for code snippets', async () => {
+      const res = await app.inject({ method: 'GET', url: '/' });
+      expect(res.body).toContain('copy-btn');
+    });
+
+    it('contains JS SDK code example', async () => {
+      const res = await app.inject({ method: 'GET', url: '/' });
+      expect(res.body).toContain('screenforge');
+      expect(res.body).toContain('screenshot');
+    });
+
+    it('contains Python SDK code example', async () => {
+      const res = await app.inject({ method: 'GET', url: '/' });
+      expect(res.body).toContain('requests.post');
+    });
+  });
+
+  describe('FAQ section with JSON-LD', () => {
+    it('contains FAQ section with questions', async () => {
+      const res = await app.inject({ method: 'GET', url: '/' });
+      const body = res.body;
+      expect(body).toContain('Frequently Asked Questions');
+      expect(body).toContain('faq-section');
+    });
+
+    it('contains FAQPage JSON-LD structured data', async () => {
+      const res = await app.inject({ method: 'GET', url: '/' });
+      const body = res.body;
+      // Extract all JSON-LD blocks
+      const jsonLdMatches = body.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g);
+      expect(jsonLdMatches).toBeTruthy();
+      expect(jsonLdMatches!.length).toBeGreaterThanOrEqual(2); // SoftwareApplication + FAQPage
+
+      // Find the FAQPage block
+      const faqBlock = jsonLdMatches!.find((m: string) => m.includes('FAQPage'));
+      expect(faqBlock).toBeTruthy();
+
+      // Parse and validate the JSON-LD
+      const jsonContent = faqBlock!.replace(/<script type="application\/ld\+json">/, '').replace(/<\/script>/, '');
+      const parsed = JSON.parse(jsonContent);
+      expect(parsed['@context']).toBe('https://schema.org');
+      expect(parsed['@type']).toBe('FAQPage');
+      expect(parsed.mainEntity).toBeInstanceOf(Array);
+      expect(parsed.mainEntity.length).toBeGreaterThanOrEqual(6);
+
+      // Each FAQ entry should have Question type with name and acceptedAnswer
+      for (const entry of parsed.mainEntity) {
+        expect(entry['@type']).toBe('Question');
+        expect(entry.name).toBeTruthy();
+        expect(entry.acceptedAnswer['@type']).toBe('Answer');
+        expect(entry.acceptedAnswer.text).toBeTruthy();
+      }
+    });
+  });
+
+  describe('analytics snippet injection', () => {
+    it('does not inject analytics when ANALYTICS_SCRIPT is not set', async () => {
+      const res = await app.inject({ method: 'GET', url: '/' });
+      // Should not contain any analytics script tag (beyond our own)
+      expect(res.body).not.toContain('plausible');
+      expect(res.body).not.toContain('googletagmanager');
+    });
+
+    it('injects analytics script when ANALYTICS_SCRIPT is set', async () => {
+      // Build a separate server with analytics configured
+      const prevScript = process.env.ANALYTICS_SCRIPT;
+      process.env.ANALYTICS_SCRIPT = '<script defer data-domain="screenforge.dev" src="https://plausible.io/js/script.js"></script>';
+      let analyticsApp: FastifyInstance | undefined;
+      try {
+        analyticsApp = await buildServer({ skipBrowserInit: true });
+        const res = await analyticsApp.inject({ method: 'GET', url: '/' });
+        expect(res.body).toContain('plausible.io/js/script.js');
+        expect(res.body).toContain('data-domain="screenforge.dev"');
+      } finally {
+        if (analyticsApp) await analyticsApp.close();
+        if (prevScript === undefined) delete process.env.ANALYTICS_SCRIPT;
+        else process.env.ANALYTICS_SCRIPT = prevScript;
+      }
+    });
+  });
+
+  describe('social proof counter', () => {
+    it('contains social proof counter section', async () => {
+      const res = await app.inject({ method: 'GET', url: '/' });
+      const body = res.body;
+      expect(body).toContain('social-proof-counter');
+      // Should display a number (the count, possibly formatted)
+      expect(body).toMatch(/[\d,]+\s*(renders|screenshots|images)/i);
+    });
+  });
+
   describe('robots.txt', () => {
     it('returns valid robots.txt', async () => {
       const res = await app.inject({ method: 'GET', url: '/robots.txt' });

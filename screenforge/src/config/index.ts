@@ -35,6 +35,7 @@ const envSchema = z.object({
   GRACEFUL_SHUTDOWN_TIMEOUT_MS: z.coerce.number().int().min(1000).default(30_000),
   RENDER_TIMEOUT_MS: z.coerce.number().int().min(1000).max(120_000).default(30_000),
   CIRCUIT_BREAKER_THRESHOLD: z.coerce.number().int().min(1).default(3),
+  ANALYTICS_SCRIPT: z.string().optional(),
 });
 
 export type Config = z.infer<typeof envSchema>;
