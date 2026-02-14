@@ -20,10 +20,15 @@ class Cookie(TypedDict, total=False):
     path: str
 
 
-class Action(TypedDict, total=False):
-    """Pre-capture interaction action."""
+class _ActionRequired(TypedDict):
+    """Required fields for Action."""
 
     type: Literal["click", "scroll", "type", "hover", "wait"]
+
+
+class Action(_ActionRequired, total=False):
+    """Pre-capture interaction action. `type` is required."""
+
     selector: str
     value: str
     x: int
