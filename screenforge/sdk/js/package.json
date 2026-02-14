@@ -30,13 +30,11 @@
   },
   "keywords": [
     "screenshot",
-    "api",
     "pdf",
+    "api",
     "og-image",
-    "puppeteer",
-    "playwright",
     "render",
-    "screenforge"
+    "headless-browser"
   ],
   "engines": {
     "node": ">=18"

@@ -38,8 +38,8 @@ dev = [
 [project.urls]
 Homepage = "https://screenforge.dev"
 Documentation = "https://docs.screenforge.dev"
-Repository = "https://github.com/screenforge/screenforge"
-"Bug Tracker" = "https://github.com/screenforge/screenforge/issues"
+Repository = "https://github.com/hodlthedoor/screenforge"
+"Bug Tracker" = "https://github.com/hodlthedoor/screenforge/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]
