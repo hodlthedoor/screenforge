@@ -3,6 +3,7 @@ import type { PdfOptions, RenderResult } from './schemas.js';
 import { applyPreNavigationFilters, applyPostNavigationFilters } from './filters.js';
 import { applyWaitStrategy } from './wait.js';
 import { toPlaywrightCookies } from '../security/sanitize.js';
+import { getConfig } from '../config/index.js';
 
 const FORMAT_SIZE: Record<string, { width: string; height: string }> = {
   a4: { width: '210mm', height: '297mm' },
@@ -12,6 +13,24 @@ const FORMAT_SIZE: Record<string, { width: string; height: string }> = {
 
 export async function renderPdf(pool: BrowserPool, options: PdfOptions, timeoutMs = 30_000): Promise<RenderResult> {
   const start = performance.now();
+
+  // Merge per-request proxy over global default proxy (if config is loaded)
+  let proxy = options.proxy;
+  if (!proxy) {
+    try {
+      const config = getConfig();
+      if (config.PROXY_SERVER) {
+        proxy = {
+          server: config.PROXY_SERVER,
+          username: config.PROXY_USERNAME,
+          password: config.PROXY_PASSWORD,
+        };
+      }
+    } catch {
+      // Config not loaded (e.g., in tests), skip global proxy
+    }
+  }
+
   const context = await pool.acquire({
     userAgent: options.userAgent,
     isMobile: options.isMobile,
@@ -20,6 +39,7 @@ export async function renderPdf(pool: BrowserPool, options: PdfOptions, timeoutM
     geolocation: options.geolocation,
     permissions: options.geolocation ? ['geolocation'] : undefined,
     timezoneId: options.timezone,
+    proxy,
   });
 
   try {

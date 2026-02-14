@@ -75,6 +75,18 @@ const emulationSchema = z.object({
   locale: localeSchema.optional(),
 });
 
+// Proxy configuration for render requests
+export const proxySchema = z.object({
+  server: z.string().refine((server) => {
+    // Validate proxy URL format — must start with http://, https://, socks4://, or socks5://
+    return /^(https?|socks[45]):\/\/.+/.test(server);
+  }, {
+    message: 'Proxy server must use http://, https://, socks4://, or socks5:// protocol',
+  }),
+  username: z.string().optional(),
+  password: z.string().optional(),
+}).optional();
+
 export const viewportSchema = z.object({
   width: z.number().int().min(1).max(7680).default(1920),
   height: z.number().int().min(1).max(4320).default(1080),
@@ -124,6 +136,7 @@ export const screenshotOptionsSchema = z.object({
   ...contentFilterSchema.shape,
   ...requestOverridesSchema.shape,
   ...emulationSchema.shape,
+  proxy: proxySchema,
 }).refine((data) => (data.url && !data.html) || (!data.url && data.html), {
   message: 'Exactly one of url or html must be provided',
 }).refine((data) => !(data.selector && data.clip), {
@@ -190,6 +203,7 @@ export const pdfOptionsSchema = z.object({
   ...contentFilterSchema.shape,
   ...requestOverridesSchema.shape,
   ...emulationSchema.shape,
+  proxy: proxySchema,
 }).refine((data) => (data.url && !data.html) || (!data.url && data.html), {
   message: 'Exactly one of url or html must be provided',
 }).refine((data) => !(data.waitFor && data.wait), {

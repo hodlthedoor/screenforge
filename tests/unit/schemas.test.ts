@@ -352,6 +352,88 @@ describe('screenshotOptionsSchema', () => {
     });
     expect(result.success).toBe(true);
   });
+
+  describe('proxy support', () => {
+    it('accepts valid HTTP proxy', () => {
+      const result = screenshotOptionsSchema.safeParse({
+        url: 'https://example.com',
+        proxy: { server: 'http://proxy.example.com:8080' },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.proxy).toEqual({ server: 'http://proxy.example.com:8080' });
+      }
+    });
+
+    it('accepts valid HTTPS proxy', () => {
+      const result = screenshotOptionsSchema.safeParse({
+        url: 'https://example.com',
+        proxy: { server: 'https://proxy.example.com:443' },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts valid SOCKS4 proxy', () => {
+      const result = screenshotOptionsSchema.safeParse({
+        url: 'https://example.com',
+        proxy: { server: 'socks4://proxy.example.com:1080' },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts valid SOCKS5 proxy', () => {
+      const result = screenshotOptionsSchema.safeParse({
+        url: 'https://example.com',
+        proxy: { server: 'socks5://proxy.example.com:1080' },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts proxy with username and password', () => {
+      const result = screenshotOptionsSchema.safeParse({
+        url: 'https://example.com',
+        proxy: {
+          server: 'http://proxy.example.com:8080',
+          username: 'user',
+          password: 'pass',
+        },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.proxy?.username).toBe('user');
+        expect(result.data.proxy?.password).toBe('pass');
+      }
+    });
+
+    it('accepts no proxy (optional)', () => {
+      const result = screenshotOptionsSchema.safeParse({
+        url: 'https://example.com',
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.proxy).toBeUndefined();
+      }
+    });
+
+    it('rejects invalid proxy protocol', () => {
+      const result = screenshotOptionsSchema.safeParse({
+        url: 'https://example.com',
+        proxy: { server: 'ftp://proxy.example.com:21' },
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues[0].message).toContain('http://, https://, socks4://, or socks5://');
+      }
+    });
+
+    it('rejects proxy without protocol', () => {
+      const result = screenshotOptionsSchema.safeParse({
+        url: 'https://example.com',
+        proxy: { server: 'proxy.example.com:8080' },
+      });
+      expect(result.success).toBe(false);
+    });
+  });
 });
 
 describe('pdfOptionsSchema', () => {
@@ -490,6 +572,39 @@ describe('pdfOptionsSchema', () => {
       locale: 'ja-JP',
     });
     expect(result.success).toBe(true);
+  });
+
+  describe('proxy support', () => {
+    it('accepts valid proxy', () => {
+      const result = pdfOptionsSchema.safeParse({
+        url: 'https://example.com',
+        proxy: { server: 'http://proxy.example.com:8080' },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.proxy).toEqual({ server: 'http://proxy.example.com:8080' });
+      }
+    });
+
+    it('accepts proxy with credentials', () => {
+      const result = pdfOptionsSchema.safeParse({
+        url: 'https://example.com',
+        proxy: {
+          server: 'socks5://proxy.example.com:1080',
+          username: 'proxyuser',
+          password: 'proxypass',
+        },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects invalid proxy protocol', () => {
+      const result = pdfOptionsSchema.safeParse({
+        url: 'https://example.com',
+        proxy: { server: 'invalid://proxy.example.com' },
+      });
+      expect(result.success).toBe(false);
+    });
   });
 });
 

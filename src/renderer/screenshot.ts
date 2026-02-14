@@ -4,6 +4,7 @@ import { applyPreNavigationFilters, applyPostNavigationFilters } from './filters
 import { applyWaitStrategy } from './wait.js';
 import { toPlaywrightCookies } from '../security/sanitize.js';
 import { imageSize } from 'image-size';
+import { getConfig } from '../config/index.js';
 
 const FORMAT_CONTENT_TYPE: Record<string, string> = {
   png: 'image/png',
@@ -12,6 +13,24 @@ const FORMAT_CONTENT_TYPE: Record<string, string> = {
 
 export async function takeScreenshot(pool: BrowserPool, options: ScreenshotOptions, timeoutMs = 30_000): Promise<RenderResult> {
   const start = performance.now();
+
+  // Merge per-request proxy over global default proxy (if config is loaded)
+  let proxy = options.proxy;
+  if (!proxy) {
+    try {
+      const config = getConfig();
+      if (config.PROXY_SERVER) {
+        proxy = {
+          server: config.PROXY_SERVER,
+          username: config.PROXY_USERNAME,
+          password: config.PROXY_PASSWORD,
+        };
+      }
+    } catch {
+      // Config not loaded (e.g., in tests), skip global proxy
+    }
+  }
+
   const context = await pool.acquire({
     viewport: { width: options.viewport.width, height: options.viewport.height },
     deviceScaleFactor: options.deviceScaleFactor,
@@ -23,6 +42,7 @@ export async function takeScreenshot(pool: BrowserPool, options: ScreenshotOptio
     geolocation: options.geolocation,
     permissions: options.geolocation ? ['geolocation'] : undefined,
     timezoneId: options.timezone,
+    proxy,
   });
 
   try {

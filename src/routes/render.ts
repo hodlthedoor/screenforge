@@ -266,6 +266,16 @@ export async function renderRoutes(
             description: 'Locale to emulate (e.g., "en-US", "fr-FR")',
             pattern: '^[a-z]{2}(-[A-Z]{2})?$',
           },
+          proxy: {
+            type: 'object',
+            description: 'HTTP/SOCKS proxy configuration for this request. Overrides global PROXY_SERVER env var.',
+            properties: {
+              server: { type: 'string', description: 'Proxy server URL (http://, https://, socks4://, or socks5://)' },
+              username: { type: 'string', description: 'Proxy authentication username (optional)' },
+              password: { type: 'string', description: 'Proxy authentication password (optional)' },
+            },
+            required: ['server'],
+          },
         },
       },
     },
@@ -492,6 +502,16 @@ export async function renderRoutes(
             type: 'string',
             description: 'Locale to emulate (e.g., "en-US", "fr-FR")',
             pattern: '^[a-z]{2}(-[A-Z]{2})?$',
+          },
+          proxy: {
+            type: 'object',
+            description: 'HTTP/SOCKS proxy configuration for this request. Overrides global PROXY_SERVER env var.',
+            properties: {
+              server: { type: 'string', description: 'Proxy server URL (http://, https://, socks4://, or socks5://)' },
+              username: { type: 'string', description: 'Proxy authentication username (optional)' },
+              password: { type: 'string', description: 'Proxy authentication password (optional)' },
+            },
+            required: ['server'],
           },
         },
       },

@@ -125,4 +125,61 @@ describe('config', () => {
       loadConfig({ ...validEnv, CIRCUIT_BREAKER_THRESHOLD: '0' }),
     ).toThrow('Invalid environment configuration');
   });
+
+  describe('proxy configuration', () => {
+    it('accepts valid HTTP proxy server', () => {
+      const config = loadConfig({
+        ...validEnv,
+        PROXY_SERVER: 'http://proxy.example.com:8080',
+      });
+      expect(config.PROXY_SERVER).toBe('http://proxy.example.com:8080');
+    });
+
+    it('accepts valid HTTPS proxy server', () => {
+      const config = loadConfig({
+        ...validEnv,
+        PROXY_SERVER: 'https://proxy.example.com:443',
+      });
+      expect(config.PROXY_SERVER).toBe('https://proxy.example.com:443');
+    });
+
+    it('accepts valid SOCKS5 proxy server', () => {
+      const config = loadConfig({
+        ...validEnv,
+        PROXY_SERVER: 'socks5://proxy.example.com:1080',
+      });
+      expect(config.PROXY_SERVER).toBe('socks5://proxy.example.com:1080');
+    });
+
+    it('accepts proxy with username and password', () => {
+      const config = loadConfig({
+        ...validEnv,
+        PROXY_SERVER: 'http://proxy.example.com:8080',
+        PROXY_USERNAME: 'proxyuser',
+        PROXY_PASSWORD: 'proxypass',
+      });
+      expect(config.PROXY_SERVER).toBe('http://proxy.example.com:8080');
+      expect(config.PROXY_USERNAME).toBe('proxyuser');
+      expect(config.PROXY_PASSWORD).toBe('proxypass');
+    });
+
+    it('accepts no proxy (optional)', () => {
+      const config = loadConfig(validEnv);
+      expect(config.PROXY_SERVER).toBeUndefined();
+      expect(config.PROXY_USERNAME).toBeUndefined();
+      expect(config.PROXY_PASSWORD).toBeUndefined();
+    });
+
+    it('rejects invalid proxy protocol', () => {
+      expect(() =>
+        loadConfig({ ...validEnv, PROXY_SERVER: 'ftp://proxy.example.com:21' }),
+      ).toThrow('Invalid environment configuration');
+    });
+
+    it('rejects proxy without protocol', () => {
+      expect(() =>
+        loadConfig({ ...validEnv, PROXY_SERVER: 'proxy.example.com:8080' }),
+      ).toThrow('Invalid environment configuration');
+    });
+  });
 });

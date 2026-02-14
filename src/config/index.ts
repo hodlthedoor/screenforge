@@ -44,6 +44,16 @@ const envSchema = z.object({
   S3_ACCESS_KEY_ID: z.string().optional(),
   S3_SECRET_ACCESS_KEY: z.string().optional(),
   S3_ENDPOINT: z.string().optional(),
+
+  // Global default proxy (used when no per-request proxy is set)
+  PROXY_SERVER: z.string().refine((server) => {
+    if (!server) return true; // Optional
+    return /^(https?|socks[45]):\/\/.+/.test(server);
+  }, {
+    message: 'PROXY_SERVER must use http://, https://, socks4://, or socks5:// protocol',
+  }).optional(),
+  PROXY_USERNAME: z.string().optional(),
+  PROXY_PASSWORD: z.string().optional(),
 });
 
 export type Config = z.infer<typeof envSchema>;

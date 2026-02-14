@@ -211,4 +211,36 @@ describe('renderer', { timeout: 60_000 }, () => {
       expect(result.contentType).toBe('application/pdf');
     });
   });
+
+  describe('proxy support', () => {
+    it('accepts proxy config for screenshots', async () => {
+      const result = await takeScreenshot(pool, {
+        url: FIXTURE_URL,
+        viewport: { width: 1280, height: 720 },
+        format: 'png',
+        fullPage: false,
+        darkMode: false,
+        deviceScaleFactor: 1,
+        proxy: { server: 'http://proxy.example.com:8080' }, // Config accepted even if no proxy exists
+      });
+
+      expect(result.buffer).toBeInstanceOf(Buffer);
+      expect(result.contentType).toBe('image/png');
+    });
+
+    it('accepts proxy config for PDFs', async () => {
+      const result = await renderPdf(pool, {
+        url: FIXTURE_URL,
+        format: 'a4',
+        landscape: false,
+        margins: { top: '0', right: '0', bottom: '0', left: '0' },
+        printBackground: true,
+        scale: 1,
+        proxy: { server: 'socks5://proxy.example.com:1080', username: 'user', password: 'pass' },
+      });
+
+      expect(result.buffer).toBeInstanceOf(Buffer);
+      expect(result.contentType).toBe('application/pdf');
+    });
+  });
 });
