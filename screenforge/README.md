@@ -420,6 +420,7 @@ This starts:
 2. Login with default credentials:
    - Username: `admin`
    - Password: `admin`
+   - **⚠️ Production:** Change credentials via `GRAFANA_ADMIN_USER` and `GRAFANA_ADMIN_PASSWORD` in `.env`
 3. The ScreenForge dashboard is auto-provisioned and ready to use
 
 ### Dashboard Panels
