@@ -1,0 +1,58 @@
+{
+  "name": "@screenforge/sdk",
+  "version": "1.0.0",
+  "description": "JavaScript/TypeScript SDK for ScreenForge",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hodlthedoor/screenforge.git",
+    "directory": "sdk/js"
+  },
+  "homepage": "https://github.com/hodlthedoor/screenforge#readme",
+  "bugs": {
+    "url": "https://github.com/hodlthedoor/screenforge/issues"
+  },
+  "keywords": [
+    "screenshot",
+    "pdf",
+    "api",
+    "og-image",
+    "render",
+    "headless-browser"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run --config vitest.config.ts",
+    "test:watch": "vitest --config vitest.config.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": false,
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "tsup": "^8.5.0",
+    "typescript": "^5.9.2",
+    "vitest": "^4.0.0"
+  }
+}
