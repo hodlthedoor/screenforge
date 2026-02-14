@@ -30,7 +30,14 @@ export interface EnhancedMetadata {
  * Extract enhanced metadata from a Document object
  * This function is designed to be serializable and run in a browser context via page.evaluate()
  */
-export async function extractEnhancedMetadata(document: any): Promise<EnhancedMetadata> {
+interface DocumentLike {
+  querySelector(selector: string): { getAttribute(name: string): string | null } | null;
+  title: string;
+  documentElement: { getAttribute(name: string): string | null };
+  location?: { href: string };
+}
+
+export async function extractEnhancedMetadata(document: DocumentLike): Promise<EnhancedMetadata> {
   // Helper to get meta content by property or name
   const getMetaContent = (selector: string): string | null => {
     const el = document.querySelector(selector);
@@ -183,5 +190,5 @@ export async function extractMetadataFromPage(page: { evaluate: (fn: string) => 
         twitter,
       };
     })()
-  ` as any);
+  ` as string);
 }

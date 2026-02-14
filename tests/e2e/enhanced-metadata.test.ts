@@ -215,9 +215,12 @@ describe('E2E: Enhanced metadata extraction', () => {
 
       expect(pollData).toBeDefined();
       expect(pollData!.status).toBe('completed');
-      expect((pollData! as any).jobs).toHaveLength(1);
-      expect((pollData! as any).jobs[0].metadata).toHaveProperty('og');
-      expect((pollData! as any).jobs[0].metadata.og.title).toBe('Batch OG Title');
+      const data = pollData as Record<string, unknown>;
+      const jobs = data.jobs as Array<Record<string, unknown>>;
+      expect(jobs).toHaveLength(1);
+      const metadata = jobs[0].metadata as Record<string, Record<string, string>>;
+      expect(metadata).toHaveProperty('og');
+      expect(metadata.og.title).toBe('Batch OG Title');
     });
   });
 });
