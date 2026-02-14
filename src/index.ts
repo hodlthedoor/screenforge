@@ -43,6 +43,7 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
   const config = loadConfig();
 
   const app = Fastify({
+    trustProxy: config.NODE_ENV === 'production',
     logger: config.NODE_ENV === 'test'
       ? false
       : {
