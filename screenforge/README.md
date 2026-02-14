@@ -397,6 +397,67 @@ The nginx config includes:
 
 ---
 
+## Monitoring
+
+ScreenForge exposes Prometheus metrics at `/metrics` and includes pre-configured Grafana dashboards for comprehensive observability.
+
+### Quick Start
+
+Start ScreenForge with monitoring enabled using Docker Compose profiles:
+
+```bash
+docker compose --profile monitoring up -d
+```
+
+This starts:
+- **ScreenForge** at `http://localhost:3100`
+- **Prometheus** at `http://localhost:9090`
+- **Grafana** at `http://localhost:3000`
+
+### Access Grafana
+
+1. Open `http://localhost:3000`
+2. Login with default credentials:
+   - Username: `admin`
+   - Password: `admin`
+3. The ScreenForge dashboard is auto-provisioned and ready to use
+
+### Dashboard Panels
+
+The pre-built dashboard includes:
+
+- **Request Rate by Endpoint** — requests/sec grouped by API route
+- **Request Rate by Status Code** — HTTP status code distribution
+- **Render Duration (p50/p95/p99)** — screenshot/PDF generation latency percentiles
+- **Browser Pool Utilization** — percentage of browser contexts in use
+- **Queue Depth** — waiting/active/completed/failed job counts
+- **Cache Hit Rate** — percentage of renders served from cache
+- **Storage Disk Usage** — total cached file size
+- **Cache Entries** — number of cached renders
+- **Rate Limit Rejections** — 429 response count
+- **Error Rate by Type** — failed render breakdown
+- **Active HTTP Connections** — Node.js TCP/TLS handle count
+
+### Metrics Endpoint
+
+The `/metrics` endpoint is enabled by default and can be scraped by any Prometheus-compatible monitoring system:
+
+```bash
+curl http://localhost:3100/metrics
+```
+
+To disable metrics, set `METRICS_ENABLED=false` in your `.env` file.
+
+### Custom Prometheus Configuration
+
+Edit `prometheus.yml` to adjust scrape intervals or add additional targets. Restart Prometheus after changes:
+
+```bash
+docker compose --profile monitoring restart prometheus
+```
+
+---
+
 ## Architecture
 
 ```mermaid
