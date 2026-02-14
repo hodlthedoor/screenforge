@@ -1,7 +1,6 @@
-import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { authMiddleware } from '../auth/middleware.js';
 import { getPool } from '../db/index.js';
-import { getUsageStats } from '../db/api-keys.js';
 import { getConfig } from '../config/index.js';
 import { createError } from '../security/errors.js';
 
