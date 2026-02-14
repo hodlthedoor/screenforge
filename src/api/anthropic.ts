@@ -114,7 +114,14 @@ function parseJsonResponse(text: string): unknown {
     }
   }
 
-  return JSON.parse(cleaned);
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    throw new AnthropicApiError(
+      `LLM returned invalid JSON: ${cleaned.slice(0, 200)}`,
+      502,
+    );
+  }
 }
 
 export class AnthropicApiError extends Error {

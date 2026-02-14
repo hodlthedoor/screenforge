@@ -322,15 +322,21 @@ export async function extractRoutes(app: FastifyInstance) {
       const { limit = 20, offset = 0 } = req.query as { limit?: number; offset?: number };
       const pool = getPool();
 
-      const result = await pool.query(
-        `SELECT * FROM extraction_jobs WHERE api_key_id = $1
-         ORDER BY created_at DESC LIMIT $2 OFFSET $3`,
-        [apiKeyId, limit, offset],
-      );
+      const [result, countResult] = await Promise.all([
+        pool.query(
+          `SELECT * FROM extraction_jobs WHERE api_key_id = $1
+           ORDER BY created_at DESC LIMIT $2 OFFSET $3`,
+          [apiKeyId, limit, offset],
+        ),
+        pool.query(
+          `SELECT COUNT(*)::int AS total FROM extraction_jobs WHERE api_key_id = $1`,
+          [apiKeyId],
+        ),
+      ]);
 
       return reply.send({
         extractions: result.rows.map(formatExtraction),
-        total: result.rows.length,
+        total: countResult.rows[0].total,
       });
     },
   );

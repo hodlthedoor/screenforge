@@ -395,6 +395,51 @@ describe('extract routes', () => {
     });
   });
 
+  describe('GET /v1/extract (list)', () => {
+    it('returns correct total count independent of limit/offset', async () => {
+      // Create 3 extraction jobs
+      for (let i = 0; i < 3; i++) {
+        mockExtract.mockResolvedValueOnce({
+          data: { i },
+          modelUsed: 'claude-sonnet-4-5-20250929',
+          tokensUsed: 100,
+          rawText: `{"i":${i}}`,
+        });
+        await app.inject({
+          method: 'POST',
+          url: '/v1/extract',
+          headers: { 'x-api-key': rawApiKey },
+          payload: { url: 'https://example.com', prompt: 'Extract data' },
+        });
+      }
+
+      // Request with limit=1 — should return 1 item but total=3
+      const response = await app.inject({
+        method: 'GET',
+        url: '/v1/extract?limit=1&offset=0',
+        headers: { 'x-api-key': rawApiKey },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.extractions).toHaveLength(1);
+      expect(body.total).toBe(3);
+    });
+
+    it('returns total=0 when no extractions exist', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/v1/extract',
+        headers: { 'x-api-key': rawApiKey },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.extractions).toHaveLength(0);
+      expect(body.total).toBe(0);
+    });
+  });
+
   describe('GET /v1/extract/:id', () => {
     it('returns extraction job details', async () => {
       mockExtract.mockResolvedValueOnce({
