@@ -359,6 +359,7 @@ export async function renderRoutes(
       sanitizeWaitFor(options.waitFor);
       sanitizeSelectorList(options.hide_selectors, 'hide_selectors');
       sanitizeSelectorList(options.remove_selectors, 'remove_selectors');
+      sanitizeSelectorList(options.blur_selectors, 'blur_selectors');
     } catch (e) {
       if (e instanceof SanitizeError) {
         sendError(reply, req, 'VALIDATION_ERROR', { message: e.message });
@@ -673,6 +674,7 @@ export async function renderRoutes(
       sanitizeTemplate(options.footerTemplate);
       sanitizeSelectorList(options.hide_selectors, 'hide_selectors');
       sanitizeSelectorList(options.remove_selectors, 'remove_selectors');
+      sanitizeSelectorList(options.blur_selectors, 'blur_selectors');
     } catch (e) {
       if (e instanceof SanitizeError) {
         sendError(reply, req, 'VALIDATION_ERROR', { message: e.message });

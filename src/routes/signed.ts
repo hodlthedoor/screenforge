@@ -130,6 +130,9 @@ export async function signedRoutes(
         if ('remove_selectors' in validatedOptions) {
           sanitizeSelectorList(validatedOptions.remove_selectors, 'remove_selectors');
         }
+        if ('blur_selectors' in validatedOptions) {
+          sanitizeSelectorList(validatedOptions.blur_selectors, 'blur_selectors');
+        }
       } catch (e) {
         if (e instanceof SanitizeError) {
           sendError(reply, req, 'VALIDATION_ERROR', { message: e.message });

@@ -224,6 +224,68 @@ describe('schema content filtering options', () => {
       });
       expect(result.success).toBe(true);
     });
+
+    it('accepts blur_selectors array', () => {
+      const result = screenshotOptionsSchema.safeParse({
+        url: 'https://example.com',
+        blur_selectors: ['.email', '#phone', 'img.avatar'],
+      });
+      expect(result.success).toBe(true);
+      if (result.success) expect(result.data.blur_selectors).toEqual(['.email', '#phone', 'img.avatar']);
+    });
+
+    it('rejects blur_selectors with more than 20 items', () => {
+      const result = screenshotOptionsSchema.safeParse({
+        url: 'https://example.com',
+        blur_selectors: Array(21).fill('.item'),
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('allows exactly 20 blur_selectors', () => {
+      const result = screenshotOptionsSchema.safeParse({
+        url: 'https://example.com',
+        blur_selectors: Array(20).fill('.item'),
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts blur_radius with valid value', () => {
+      const result = screenshotOptionsSchema.safeParse({
+        url: 'https://example.com',
+        blur_selectors: ['.email'],
+        blur_radius: 25,
+      });
+      expect(result.success).toBe(true);
+      if (result.success) expect(result.data.blur_radius).toBe(25);
+    });
+
+    it('defaults blur_radius to 10', () => {
+      const result = screenshotOptionsSchema.safeParse({
+        url: 'https://example.com',
+        blur_selectors: ['.email'],
+      });
+      expect(result.success).toBe(true);
+      if (result.success) expect(result.data.blur_radius).toBe(10);
+    });
+
+    it('rejects blur_radius below 1', () => {
+      const result = screenshotOptionsSchema.safeParse({
+        url: 'https://example.com',
+        blur_selectors: ['.email'],
+        blur_radius: 0,
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects blur_radius above 50', () => {
+      const result = screenshotOptionsSchema.safeParse({
+        url: 'https://example.com',
+        blur_selectors: ['.email'],
+        blur_radius: 51,
+      });
+      expect(result.success).toBe(false);
+    });
   });
 
   describe('pdfOptionsSchema', () => {
@@ -261,5 +323,46 @@ describe('schema content filtering options', () => {
       expect(result.success).toBe(true);
       if (result.success) expect(result.data.remove_selectors).toEqual(['#popup']);
     });
+
+    it('accepts blur_selectors array', () => {
+      const result = pdfOptionsSchema.safeParse({
+        url: 'https://example.com',
+        blur_selectors: ['.email', '#phone'],
+      });
+      expect(result.success).toBe(true);
+      if (result.success) expect(result.data.blur_selectors).toEqual(['.email', '#phone']);
+    });
+
+    it('accepts blur_radius', () => {
+      const result = pdfOptionsSchema.safeParse({
+        url: 'https://example.com',
+        blur_selectors: ['.pii'],
+        blur_radius: 20,
+      });
+      expect(result.success).toBe(true);
+      if (result.success) expect(result.data.blur_radius).toBe(20);
+    });
+  });
+});
+
+describe('buildBlurCss', () => {
+  // Import after schema tests since it's a new function
+  it('generates correct blur CSS for selectors', async () => {
+    const { buildBlurCss } = await import('../../src/renderer/filters.js');
+    const css = buildBlurCss(['.email', '#phone'], 10);
+    expect(css).toContain('.email, #phone');
+    expect(css).toContain('filter: blur(10px) !important');
+    expect(css).toContain('-webkit-filter: blur(10px) !important');
+  });
+
+  it('uses custom blur radius', async () => {
+    const { buildBlurCss } = await import('../../src/renderer/filters.js');
+    const css = buildBlurCss(['.avatar'], 25);
+    expect(css).toContain('blur(25px)');
+  });
+
+  it('returns empty string for empty selectors', async () => {
+    const { buildBlurCss } = await import('../../src/renderer/filters.js');
+    expect(buildBlurCss([], 10)).toBe('');
   });
 });

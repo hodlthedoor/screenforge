@@ -12,6 +12,8 @@ export interface ContentFilterOptions {
   custom_js?: string;
   hide_selectors?: string[];
   remove_selectors?: string[];
+  blur_selectors?: string[];
+  blur_radius?: number;
 }
 
 /** Set up request-level filters (ad blocking, resource blocking) — must be called BEFORE navigation. */
@@ -47,6 +49,12 @@ export async function applyPreNavigationFilters(page: Page, options: ContentFilt
   }
 }
 
+/** Build CSS rule to blur matched elements for PII redaction. */
+export function buildBlurCss(selectors: string[], radius: number): string {
+  if (selectors.length === 0) return '';
+  return `${selectors.join(', ')} { filter: blur(${radius}px) !important; -webkit-filter: blur(${radius}px) !important; }`;
+}
+
 /** Inject CSS/JS filters — must be called AFTER navigation. */
 export async function applyPostNavigationFilters(page: Page, options: ContentFilterOptions): Promise<void> {
   if (options.hide_cookies) {
@@ -64,6 +72,11 @@ export async function applyPostNavigationFilters(page: Page, options: ContentFil
         // Invalid selector — skip silently
       });
     }
+  }
+
+  if (options.blur_selectors && options.blur_selectors.length > 0) {
+    const blurCss = buildBlurCss(options.blur_selectors, options.blur_radius ?? 10);
+    await page.addStyleTag({ content: blurCss });
   }
 
   if (options.custom_css) {

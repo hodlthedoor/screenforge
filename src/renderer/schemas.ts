@@ -45,6 +45,8 @@ const contentFilterSchema = z.object({
   ).optional(),
   hide_selectors: z.array(z.string()).max(20).optional(),
   remove_selectors: z.array(z.string()).max(20).optional(),
+  blur_selectors: z.array(z.string()).max(20).optional(),
+  blur_radius: z.number().min(1).max(50).default(10),
 });
 
 export const cookieSchema = z.object({
