@@ -160,6 +160,15 @@ export async function billingRoutes(app: FastifyInstance): Promise<void> {
     return reply.type('text/html').send(billingLayout('Billing', html, csrfToken));
   });
 
+  // GET /v1/billing/checkout — redirect to login (landing page links use GET)
+  app.get('/v1/billing/checkout', async (req, reply) => {
+    const userId = req.session.userId;
+    if (!userId) {
+      return reply.redirect('/register');
+    }
+    return reply.redirect('/dashboard/billing');
+  });
+
   // Create Stripe Checkout session
   app.post('/v1/billing/checkout', { preHandler: requireAuth }, async (req, reply) => {
     if (!verifyCsrf(req)) {
