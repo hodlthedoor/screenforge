@@ -1,9 +1,13 @@
 import type {
+  AccessibilityOptions,
+  AccessibilityReport,
   AnalyticsData,
   AsyncRenderResponse,
   BatchItem,
   BatchJob,
   BatchRenderResponse,
+  ExtractOptions,
+  ExtractResult,
   ListWebhookDeliveriesOptions,
   OgOptions,
   PdfOptions,
@@ -219,6 +223,52 @@ export class ScreenForge {
     const path = query ? `/v1/webhooks/deliveries?${query}` : '/v1/webhooks/deliveries';
     const result = await this.request<{ deliveries: WebhookDelivery[] }>('GET', path);
     return result.deliveries;
+  }
+
+  async extract(options: ExtractOptions): Promise<ExtractResult> {
+    const result = await this.request<{
+      extractionId?: string;
+      data: unknown;
+      modelUsed?: string;
+      tokensUsed?: number;
+      screenshotPath?: string;
+      durationMs?: number;
+    }>('POST', '/v1/extract', options);
+
+    const extractionId = normalizeNonEmptyString(result.extractionId);
+    const modelUsed = normalizeNonEmptyString(result.modelUsed);
+    if (!extractionId || !modelUsed || typeof result.tokensUsed !== 'number' || typeof result.durationMs !== 'number') {
+      throw new ScreenForgeError('Malformed API response: expected extractionId, modelUsed, tokensUsed, and durationMs', {
+        code: 'MALFORMED_RESPONSE',
+        details: result,
+      });
+    }
+
+    return {
+      extractionId,
+      data: result.data,
+      modelUsed,
+      tokensUsed: result.tokensUsed,
+      screenshotPath: result.screenshotPath,
+      durationMs: result.durationMs,
+    };
+  }
+
+  async accessibility(url: string, options: Omit<AccessibilityOptions, 'url'> = {}): Promise<AccessibilityReport> {
+    const result = await this.request<AccessibilityReport>('POST', '/v1/accessibility', {
+      url,
+      ...options,
+    });
+
+    const auditId = normalizeNonEmptyString(result.auditId);
+    if (!auditId || !Array.isArray(result.violations) || typeof result.passesCount !== 'number') {
+      throw new ScreenForgeError('Malformed API response: expected auditId, violations array, and passesCount', {
+        code: 'MALFORMED_RESPONSE',
+        details: result,
+      });
+    }
+
+    return result;
   }
 
   private async request<T>(method: string, path: string, body?: unknown, options: RequestOptions = {}): Promise<T> {

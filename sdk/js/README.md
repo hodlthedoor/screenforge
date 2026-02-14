@@ -417,6 +417,154 @@ console.log(`Rate limit: ${usage.rateLimit.requestsPerMinute} req/min`);
 
 ---
 
+### `extract(options)` — `Promise<ExtractResult>`
+
+Extract structured data from a webpage using LLM-powered vision analysis.
+
+```ts
+// Extract from a URL
+const result = await client.extract({
+  url: 'https://example.com/product',
+  prompt: 'Extract the product title, price, and description',
+  schema: {
+    title: 'string',
+    price: 'number',
+    description: 'string'
+  },
+  model: 'sonnet', // or 'haiku'
+});
+
+console.log(result.data); // { title: "...", price: 99.99, description: "..." }
+console.log(`Model: ${result.modelUsed}, Tokens: ${result.tokensUsed}`);
+
+// Extract from an existing render job
+const extracted = await client.extract({
+  job_id: 'job_abc123',
+  prompt: 'Extract all product names from the page',
+  model: 'haiku',
+});
+```
+
+**Options (`ExtractOptions`):**
+
+| Option | Type | Required | Description |
+|--------|------|----------|-------------|
+| `prompt` | `string` | ✅ | Extraction prompt for the LLM |
+| `url` | `string` | One of `url` or `job_id` | URL to capture and extract from |
+| `job_id` | `string` | One of `url` or `job_id` | Use screenshot from existing render job |
+| `schema` | `object` | ❌ | JSON schema for structured extraction |
+| `model` | `'sonnet' \| 'haiku'` | ❌ | LLM model (default: `'sonnet'`) |
+| `screenshot_options` | `ExtractScreenshotOptions` | ❌ | Screenshot capture settings |
+
+**`ExtractScreenshotOptions`:**
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `viewport_width` | `number` | Viewport width (1-7680) |
+| `viewport_height` | `number` | Viewport height (1-4320) |
+| `format` | `'png' \| 'jpeg' \| 'webp'` | Image format |
+| `full_page` | `boolean` | Capture full page scroll |
+| `delay_ms` | `number` | Wait before capture (0-30000ms) |
+
+**Response shape (`ExtractResult`):**
+
+```ts
+{
+  extractionId: string;       // Unique extraction job ID
+  data: unknown;              // Extracted data (matches schema if provided)
+  modelUsed: string;          // LLM model used (e.g., "claude-sonnet-4.5")
+  tokensUsed: number;         // Tokens consumed
+  screenshotPath?: string;    // Screenshot storage path (if new capture)
+  durationMs: number;         // Processing time in milliseconds
+}
+```
+
+---
+
+### `accessibility(url, options?)` — `Promise<AccessibilityReport>`
+
+Run a comprehensive WCAG accessibility audit on a webpage using axe-core.
+
+```ts
+const report = await client.accessibility('https://example.com', {
+  standard: 'WCAG2AA',
+  include_screenshot: true,
+});
+
+console.log(`Audit ID: ${report.auditId}`);
+console.log(`Violations: ${report.violationsCount}`);
+console.log(`Passes: ${report.passesCount}`);
+
+for (const violation of report.violations) {
+  console.log(`\n${violation.id} (${violation.impact})`);
+  console.log(`  ${violation.description}`);
+  console.log(`  Help: ${violation.helpUrl}`);
+
+  for (const node of violation.nodes) {
+    console.log(`  - Target: ${node.target.join(', ')}`);
+    console.log(`    HTML: ${node.html}`);
+  }
+}
+
+if (report.screenshotPath) {
+  console.log(`Screenshot: ${report.screenshotPath}`);
+  console.log(`Annotated: ${report.annotatedScreenshotPath}`);
+}
+```
+
+**Options (`AccessibilityOptions`):**
+
+| Option | Type | Required | Description |
+|--------|------|----------|-------------|
+| `url` | `string` | ✅ | URL to audit |
+| `standard` | `'WCAG2A' \| 'WCAG2AA' \| 'WCAG2AAA'` | ❌ | Conformance level (default: `'WCAG2AA'`) |
+| `screenshot_options` | `AccessibilityScreenshotOptions` | ❌ | Screenshot capture settings |
+| `include_screenshot` | `boolean` | ❌ | Include clean and annotated screenshots (default: `false`) |
+
+**`AccessibilityScreenshotOptions`:**
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `viewport_width` | `number` | Viewport width (1-7680) |
+| `viewport_height` | `number` | Viewport height (1-4320) |
+| `delay_ms` | `number` | Wait before audit (0-30000ms) |
+
+**Response shape (`AccessibilityReport`):**
+
+```ts
+{
+  auditId: string;                        // Unique audit job ID
+  url: string;                            // Audited URL
+  standard: 'WCAG2A' | 'WCAG2AA' | 'WCAG2AAA';
+  violations: AccessibilityViolation[];   // Array of violations
+  passesCount: number;                    // Number of passed checks
+  violationsCount: number;                // Number of violations
+  incompleteCount: number;                // Number of incomplete checks
+  screenshotPath?: string;                // Clean screenshot path
+  annotatedScreenshotPath?: string;       // Screenshot with violations highlighted
+  durationMs: number;                     // Processing time in milliseconds
+  timestamp: string;                      // ISO 8601 timestamp
+}
+```
+
+**`AccessibilityViolation`:**
+
+```ts
+{
+  id: string;              // Rule ID (e.g., "color-contrast")
+  impact: string;          // "critical" | "serious" | "moderate" | "minor"
+  description: string;     // Human-readable description
+  helpUrl: string;         // Documentation URL
+  nodes: Array<{
+    html: string;          // Element HTML
+    target: string[];      // CSS selectors
+    failureSummary?: string; // What failed and how to fix
+  }>;
+}
+```
+
+---
+
 ### `listWebhookDeliveries(opts?)` — `Promise<WebhookDelivery[]>`
 
 Lists webhook delivery attempts for your API key, with pagination.

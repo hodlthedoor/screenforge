@@ -452,4 +452,147 @@ describe('ScreenForge client', () => {
     expect(body.fail_if_missing).toBe('#report-content');
     expect(body.block_ads).toBe(true);
   });
+
+  it('extract() posts correct payload and returns ExtractResult', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      jsonResponse({
+        extractionId: 'ext_123',
+        data: { title: 'Test Page', price: 99.99 },
+        modelUsed: 'claude-sonnet-4.5',
+        tokensUsed: 450,
+        screenshotPath: 'screenshots/test.png',
+        durationMs: 1234,
+      }),
+    );
+
+    const result = await client.extract({
+      url: 'https://example.com/product',
+      prompt: 'Extract title and price',
+      schema: { title: 'string', price: 'number' },
+      model: 'sonnet',
+    });
+
+    expect(result.extractionId).toBe('ext_123');
+    expect(result.data).toEqual({ title: 'Test Page', price: 99.99 });
+    expect(result.modelUsed).toBe('claude-sonnet-4.5');
+    expect(result.tokensUsed).toBe(450);
+    expect(result.screenshotPath).toBe('screenshots/test.png');
+    expect(result.durationMs).toBe(1234);
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(String(init.body));
+    expect(body.url).toBe('https://example.com/product');
+    expect(body.prompt).toBe('Extract title and price');
+    expect(body.schema).toEqual({ title: 'string', price: 'number' });
+    expect(body.model).toBe('sonnet');
+  });
+
+  it('extract() handles job_id flow', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      jsonResponse({
+        extractionId: 'ext_456',
+        data: { name: 'Product' },
+        modelUsed: 'claude-haiku-4.5',
+        tokensUsed: 200,
+        durationMs: 567,
+      }),
+    );
+
+    const result = await client.extract({
+      job_id: 'job_abc123',
+      prompt: 'Extract product name',
+      model: 'haiku',
+    });
+
+    expect(result.extractionId).toBe('ext_456');
+    expect(result.data).toEqual({ name: 'Product' });
+    expect(result.screenshotPath).toBeUndefined();
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(String(init.body));
+    expect(body.job_id).toBe('job_abc123');
+    expect(body.url).toBeUndefined();
+  });
+
+  it('extract() throws on malformed response', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      jsonResponse({
+        extractionId: '',
+        data: {},
+      }),
+    );
+
+    await expect(client.extract({ prompt: 'test', url: 'https://example.com' })).rejects.toMatchObject({
+      name: 'ScreenForgeError',
+      code: 'MALFORMED_RESPONSE',
+    });
+  });
+
+  it('accessibility() posts merged payload and returns AccessibilityReport', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      jsonResponse({
+        auditId: 'audit_123',
+        url: 'https://example.com',
+        standard: 'WCAG2AA',
+        violations: [
+          {
+            id: 'color-contrast',
+            impact: 'serious',
+            description: 'Elements must meet minimum color contrast ratio',
+            helpUrl: 'https://dequeuniversity.com/rules/axe/4.0/color-contrast',
+            nodes: [
+              {
+                html: '<button>Submit</button>',
+                target: ['#submit-btn'],
+                failureSummary: 'Fix contrast ratio',
+              },
+            ],
+          },
+        ],
+        passesCount: 42,
+        violationsCount: 1,
+        incompleteCount: 0,
+        screenshotPath: 'accessibility/screenshot.png',
+        annotatedScreenshotPath: 'accessibility/annotated.png',
+        durationMs: 3456,
+        timestamp: '2026-02-14T12:00:00Z',
+      }),
+    );
+
+    const result = await client.accessibility('https://example.com', {
+      standard: 'WCAG2AA',
+      include_screenshot: true,
+    });
+
+    expect(result.auditId).toBe('audit_123');
+    expect(result.url).toBe('https://example.com');
+    expect(result.standard).toBe('WCAG2AA');
+    expect(result.violations).toHaveLength(1);
+    expect(result.violations[0].id).toBe('color-contrast');
+    expect(result.passesCount).toBe(42);
+    expect(result.violationsCount).toBe(1);
+    expect(result.incompleteCount).toBe(0);
+    expect(result.screenshotPath).toBe('accessibility/screenshot.png');
+    expect(result.annotatedScreenshotPath).toBe('accessibility/annotated.png');
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(String(init.body));
+    expect(body.url).toBe('https://example.com');
+    expect(body.standard).toBe('WCAG2AA');
+    expect(body.include_screenshot).toBe(true);
+  });
+
+  it('accessibility() throws on malformed response', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      jsonResponse({
+        auditId: '',
+        violations: 'not-an-array',
+      }),
+    );
+
+    await expect(client.accessibility('https://example.com')).rejects.toMatchObject({
+      name: 'ScreenForgeError',
+      code: 'MALFORMED_RESPONSE',
+    });
+  });
 });

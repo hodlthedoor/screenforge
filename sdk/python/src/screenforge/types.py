@@ -189,3 +189,106 @@ class BatchRenderResponse:
 
     batchId: str
     jobs: List[Dict[str, str]]
+
+
+# Extract API types
+
+
+class ExtractScreenshotOptions(TypedDict, total=False):
+    """Screenshot options for extraction."""
+
+    viewport_width: int
+    viewport_height: int
+    format: Literal["png", "jpeg", "webp"]
+    full_page: bool
+    delay_ms: int
+
+
+class _ExtractOptionsRequired(TypedDict):
+    """Required fields for ExtractOptions."""
+
+    prompt: str
+
+
+class ExtractOptions(_ExtractOptionsRequired, total=False):
+    """Options for LLM-powered data extraction. `prompt` is required."""
+
+    url: str
+    job_id: str
+    schema: Dict[str, Any]
+    model: Literal["sonnet", "haiku"]
+    screenshot_options: ExtractScreenshotOptions
+
+
+@dataclass
+class ExtractResult:
+    """Result from extraction request."""
+
+    extractionId: str
+    data: Any
+    modelUsed: str
+    tokensUsed: int
+    durationMs: int
+    screenshotPath: Optional[str] = None
+
+
+# Accessibility API types
+
+
+class AccessibilityScreenshotOptions(TypedDict, total=False):
+    """Screenshot options for accessibility audit."""
+
+    viewport_width: int
+    viewport_height: int
+    delay_ms: int
+
+
+class _AccessibilityOptionsRequired(TypedDict):
+    """Required fields for AccessibilityOptions."""
+
+    url: str
+
+
+class AccessibilityOptions(_AccessibilityOptionsRequired, total=False):
+    """Options for WCAG accessibility audit. `url` is required."""
+
+    standard: Literal["WCAG2A", "WCAG2AA", "WCAG2AAA"]
+    screenshot_options: AccessibilityScreenshotOptions
+    include_screenshot: bool
+
+
+@dataclass
+class AccessibilityViolationNode:
+    """Single node with accessibility violation."""
+
+    html: str
+    target: List[str]
+    failureSummary: Optional[str] = None
+
+
+@dataclass
+class AccessibilityViolation:
+    """Accessibility violation details."""
+
+    id: str
+    impact: str
+    description: str
+    helpUrl: str
+    nodes: List[AccessibilityViolationNode]
+
+
+@dataclass
+class AccessibilityReport:
+    """WCAG accessibility audit report."""
+
+    auditId: str
+    url: str
+    standard: Literal["WCAG2A", "WCAG2AA", "WCAG2AAA"]
+    violations: List[AccessibilityViolation]
+    passesCount: int
+    violationsCount: int
+    incompleteCount: int
+    durationMs: int
+    timestamp: str
+    screenshotPath: Optional[str] = None
+    annotatedScreenshotPath: Optional[str] = None

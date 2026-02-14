@@ -19,9 +19,17 @@ from .types import (
     UsageStats,
     AsyncRenderResponse,
     BatchRenderResponse,
+    ExtractOptions,
+    ExtractResult,
+    ExtractScreenshotOptions,
+    AccessibilityOptions,
+    AccessibilityReport,
+    AccessibilityScreenshotOptions,
+    AccessibilityViolation,
+    AccessibilityViolationNode,
 )
 
-__version__ = "1.2.0"
+__version__ = "1.4.0"
 
 __all__ = [
     # Clients
@@ -44,4 +52,12 @@ __all__ = [
     "UsageStats",
     "AsyncRenderResponse",
     "BatchRenderResponse",
+    "ExtractOptions",
+    "ExtractResult",
+    "ExtractScreenshotOptions",
+    "AccessibilityOptions",
+    "AccessibilityReport",
+    "AccessibilityScreenshotOptions",
+    "AccessibilityViolation",
+    "AccessibilityViolationNode",
 ]

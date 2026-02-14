@@ -272,6 +272,77 @@ print(f"Remaining: {usage.usage['remaining']}")
 print(f"Rate limit: {usage.rateLimit['requestsPerMinute']} req/min")
 ```
 
+##### `extract(options: ExtractOptions) -> ExtractResult`
+
+Extract structured data from a webpage using LLM-powered vision analysis.
+
+```python
+# Extract from a URL
+result = client.extract({
+    "url": "https://example.com/product",
+    "prompt": "Extract the product title, price, and description",
+    "schema": {
+        "title": "string",
+        "price": "number",
+        "description": "string"
+    },
+    "model": "sonnet"
+})
+
+print(result.data)  # {"title": "...", "price": 99.99, "description": "..."}
+print(f"Model: {result.modelUsed}, Tokens: {result.tokensUsed}")
+
+# Extract from an existing render job
+extracted = client.extract({
+    "job_id": "job_abc123",
+    "prompt": "Extract all product names from the page",
+    "model": "haiku"
+})
+
+# Async version
+async with AsyncScreenForgeClient(api_key="your-api-key") as client:
+    result = await client.extract({
+        "url": "https://example.com",
+        "prompt": "Extract page title"
+    })
+    print(result.data)
+```
+
+##### `accessibility(url: str, **options) -> AccessibilityReport`
+
+Run a comprehensive WCAG accessibility audit on a webpage using axe-core.
+
+```python
+# Run accessibility audit
+report = client.accessibility(
+    "https://example.com",
+    standard="WCAG2AA",
+    include_screenshot=True
+)
+
+print(f"Audit ID: {report.auditId}")
+print(f"Violations: {report.violationsCount}")
+print(f"Passes: {report.passesCount}")
+
+for violation in report.violations:
+    print(f"\n{violation.id} ({violation.impact})")
+    print(f"  {violation.description}")
+    print(f"  Help: {violation.helpUrl}")
+
+    for node in violation.nodes:
+        print(f"  - Target: {', '.join(node.target)}")
+        print(f"    HTML: {node.html}")
+
+if report.screenshotPath:
+    print(f"Screenshot: {report.screenshotPath}")
+    print(f"Annotated: {report.annotatedScreenshotPath}")
+
+# Async version
+async with AsyncScreenForgeClient(api_key="your-api-key") as client:
+    report = await client.accessibility("https://example.com")
+    print(f"Violations: {report.violationsCount}")
+```
+
 ## Error Handling
 
 The SDK raises typed exceptions for different error scenarios:

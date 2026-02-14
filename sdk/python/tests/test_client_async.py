@@ -3,7 +3,7 @@
 import json
 import httpx
 import pytest
-from screenforge import AsyncScreenForgeClient, ValidationError
+from screenforge import AsyncScreenForgeClient, ValidationError, ScreenForgeError
 
 
 @pytest.mark.asyncio
@@ -115,4 +115,124 @@ async def test_async_error_handling():
     with pytest.raises(ValidationError):
         await client.screenshot("https://example.com")
 
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_async_extract():
+    """Test async extract() method."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v1/extract"
+        body = json.loads(request.content)
+        assert body["url"] == "https://example.com/product"
+        assert body["prompt"] == "Extract title and price"
+        return httpx.Response(
+            200,
+            json={
+                "extractionId": "ext_async_123",
+                "data": {"title": "Async Product", "price": 49.99},
+                "modelUsed": "claude-sonnet-4.5",
+                "tokensUsed": 350,
+                "screenshotPath": "screenshots/async.png",
+                "durationMs": 987,
+            },
+        )
+
+    transport = httpx.MockTransport(handler)
+    client = AsyncScreenForgeClient(api_key="test-key", transport=transport)
+
+    result = await client.extract({
+        "url": "https://example.com/product",
+        "prompt": "Extract title and price",
+    })
+
+    assert result.extractionId == "ext_async_123"
+    assert result.data == {"title": "Async Product", "price": 49.99}
+    assert result.modelUsed == "claude-sonnet-4.5"
+    assert result.tokensUsed == 350
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_async_extract_malformed():
+    """Test async extract() with malformed response."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"extractionId": "", "data": {}})
+
+    transport = httpx.MockTransport(handler)
+    client = AsyncScreenForgeClient(api_key="test-key", transport=transport)
+
+    with pytest.raises(ScreenForgeError) as exc_info:
+        await client.extract({"url": "https://example.com", "prompt": "test"})
+
+    assert exc_info.value.code == "MALFORMED_RESPONSE"
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_async_accessibility():
+    """Test async accessibility() method."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v1/accessibility"
+        body = json.loads(request.content)
+        assert body["url"] == "https://example.com"
+        return httpx.Response(
+            200,
+            json={
+                "auditId": "audit_async_123",
+                "url": "https://example.com",
+                "standard": "WCAG2AA",
+                "violations": [
+                    {
+                        "id": "alt-text",
+                        "impact": "critical",
+                        "description": "Images must have alt text",
+                        "helpUrl": "https://dequeuniversity.com/rules/axe/4.0/image-alt",
+                        "nodes": [
+                            {
+                                "html": "<img src='logo.png'>",
+                                "target": ["#logo"],
+                                "failureSummary": "Add alt attribute",
+                            },
+                        ],
+                    },
+                ],
+                "passesCount": 35,
+                "violationsCount": 1,
+                "incompleteCount": 2,
+                "durationMs": 2345,
+                "timestamp": "2026-02-14T12:00:00Z",
+            },
+        )
+
+    transport = httpx.MockTransport(handler)
+    client = AsyncScreenForgeClient(api_key="test-key", transport=transport)
+
+    result = await client.accessibility("https://example.com")
+
+    assert result.auditId == "audit_async_123"
+    assert result.url == "https://example.com"
+    assert len(result.violations) == 1
+    assert result.violations[0].id == "alt-text"
+    assert result.passesCount == 35
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_async_accessibility_malformed():
+    """Test async accessibility() with malformed response."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"auditId": "", "violations": "not-array"})
+
+    transport = httpx.MockTransport(handler)
+    client = AsyncScreenForgeClient(api_key="test-key", transport=transport)
+
+    with pytest.raises(ScreenForgeError) as exc_info:
+        await client.accessibility("https://example.com")
+
+    assert exc_info.value.code == "MALFORMED_RESPONSE"
     await client.close()

@@ -198,3 +198,74 @@ export interface BatchRenderResponse {
   batchId: string;
   jobs: Array<{ jobId: string; pollUrl: string }>;
 }
+
+// Extract API types
+
+export interface ExtractScreenshotOptions {
+  viewport_width?: number;
+  viewport_height?: number;
+  format?: 'png' | 'jpeg' | 'webp';
+  full_page?: boolean;
+  delay_ms?: number;
+}
+
+export interface ExtractOptions {
+  url?: string;
+  job_id?: string;
+  prompt: string;
+  schema?: Record<string, unknown>;
+  model?: 'sonnet' | 'haiku';
+  screenshot_options?: ExtractScreenshotOptions;
+}
+
+export interface ExtractResult {
+  extractionId: string;
+  data: unknown;
+  modelUsed: string;
+  tokensUsed: number;
+  screenshotPath?: string;
+  durationMs: number;
+}
+
+// Accessibility API types
+
+export interface AccessibilityScreenshotOptions {
+  viewport_width?: number;
+  viewport_height?: number;
+  delay_ms?: number;
+}
+
+export interface AccessibilityOptions {
+  url: string;
+  standard?: 'WCAG2A' | 'WCAG2AA' | 'WCAG2AAA';
+  screenshot_options?: AccessibilityScreenshotOptions;
+  include_screenshot?: boolean;
+}
+
+export interface AccessibilityViolationNode {
+  html: string;
+  target: string[];
+  failureSummary?: string;
+}
+
+export interface AccessibilityViolation {
+  id: string;
+  impact: string;
+  description: string;
+  helpUrl: string;
+  nodes: AccessibilityViolationNode[];
+}
+
+export interface AccessibilityReport {
+  auditId: string;
+  url: string;
+  standard: 'WCAG2A' | 'WCAG2AA' | 'WCAG2AAA';
+  violations: AccessibilityViolation[];
+  passesCount: number;
+  violationsCount: number;
+  incompleteCount: number;
+  screenshotPath?: string;
+  annotatedScreenshotPath?: string;
+  durationMs: number;
+  timestamp: string;
+}

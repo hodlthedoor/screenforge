@@ -16,11 +16,17 @@ from .exceptions import (
     ValidationError,
 )
 from .types import (
+    AccessibilityOptions,
+    AccessibilityReport,
+    AccessibilityViolation,
+    AccessibilityViolationNode,
     AsyncRenderResponse,
     BatchItem,
     BatchJob,
     BatchJobItem,
     BatchRenderResponse,
+    ExtractOptions,
+    ExtractResult,
     OgOptions,
     PdfOptions,
     RenderJob,
@@ -232,6 +238,99 @@ class ScreenForgeClient:
         """
         result = self._request("GET", "/v1/usage")
         return UsageStats(**result)
+
+    def extract(self, options: ExtractOptions) -> ExtractResult:
+        """Extract structured data from a webpage using LLM.
+
+        Args:
+            options: Extraction options including prompt, URL/job_id, schema, model
+
+        Returns:
+            ExtractResult with extracted data and metadata
+        """
+        result = self._request("POST", "/v1/extract", options)
+
+        extraction_id = self._normalize_non_empty_string(result.get("extractionId"))
+        model_used = self._normalize_non_empty_string(result.get("modelUsed"))
+        tokens_used = result.get("tokensUsed")
+        duration_ms = result.get("durationMs")
+
+        if (
+            not extraction_id
+            or not model_used
+            or not isinstance(tokens_used, int)
+            or not isinstance(duration_ms, int)
+        ):
+            raise ScreenForgeError(
+                "Malformed API response: expected extractionId, modelUsed, tokensUsed, and durationMs",
+                code="MALFORMED_RESPONSE",
+                details=result,
+            )
+
+        return ExtractResult(
+            extractionId=extraction_id,
+            data=result.get("data"),
+            modelUsed=model_used,
+            tokensUsed=tokens_used,
+            screenshotPath=result.get("screenshotPath"),
+            durationMs=duration_ms,
+        )
+
+    def accessibility(self, url: str, **options) -> AccessibilityReport:
+        """Run WCAG accessibility audit on a webpage.
+
+        Args:
+            url: URL to audit
+            **options: Additional options (standard, screenshot_options, include_screenshot)
+
+        Returns:
+            AccessibilityReport with violations and metadata
+        """
+        body: AccessibilityOptions = {"url": url, **options}  # type: ignore
+        result = self._request("POST", "/v1/accessibility", body)
+
+        audit_id = self._normalize_non_empty_string(result.get("auditId"))
+        violations_data = result.get("violations")
+        passes_count = result.get("passesCount")
+
+        if not audit_id or not isinstance(violations_data, list) or not isinstance(passes_count, int):
+            raise ScreenForgeError(
+                "Malformed API response: expected auditId, violations array, and passesCount",
+                code="MALFORMED_RESPONSE",
+                details=result,
+            )
+
+        violations = [
+            AccessibilityViolation(
+                id=v["id"],
+                impact=v["impact"],
+                description=v["description"],
+                helpUrl=v["helpUrl"],
+                nodes=[
+                    AccessibilityViolationNode(
+                        html=n["html"],
+                        target=n["target"],
+                        failureSummary=n.get("failureSummary"),
+                    )
+                    for n in v.get("nodes", [])
+                ],
+            )
+            for v in violations_data
+        ]
+
+        return AccessibilityReport(
+            auditId=audit_id,
+            url=result["url"],
+            standard=result["standard"],
+            violations=violations,
+            passesCount=passes_count,
+            violationsCount=result["violationsCount"],
+            incompleteCount=result["incompleteCount"],
+            durationMs=result["durationMs"],
+            timestamp=result["timestamp"],
+            screenshotPath=result.get("screenshotPath"),
+            annotatedScreenshotPath=result.get("annotatedScreenshotPath"),
+        )
 
     def _normalize_async_response(self, result: Dict[str, Any]) -> AsyncRenderResponse:
         """Normalize async render response."""
@@ -663,6 +762,99 @@ class AsyncScreenForgeClient:
         """
         result = await self._request("GET", "/v1/usage")
         return UsageStats(**result)
+
+    async def extract(self, options: ExtractOptions) -> ExtractResult:
+        """Extract structured data from a webpage using LLM (async).
+
+        Args:
+            options: Extraction options including prompt, URL/job_id, schema, model
+
+        Returns:
+            ExtractResult with extracted data and metadata
+        """
+        result = await self._request("POST", "/v1/extract", options)
+
+        extraction_id = self._normalize_non_empty_string(result.get("extractionId"))
+        model_used = self._normalize_non_empty_string(result.get("modelUsed"))
+        tokens_used = result.get("tokensUsed")
+        duration_ms = result.get("durationMs")
+
+        if (
+            not extraction_id
+            or not model_used
+            or not isinstance(tokens_used, int)
+            or not isinstance(duration_ms, int)
+        ):
+            raise ScreenForgeError(
+                "Malformed API response: expected extractionId, modelUsed, tokensUsed, and durationMs",
+                code="MALFORMED_RESPONSE",
+                details=result,
+            )
+
+        return ExtractResult(
+            extractionId=extraction_id,
+            data=result.get("data"),
+            modelUsed=model_used,
+            tokensUsed=tokens_used,
+            screenshotPath=result.get("screenshotPath"),
+            durationMs=duration_ms,
+        )
+
+    async def accessibility(self, url: str, **options) -> AccessibilityReport:
+        """Run WCAG accessibility audit on a webpage (async).
+
+        Args:
+            url: URL to audit
+            **options: Additional options (standard, screenshot_options, include_screenshot)
+
+        Returns:
+            AccessibilityReport with violations and metadata
+        """
+        body: AccessibilityOptions = {"url": url, **options}  # type: ignore
+        result = await self._request("POST", "/v1/accessibility", body)
+
+        audit_id = self._normalize_non_empty_string(result.get("auditId"))
+        violations_data = result.get("violations")
+        passes_count = result.get("passesCount")
+
+        if not audit_id or not isinstance(violations_data, list) or not isinstance(passes_count, int):
+            raise ScreenForgeError(
+                "Malformed API response: expected auditId, violations array, and passesCount",
+                code="MALFORMED_RESPONSE",
+                details=result,
+            )
+
+        violations = [
+            AccessibilityViolation(
+                id=v["id"],
+                impact=v["impact"],
+                description=v["description"],
+                helpUrl=v["helpUrl"],
+                nodes=[
+                    AccessibilityViolationNode(
+                        html=n["html"],
+                        target=n["target"],
+                        failureSummary=n.get("failureSummary"),
+                    )
+                    for n in v.get("nodes", [])
+                ],
+            )
+            for v in violations_data
+        ]
+
+        return AccessibilityReport(
+            auditId=audit_id,
+            url=result["url"],
+            standard=result["standard"],
+            violations=violations,
+            passesCount=passes_count,
+            violationsCount=result["violationsCount"],
+            incompleteCount=result["incompleteCount"],
+            durationMs=result["durationMs"],
+            timestamp=result["timestamp"],
+            screenshotPath=result.get("screenshotPath"),
+            annotatedScreenshotPath=result.get("annotatedScreenshotPath"),
+        )
 
     def _normalize_async_response(self, result: Dict[str, Any]) -> AsyncRenderResponse:
         """Normalize async render response."""

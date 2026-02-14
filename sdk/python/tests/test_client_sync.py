@@ -362,3 +362,150 @@ def test_pdf_with_rendering_options():
         "block_ads": True,
     })
     assert result == b"fake-pdf-data"
+
+
+def test_extract_with_url():
+    """Test extract() with URL and schema."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v1/extract"
+        body = json.loads(request.content)
+        assert body["url"] == "https://example.com/product"
+        assert body["prompt"] == "Extract title and price"
+        assert body["schema"] == {"title": "string", "price": "number"}
+        assert body["model"] == "sonnet"
+        return httpx.Response(200, json={
+            "extractionId": "ext_123",
+            "data": {"title": "Test Product", "price": 99.99},
+            "modelUsed": "claude-sonnet-4.5",
+            "tokensUsed": 450,
+            "screenshotPath": "screenshots/test.png",
+            "durationMs": 1234,
+        })
+
+    transport = httpx.MockTransport(handler)
+    client = ScreenForgeClient(api_key="test-key", transport=transport)
+
+    result = client.extract({
+        "url": "https://example.com/product",
+        "prompt": "Extract title and price",
+        "schema": {"title": "string", "price": "number"},
+        "model": "sonnet",
+    })
+
+    assert result.extractionId == "ext_123"
+    assert result.data == {"title": "Test Product", "price": 99.99}
+    assert result.modelUsed == "claude-sonnet-4.5"
+    assert result.tokensUsed == 450
+    assert result.screenshotPath == "screenshots/test.png"
+    assert result.durationMs == 1234
+
+
+def test_extract_with_job_id():
+    """Test extract() with job_id."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        assert body["job_id"] == "job_abc123"
+        assert body["prompt"] == "Extract product name"
+        return httpx.Response(200, json={
+            "extractionId": "ext_456",
+            "data": {"name": "Product"},
+            "modelUsed": "claude-haiku-4.5",
+            "tokensUsed": 200,
+            "durationMs": 567,
+        })
+
+    transport = httpx.MockTransport(handler)
+    client = ScreenForgeClient(api_key="test-key", transport=transport)
+
+    result = client.extract({
+        "job_id": "job_abc123",
+        "prompt": "Extract product name",
+    })
+
+    assert result.extractionId == "ext_456"
+    assert result.screenshotPath is None
+
+
+def test_extract_malformed_response():
+    """Test extract() with malformed response."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={
+            "extractionId": "",
+            "data": {},
+        })
+
+    transport = httpx.MockTransport(handler)
+    client = ScreenForgeClient(api_key="test-key", transport=transport)
+
+    with pytest.raises(ScreenForgeError) as exc_info:
+        client.extract({"url": "https://example.com", "prompt": "test"})
+
+    assert exc_info.value.code == "MALFORMED_RESPONSE"
+
+
+def test_accessibility_audit():
+    """Test accessibility() with full report."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v1/accessibility"
+        body = json.loads(request.content)
+        assert body["url"] == "https://example.com"
+        assert body["standard"] == "WCAG2AA"
+        assert body["include_screenshot"] is True
+        return httpx.Response(200, json={
+            "auditId": "audit_123",
+            "url": "https://example.com",
+            "standard": "WCAG2AA",
+            "violations": [
+                {
+                    "id": "color-contrast",
+                    "impact": "serious",
+                    "description": "Elements must meet minimum color contrast ratio",
+                    "helpUrl": "https://dequeuniversity.com/rules/axe/4.0/color-contrast",
+                    "nodes": [
+                        {
+                            "html": "<button>Submit</button>",
+                            "target": ["#submit-btn"],
+                            "failureSummary": "Fix contrast ratio",
+                        },
+                    ],
+                },
+            ],
+            "passesCount": 42,
+            "violationsCount": 1,
+            "incompleteCount": 0,
+            "screenshotPath": "accessibility/screenshot.png",
+            "annotatedScreenshotPath": "accessibility/annotated.png",
+            "durationMs": 3456,
+            "timestamp": "2026-02-14T12:00:00Z",
+        })
+
+    transport = httpx.MockTransport(handler)
+    client = ScreenForgeClient(api_key="test-key", transport=transport)
+
+    result = client.accessibility("https://example.com", standard="WCAG2AA", include_screenshot=True)
+
+    assert result.auditId == "audit_123"
+    assert result.url == "https://example.com"
+    assert result.standard == "WCAG2AA"
+    assert len(result.violations) == 1
+    assert result.violations[0].id == "color-contrast"
+    assert result.passesCount == 42
+    assert result.violationsCount == 1
+    assert result.screenshotPath == "accessibility/screenshot.png"
+
+
+def test_accessibility_malformed_response():
+    """Test accessibility() with malformed response."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={
+            "auditId": "",
+            "violations": "not-an-array",
+        })
+
+    transport = httpx.MockTransport(handler)
+    client = ScreenForgeClient(api_key="test-key", transport=transport)
+
+    with pytest.raises(ScreenForgeError) as exc_info:
+        client.accessibility("https://example.com")
+
+    assert exc_info.value.code == "MALFORMED_RESPONSE"

@@ -24,4 +24,12 @@ export type {
   ListWebhookDeliveriesOptions,
   AsyncRenderResponse,
   BatchRenderResponse,
+  ExtractOptions,
+  ExtractResult,
+  ExtractScreenshotOptions,
+  AccessibilityOptions,
+  AccessibilityReport,
+  AccessibilityScreenshotOptions,
+  AccessibilityViolation,
+  AccessibilityViolationNode,
 } from './types';
