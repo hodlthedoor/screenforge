@@ -51,9 +51,8 @@ export async function executeActions(
             // Scroll to coordinates
             await page.evaluate(
               ({ x, y }) => {
-                // eslint-disable-next-line no-undef
-                // @ts-expect-error - window is available in browser context
-                window.scrollTo(x, y);
+                // @ts-expect-error - window exists in browser context
+                window.scrollTo(x, y); // eslint-disable-line no-undef
               },
               { x: action.x, y: action.y },
             );

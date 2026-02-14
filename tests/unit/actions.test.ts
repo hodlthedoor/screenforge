@@ -127,9 +127,7 @@ describe('executeActions', { timeout: 60_000 }, () => {
     await executeActions(page, actions);
 
     const scrollY = await page.evaluate(() => {
-      // eslint-disable-next-line no-undef
-      // @ts-expect-error - window is available in browser context
-      return window.scrollY;
+        return window.scrollY; // eslint-disable-line no-undef
     });
     expect(scrollY).toBeGreaterThan(0);
   });
