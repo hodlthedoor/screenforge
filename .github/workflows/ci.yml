@@ -39,6 +39,7 @@ jobs:
       DATABASE_URL: postgresql://screenforge:screenforge@127.0.0.1:5432/screenforge
       API_KEY_SALT: ci-test-salt-must-be-16-chars-long
       SESSION_SECRET: ci-test-session-secret-must-be-32-chars-long!!
+      ALLOW_PRIVATE_URLS: 'true'
       NODE_ENV: test
     steps:
       - uses: actions/checkout@v4
