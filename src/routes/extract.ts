@@ -345,21 +345,21 @@ export async function extractRoutes(app: FastifyInstance) {
 function formatExtraction(row: Record<string, unknown>) {
   return {
     id: row.id,
-    sourceType: row.source_type,
-    sourceUrl: row.source_url,
-    sourceJobId: row.source_job_id,
+    source_type: row.source_type,
+    source_url: row.source_url,
+    source_job_id: row.source_job_id,
     prompt: row.prompt,
-    responseSchema: row.response_schema,
+    response_schema: row.response_schema,
     model: row.model,
     data: row.extracted_data,
-    tokensUsed: row.tokens_used,
-    screenshotPath: row.screenshot_path,
+    tokens_used: row.tokens_used,
+    screenshot_path: row.screenshot_path,
     status: row.status,
     error: row.error,
-    durationMs: row.duration_ms,
+    duration_ms: row.duration_ms,
     byok: row.byok,
-    createdAt: row.created_at,
-    completedAt: row.completed_at,
+    created_at: row.created_at,
+    completed_at: row.completed_at,
   };
 }
 
