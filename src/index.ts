@@ -19,6 +19,7 @@ import { signedRoutes } from './routes/signed.js';
 import { devicesRoutes } from './routes/devices.js';
 import { requestIdHook } from './security/request-id.js';
 import { requestTimeoutHook, requestTimeoutCleanupHook } from './renderer/timeout.js';
+import { ActionError } from './renderer/actions.js';
 import { getQueueMetrics, createWorker, type RenderJobData, type RenderJobResult } from './queue/render-queue.js';
 import { closePool } from './db/index.js';
 import { closeQueue } from './queue/render-queue.js';
@@ -261,6 +262,18 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
 
   app.setErrorHandler((error: { message: string; statusCode?: number; code?: string; validation?: unknown }, req, reply) => {
     const statusCode = error.statusCode ?? 500;
+
+    // Handle ActionError (pre-capture action failure)
+    if (error instanceof ActionError) {
+      const response = buildErrorResponse('ACTION_FAILED', req, {
+        message: error.message,
+        details: {
+          actionIndex: error.actionIndex,
+          actionType: error.actionType,
+        },
+      });
+      return reply.status(400).send(response);
+    }
 
     // Handle Fastify validation errors
     if (statusCode === 400 && error.validation) {

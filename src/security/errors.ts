@@ -4,6 +4,7 @@ export const ERROR_CODES = {
   VALIDATION_ERROR: { status: 400, message: 'Validation failed' },
   INVALID_URL: { status: 400, message: 'Invalid or blocked URL' },
   SSRF_BLOCKED: { status: 400, message: 'URLs targeting private networks are not allowed' },
+  ACTION_FAILED: { status: 400, message: 'Pre-capture action failed' },
   AUTH_REQUIRED: { status: 401, message: 'API key required' },
   INVALID_API_KEY: { status: 401, message: 'Invalid API key' },
   INVALID_ADMIN_KEY: { status: 401, message: 'Invalid admin API key' },

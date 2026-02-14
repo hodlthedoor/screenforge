@@ -116,6 +116,17 @@ export const waitStrategySchema = z.discriminatedUnion('type', [
 
 export type WaitStrategy = z.infer<typeof waitStrategySchema>;
 
+// Pre-capture interaction actions
+export const actionSchema = z.object({
+  type: z.enum(['click', 'scroll', 'type', 'hover', 'wait']),
+  selector: z.string().optional(),
+  value: z.string().optional(),
+  x: z.number().optional(),
+  y: z.number().optional(),
+});
+
+export type Action = z.infer<typeof actionSchema>;
+
 const screenshotBaseOptionsSchema = z.object({
   viewport: viewportSchema.default({ width: 1920, height: 1080 }),
   format: z.enum(['png', 'jpeg']).default('png'),
@@ -133,6 +144,7 @@ const screenshotBaseOptionsSchema = z.object({
   hasTouch: z.boolean().optional(),
   cache_ttl: z.number().int().min(0).max(2592000).optional(),
   cache_key: z.string().max(128).optional(),
+  actions: z.array(actionSchema).max(10).optional(),
 });
 
 export const screenshotOptionsSchema = z.object({
@@ -202,6 +214,7 @@ const pdfBaseOptionsSchema = z.object({
   hasTouch: z.boolean().optional(),
   cache_ttl: z.number().int().min(0).max(2592000).optional(),
   cache_key: z.string().max(128).optional(),
+  actions: z.array(actionSchema).max(10).optional(),
 });
 
 export const pdfOptionsSchema = z.object({

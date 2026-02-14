@@ -2,6 +2,7 @@ import type { BrowserPool } from './browser-pool.js';
 import type { PdfOptions, RenderResult } from './schemas.js';
 import { applyPreNavigationFilters, applyPostNavigationFilters } from './filters.js';
 import { applyWaitStrategy } from './wait.js';
+import { executeActions } from './actions.js';
 import { toPlaywrightCookies } from '../security/sanitize.js';
 import { getConfig } from '../config/index.js';
 
@@ -65,6 +66,8 @@ export async function renderPdf(pool: BrowserPool, options: PdfOptions, timeoutM
     await applyPostNavigationFilters(page, options);
 
     await applyWaitStrategy(page, options.wait, options.waitFor, timeoutMs);
+
+    await executeActions(page, options.actions);
 
     const size = FORMAT_SIZE[options.format];
 

@@ -21,6 +21,10 @@ const ERROR_DOCUMENTATION: Record<string, Omit<ErrorCodeDoc, 'code' | 'http_stat
     description: 'URLs targeting private networks (localhost, 127.0.0.1, 192.168.x.x, etc.) are not allowed.',
     retry_guidance: 'Use a publicly accessible URL or enable ALLOW_PRIVATE_URLS if authorized.',
   },
+  ACTION_FAILED: {
+    description: 'A pre-capture interaction action failed (e.g., selector not found, timeout). Check details.actionIndex and details.actionType for the failing action.',
+    retry_guidance: 'Fix the action (check selector validity, increase timeouts) or remove the failing action.',
+  },
   AUTH_REQUIRED: {
     description: 'API key required for this endpoint.',
     retry_guidance: 'Include a valid API key in the Authorization or X-Api-Key header.',
