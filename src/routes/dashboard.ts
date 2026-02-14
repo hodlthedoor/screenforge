@@ -338,12 +338,14 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
       </div>
       <div class="card">
         <h2 style="margin-bottom:16px">Daily Renders (Last 30 Days)</h2>
-        <canvas id="dailyChart" height="250"></canvas>
+        <div style="position:relative;height:250px">
+          <canvas id="dailyChart"></canvas>
+        </div>
       </div>
       <div class="card">
         <h2 style="margin-bottom:16px">Render Type Breakdown</h2>
-        <div style="max-width:400px;margin:0 auto">
-          <canvas id="typeChart" height="300"></canvas>
+        <div style="max-width:400px;margin:0 auto;position:relative;height:300px">
+          <canvas id="typeChart"></canvas>
         </div>
       </div>
       <div class="card">
@@ -375,6 +377,7 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
             },
             options: {
               responsive: true,
+              maintainAspectRatio: false,
               plugins: { legend: { display: false } },
               scales: {
                 x: { grid: { color: '#1e1e2e' }, ticks: { color: '#8888a0' } },
@@ -397,6 +400,7 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
             },
             options: {
               responsive: true,
+              maintainAspectRatio: false,
               plugins: {
                 legend: { labels: { color: '#e0e0e8' } }
               }
@@ -947,9 +951,10 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
           if (!canvas) return null;
           const dpr = window.devicePixelRatio || 1;
           const rect = canvas.parentElement.getBoundingClientRect();
+          canvas.style.width = rect.width + 'px';
+          canvas.style.height = canvas.getAttribute('height') + 'px';
           canvas.width = rect.width * dpr;
           canvas.height = canvas.getAttribute('height') * dpr;
-          canvas.style.height = canvas.getAttribute('height') + 'px';
           const ctx = canvas.getContext('2d');
           ctx.scale(dpr, dpr);
           return { canvas, ctx, W: rect.width, H: parseInt(canvas.getAttribute('height')) };
