@@ -1,9 +1,13 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { BrowserPool } from '../../src/renderer/browser-pool.js';
-import { screenshotOptionsSchema, pdfOptionsSchema } from '../../src/renderer/schemas.js';
+import { screenshotOptionsSchema, pdfOptionsSchema, BLOCKABLE_RESOURCE_TYPES } from '../../src/renderer/schemas.js';
 import { applyPreNavigationFilters } from '../../src/renderer/filters.js';
 
 describe('resource blocking schema validation', () => {
+  it('exports all blockable resource types as a constant', () => {
+    expect(BLOCKABLE_RESOURCE_TYPES).toEqual(['image', 'stylesheet', 'font', 'script', 'media', 'other']);
+  });
+
   describe('screenshotOptionsSchema', () => {
     it('accepts block_resources array with valid types', () => {
       const result = screenshotOptionsSchema.safeParse({
@@ -48,13 +52,16 @@ describe('resource blocking schema validation', () => {
       expect(result.success).toBe(false);
     });
 
-    it('accepts duplicate resource types (deduplicated)', () => {
+    it('accepts duplicate resource types within max limit', () => {
       const result = screenshotOptionsSchema.safeParse({
         url: 'https://example.com',
         block_resources: ['image', 'image', 'stylesheet'],
       });
       expect(result.success).toBe(true);
-      // Note: Zod doesn't auto-deduplicate, but the implementation should handle this
+      if (result.success) {
+        // Duplicates pass validation — harmless since includes() matches the first occurrence
+        expect(result.data.block_resources).toEqual(['image', 'image', 'stylesheet']);
+      }
     });
   });
 
@@ -172,6 +179,29 @@ describe('resource blocking behavior', () => {
     await context.close();
 
     expect(requestFailed).toBe(false);
+  });
+
+  it('works alongside block_ads without interference', async () => {
+    const context = await pool.acquire();
+    const page = await context.newPage();
+
+    const blockedRequests: Array<{ type: string; url: string }> = [];
+
+    page.on('requestfailed', (req) => {
+      blockedRequests.push({ type: req.resourceType(), url: req.url() });
+    });
+
+    // Enable both ad blocking and resource blocking
+    await applyPreNavigationFilters(page, { block_ads: true, block_resources: ['image'] });
+
+    await page.setContent('<html><body><img src="https://via.placeholder.com/150" /></body></html>');
+
+    await page.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => {});
+
+    await context.close();
+
+    // Image should be blocked by resource type blocking
+    expect(blockedRequests.some(r => r.type === 'image')).toBe(true);
   });
 
   it('blocks multiple resource types simultaneously', async () => {

@@ -1,4 +1,5 @@
 import type { Page } from 'playwright';
+import type { BlockableResourceType } from './schemas.js';
 import { isAdDomain } from './ad-domains.js';
 import { buildCookieHidingCss } from './cookie-selectors.js';
 import { sanitizeCustomCss, sanitizeCustomJs } from '../security/sanitize.js';
@@ -6,7 +7,7 @@ import { sanitizeCustomCss, sanitizeCustomJs } from '../security/sanitize.js';
 export interface ContentFilterOptions {
   block_ads?: boolean;
   hide_cookies?: boolean;
-  block_resources?: Array<'image' | 'stylesheet' | 'font' | 'script' | 'media' | 'other'>;
+  block_resources?: BlockableResourceType[];
   custom_css?: string;
   custom_js?: string;
 }
@@ -22,7 +23,7 @@ export async function applyPreNavigationFilters(page: Page, options: ContentFilt
       // Check resource type blocking first
       if (blockResourceTypes.length > 0) {
         const resourceType = route.request().resourceType();
-        if (blockResourceTypes.includes(resourceType as 'image' | 'stylesheet' | 'font' | 'script' | 'media' | 'other')) {
+        if ((blockResourceTypes as readonly string[]).includes(resourceType)) {
           return route.abort();
         }
       }

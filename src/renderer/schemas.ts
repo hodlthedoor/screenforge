@@ -26,10 +26,15 @@ const MAX_HTML_SIZE = 2 * 1024 * 1024; // 2MB
 const MAX_CUSTOM_CSS_SIZE = 50 * 1024; // 50KB
 const MAX_CUSTOM_JS_SIZE = 10 * 1024; // 10KB
 
+export const BLOCKABLE_RESOURCE_TYPES = ['image', 'stylesheet', 'font', 'script', 'media', 'other'] as const;
+export type BlockableResourceType = typeof BLOCKABLE_RESOURCE_TYPES[number];
+
+const blockableResourceTypeSchema = z.enum(BLOCKABLE_RESOURCE_TYPES);
+
 const contentFilterSchema = z.object({
   block_ads: z.boolean().default(false),
   hide_cookies: z.boolean().default(false),
-  block_resources: z.array(z.enum(['image', 'stylesheet', 'font', 'script', 'media', 'other'])).max(6).default([]),
+  block_resources: z.array(blockableResourceTypeSchema).max(6).default([]),
   custom_css: z.string().refine(
     (s) => Buffer.byteLength(s, 'utf-8') <= MAX_CUSTOM_CSS_SIZE,
     { message: 'custom_css must not exceed 50KB' },
