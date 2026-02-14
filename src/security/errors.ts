@@ -24,6 +24,8 @@ export const ERROR_CODES = {
   EXTRACTION_LIMIT_EXCEEDED: { status: 429, message: 'Daily extraction limit exceeded' },
   EXTRACTION_FAILED: { status: 502, message: 'LLM extraction failed' },
   EXTRACTION_NO_API_KEY: { status: 400, message: 'No Anthropic API key available. Set ANTHROPIC_API_KEY or provide x-llm-api-key header.' },
+  ACCESSIBILITY_LIMIT_EXCEEDED: { status: 429, message: 'Daily accessibility audit limit exceeded' },
+  ACCESSIBILITY_FAILED: { status: 502, message: 'Accessibility audit failed' },
   ADMIN_NOT_CONFIGURED: { status: 503, message: 'Admin API not configured' },
   INTERNAL_ERROR: { status: 500, message: 'Internal server error' },
   NOT_FOUND: { status: 404, message: 'Resource not found' },

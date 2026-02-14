@@ -7,6 +7,7 @@ export interface Plan {
   monthlyQuota: number;
   maxSchedules: number;
   maxExtractionsDaily: number;
+  maxAccessibilityDaily: number;
 }
 
 export const PLANS: Record<string, Plan> = {
@@ -19,6 +20,7 @@ export const PLANS: Record<string, Plan> = {
     monthlyQuota: 100,
     maxSchedules: 3,
     maxExtractionsDaily: 10,
+    maxAccessibilityDaily: 5,
   },
   starter: {
     name: 'Starter',
@@ -29,6 +31,7 @@ export const PLANS: Record<string, Plan> = {
     monthlyQuota: 5_000,
     maxSchedules: 10,
     maxExtractionsDaily: 50,
+    maxAccessibilityDaily: 25,
   },
   pro: {
     name: 'Pro',
@@ -39,6 +42,7 @@ export const PLANS: Record<string, Plan> = {
     monthlyQuota: 25_000,
     maxSchedules: 50,
     maxExtractionsDaily: 100,
+    maxAccessibilityDaily: 50,
   },
   business: {
     name: 'Business',
@@ -49,6 +53,7 @@ export const PLANS: Record<string, Plan> = {
     monthlyQuota: 999_999_999,
     maxSchedules: 999,
     maxExtractionsDaily: 1_000,
+    maxAccessibilityDaily: 500,
   },
 };
 

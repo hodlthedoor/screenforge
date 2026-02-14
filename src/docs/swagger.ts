@@ -40,6 +40,7 @@ export async function registerDocs(app: FastifyInstance) {
         { name: 'webhooks', description: 'Webhook management' },
         { name: 'schedules', description: 'Recurring render schedules' },
         { name: 'extract', description: 'LLM-powered structured data extraction' },
+        { name: 'accessibility', description: 'WCAG accessibility auditing' },
         { name: 'auth', description: 'Authentication' },
       ],
     },
