@@ -177,7 +177,21 @@ curl "http://localhost:3100/v1/signed/pdf?url=https://example.com&format=A4&sign
 
 ---
 
-## JavaScript SDK
+## SDKs
+
+### Installation
+
+**JavaScript/TypeScript:**
+```bash
+npm install @screenforge/sdk
+```
+
+**Python:**
+```bash
+pip install screenforge
+```
+
+### JavaScript SDK
 
 A typed JavaScript/TypeScript SDK is available in [`sdk/js/`](sdk/js/).
 
@@ -213,6 +227,34 @@ const deliveries = await client.listWebhookDeliveries({ page: 1, limit: 10 });
 
 // Usage
 const usage = await client.getUsage();
+```
+
+### Python SDK
+
+A typed Python SDK with both sync and async support is available in [`sdk/python/`](sdk/python/).
+
+```python
+from screenforge import ScreenForgeClient
+
+client = ScreenForgeClient(
+    api_key='sf_live_...',
+    base_url='https://api.screenforge.dev'
+)
+
+# Screenshot
+png_bytes = client.screenshot('https://example.com', full_page=True)
+
+# PDF
+pdf_bytes = client.pdf('https://example.com', format='a4')
+
+# OG Card
+og_bytes = client.og('https://example.com', theme='dark')
+
+# Async (for async client, use ScreenForgeAsyncClient)
+from screenforge import ScreenForgeAsyncClient
+
+async_client = ScreenForgeAsyncClient(api_key='sf_live_...', base_url='https://api.screenforge.dev')
+result = await async_client.screenshot('https://example.com')
 ```
 
 ---
