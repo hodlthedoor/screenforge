@@ -264,10 +264,10 @@ result = await async_client.screenshot('https://example.com')
 
 | Tier | Renders/month | Rate Limit | Price |
 |----------|--------------|--------------|---------|
-| Free | 1,000 | 10 req/min | $0 |
-| Starter | 10,000 | 50 req/min | $19/mo |
-| Pro | 100,000 | 200 req/min | $49/mo |
-| Business | 1,000,000 | 1,000 req/min | $149/mo |
+| Free | 100 | 10 req/min | $0 |
+| Starter | 5,000 | 50 req/min | $29/mo |
+| Pro | 25,000 | 200 req/min | $79/mo |
+| Business | Unlimited | 1,000 req/min | $199/mo |
 
 Billing is handled via Stripe. Self-hosted instances can define custom tiers or disable billing entirely.
 
