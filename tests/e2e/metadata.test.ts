@@ -210,7 +210,7 @@ describe('E2E: Response metadata', () => {
 
       // Poll until completed
       let completed = false;
-      let pollData: any;
+      let pollData: Record<string, unknown>;
       for (let i = 0; i < 30 && !completed; i++) {
         await new Promise(resolve => setTimeout(resolve, 1000));
         const pollRes = await fetch(`${baseUrl}/v1/render/${jobId}`);
@@ -219,7 +219,6 @@ describe('E2E: Response metadata', () => {
       }
 
       expect(pollData.status).toBe('completed');
-      console.log('Poll data:', JSON.stringify(pollData, null, 2));
       expect(pollData).toHaveProperty('metadata');
       expect(pollData.metadata).toHaveProperty('title');
       expect(pollData.metadata).toHaveProperty('finalUrl');
