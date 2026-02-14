@@ -6,22 +6,39 @@ import { sanitizeCustomCss, sanitizeCustomJs } from '../security/sanitize.js';
 export interface ContentFilterOptions {
   block_ads?: boolean;
   hide_cookies?: boolean;
+  block_resources?: Array<'image' | 'stylesheet' | 'font' | 'script' | 'media' | 'other'>;
   custom_css?: string;
   custom_js?: string;
 }
 
-/** Set up request-level filters (ad blocking) — must be called BEFORE navigation. */
+/** Set up request-level filters (ad blocking, resource blocking) — must be called BEFORE navigation. */
 export async function applyPreNavigationFilters(page: Page, options: ContentFilterOptions): Promise<void> {
-  if (options.block_ads) {
+  const shouldBlockAds = options.block_ads ?? false;
+  const blockResourceTypes = options.block_resources ?? [];
+
+  // Only set up route if we have filters to apply
+  if (shouldBlockAds || blockResourceTypes.length > 0) {
     await page.route('**/*', (route) => {
-      try {
-        const hostname = new URL(route.request().url()).hostname;
-        if (isAdDomain(hostname)) {
+      // Check resource type blocking first
+      if (blockResourceTypes.length > 0) {
+        const resourceType = route.request().resourceType();
+        if (blockResourceTypes.includes(resourceType as 'image' | 'stylesheet' | 'font' | 'script' | 'media' | 'other')) {
           return route.abort();
         }
-      } catch {
-        // Invalid URL — let it through
       }
+
+      // Check ad blocking
+      if (shouldBlockAds) {
+        try {
+          const hostname = new URL(route.request().url()).hostname;
+          if (isAdDomain(hostname)) {
+            return route.abort();
+          }
+        } catch {
+          // Invalid URL — let it through
+        }
+      }
+
       return route.continue();
     });
   }

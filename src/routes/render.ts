@@ -226,6 +226,13 @@ export async function renderRoutes(
           callback_url: { type: 'string', description: 'Webhook callback URL (async only)' },
           block_ads: { type: 'boolean', default: false },
           hide_cookies: { type: 'boolean', default: false },
+          block_resources: {
+            type: 'array',
+            items: { type: 'string', enum: ['image', 'stylesheet', 'font', 'script', 'media', 'other'] },
+            maxItems: 6,
+            default: [],
+            description: 'Resource types to block during page load for faster captures and reduced bandwidth'
+          },
           custom_css: { type: 'string' },
           custom_js: { type: 'string' },
           headers: {
@@ -463,6 +470,13 @@ export async function renderRoutes(
           callback_url: { type: 'string', description: 'Webhook callback URL (async only)' },
           block_ads: { type: 'boolean', default: false },
           hide_cookies: { type: 'boolean', default: false },
+          block_resources: {
+            type: 'array',
+            items: { type: 'string', enum: ['image', 'stylesheet', 'font', 'script', 'media', 'other'] },
+            maxItems: 6,
+            default: [],
+            description: 'Resource types to block during page load for faster captures and reduced bandwidth'
+          },
           custom_css: { type: 'string' },
           custom_js: { type: 'string' },
           headers: {

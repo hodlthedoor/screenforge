@@ -29,6 +29,7 @@ const MAX_CUSTOM_JS_SIZE = 10 * 1024; // 10KB
 const contentFilterSchema = z.object({
   block_ads: z.boolean().default(false),
   hide_cookies: z.boolean().default(false),
+  block_resources: z.array(z.enum(['image', 'stylesheet', 'font', 'script', 'media', 'other'])).max(6).default([]),
   custom_css: z.string().refine(
     (s) => Buffer.byteLength(s, 'utf-8') <= MAX_CUSTOM_CSS_SIZE,
     { message: 'custom_css must not exceed 50KB' },
