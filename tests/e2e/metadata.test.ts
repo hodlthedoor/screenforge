@@ -50,24 +50,25 @@ describe('E2E: Response metadata', () => {
       // Validate content type
       expect(data.contentType).toBe('image/png');
 
+      // Validate top-level durationMs (deduplicated from metadata)
+      expect(typeof data.durationMs).toBe('number');
+      expect(data.durationMs).toBeGreaterThan(0);
+
       // Validate metadata fields
       expect(data.metadata).toHaveProperty('title');
       expect(data.metadata).toHaveProperty('finalUrl');
       expect(data.metadata).toHaveProperty('statusCode');
-      expect(data.metadata).toHaveProperty('durationMs');
       expect(data.metadata).toHaveProperty('width');
       expect(data.metadata).toHaveProperty('height');
 
       expect(typeof data.metadata.title).toBe('string');
       expect(typeof data.metadata.finalUrl).toBe('string');
       expect(typeof data.metadata.statusCode).toBe('number');
-      expect(typeof data.metadata.durationMs).toBe('number');
       expect(typeof data.metadata.width).toBe('number');
       expect(typeof data.metadata.height).toBe('number');
 
       expect(data.metadata.statusCode).toBe(200);
       expect(data.metadata.finalUrl).toBe(fixtureUrl);
-      expect(data.metadata.durationMs).toBeGreaterThan(0);
 
       // Verify dimensions match actual image
       const dimensions = imageSize(buffer);
@@ -180,11 +181,14 @@ describe('E2E: Response metadata', () => {
       const buffer = Buffer.from(data.data, 'base64');
       expect(buffer.toString('utf-8', 0, 4)).toBe('%PDF');
 
+      // Validate top-level durationMs
+      expect(typeof data.durationMs).toBe('number');
+      expect(data.durationMs).toBeGreaterThan(0);
+
       // Validate metadata
-      expect(data.metadata.title).toBeTruthy();
+      expect(typeof data.metadata.title).toBe('string');
       expect(data.metadata.finalUrl).toBe(fixtureUrl);
       expect(data.metadata.statusCode).toBe(200);
-      expect(data.metadata.durationMs).toBeGreaterThan(0);
 
       // PDF metadata should not have width/height
       expect(data.metadata).not.toHaveProperty('width');
@@ -219,11 +223,11 @@ describe('E2E: Response metadata', () => {
       }
 
       expect(pollData.status).toBe('completed');
+      expect(pollData).toHaveProperty('durationMs');
       expect(pollData).toHaveProperty('metadata');
       expect(pollData.metadata).toHaveProperty('title');
       expect(pollData.metadata).toHaveProperty('finalUrl');
       expect(pollData.metadata).toHaveProperty('statusCode');
-      expect(pollData.metadata).toHaveProperty('durationMs');
       expect(pollData.metadata).toHaveProperty('width');
       expect(pollData.metadata).toHaveProperty('height');
     });

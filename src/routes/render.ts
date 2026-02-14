@@ -207,22 +207,15 @@ export async function renderRoutes(
       incrementRenderCounter('screenshot', format, 'completed', true);
       const buffer = await cache.readFile(cached.filePath);
 
-      if (wantsMetadata) {
-        // For cached results, we don't have metadata, so return minimal envelope
+      if (wantsMetadata && cached.metadata) {
         return reply
           .header('Content-Type', 'application/json')
           .header('X-Cache', 'HIT')
           .send({
             data: buffer.toString('base64'),
             contentType: cached.contentType,
-            metadata: {
-              title: '',
-              finalUrl: options.url ?? '',
-              statusCode: 0,
-              durationMs: 0,
-              width: 0,
-              height: 0,
-            },
+            durationMs: 0,
+            metadata: cached.metadata,
           });
       }
 
@@ -237,7 +230,7 @@ export async function renderRoutes(
     try {
       const result = await takeScreenshot(pool, options, config.NAVIGATION_TIMEOUT_MS);
       const ext = FORMAT_EXT[result.contentType] ?? 'bin';
-      await cache.set(optionsHash, result.buffer, result.contentType, ext);
+      await cache.set(optionsHash, result.buffer, result.contentType, ext, result.metadata);
 
       const format = result.contentType.includes('jpeg') ? 'jpeg' : 'png';
       incrementRenderCounter('screenshot', format, 'completed', false);
@@ -250,6 +243,7 @@ export async function renderRoutes(
           .send({
             data: result.buffer.toString('base64'),
             contentType: result.contentType,
+            durationMs: result.durationMs,
             metadata: result.metadata,
           });
       }
@@ -364,20 +358,15 @@ export async function renderRoutes(
       incrementRenderCounter('pdf', 'pdf', 'completed', true);
       const buffer = await cache.readFile(cached.filePath);
 
-      if (wantsMetadata) {
-        // For cached results, we don't have metadata
+      if (wantsMetadata && cached.metadata) {
         return reply
           .header('Content-Type', 'application/json')
           .header('X-Cache', 'HIT')
           .send({
             data: buffer.toString('base64'),
             contentType: cached.contentType,
-            metadata: {
-              title: '',
-              finalUrl: options.url ?? '',
-              statusCode: 0,
-              durationMs: 0,
-            },
+            durationMs: 0,
+            metadata: cached.metadata,
           });
       }
 
@@ -391,7 +380,7 @@ export async function renderRoutes(
     app.incrementInflightRenders();
     try {
       const result = await renderPdf(pool, options, config.NAVIGATION_TIMEOUT_MS);
-      await cache.set(optionsHash, result.buffer, result.contentType, 'pdf');
+      await cache.set(optionsHash, result.buffer, result.contentType, 'pdf', result.metadata);
 
       incrementRenderCounter('pdf', 'pdf', 'completed', false);
       observeRenderDuration('pdf', 'pdf', result.durationMs / 1000);
@@ -403,6 +392,7 @@ export async function renderRoutes(
           .send({
             data: result.buffer.toString('base64'),
             contentType: result.contentType,
+            durationMs: result.durationMs,
             metadata: result.metadata,
           });
       }

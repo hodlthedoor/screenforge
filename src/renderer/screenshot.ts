@@ -63,7 +63,6 @@ export async function takeScreenshot(pool: BrowserPool, options: ScreenshotOptio
         title,
         finalUrl,
         statusCode,
-        durationMs,
         width: dimensions.width ?? 0,
         height: dimensions.height ?? 0,
       },

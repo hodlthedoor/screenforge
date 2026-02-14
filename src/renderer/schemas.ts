@@ -111,7 +111,6 @@ export interface RenderMetadata {
   title: string;
   finalUrl: string;
   statusCode: number;
-  durationMs: number;
   width?: number;
   height?: number;
 }

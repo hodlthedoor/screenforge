@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { mkdir, writeFile, readFile, access } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Redis } from 'ioredis';
+import type { RenderMetadata } from '../renderer/schemas.js';
 import { updateCacheGauges } from '../metrics/index.js';
 
 // Redis keys for atomic cache counters (avoids KEYS scan)
@@ -12,6 +13,7 @@ export interface CacheEntry {
   filePath: string;
   contentType: string;
   sizeBytes: number;
+  metadata?: RenderMetadata;
 }
 
 export class RenderCache {
@@ -61,7 +63,7 @@ export class RenderCache {
     }
   }
 
-  async set(optionsHash: string, buffer: Buffer, contentType: string, ext: string): Promise<CacheEntry> {
+  async set(optionsHash: string, buffer: Buffer, contentType: string, ext: string, metadata?: RenderMetadata): Promise<CacheEntry> {
     const date = new Date().toISOString().slice(0, 10);
     const dir = join(this.storagePath, date);
     await mkdir(dir, { recursive: true });
@@ -69,7 +71,7 @@ export class RenderCache {
     const filePath = join(dir, `${optionsHash}.${ext}`);
     await writeFile(filePath, buffer);
 
-    const entry: CacheEntry = { filePath, contentType, sizeBytes: buffer.length };
+    const entry: CacheEntry = { filePath, contentType, sizeBytes: buffer.length, metadata };
     await this.redis.set(`screenforge:cache:${optionsHash}`, JSON.stringify(entry), 'EX', this.ttlSeconds);
 
     // Increment atomic counters

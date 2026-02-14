@@ -63,7 +63,7 @@ beforeAll(async () => {
       const result = await renderPdf(browserPool, parsed, config.NAVIGATION_TIMEOUT_MS);
       const filePath = join(config.STORAGE_PATH, `${job.data.jobId}.pdf`);
       await writeFile(filePath, result.buffer);
-      return { resultPath: filePath, contentType: result.contentType, durationMs: result.durationMs };
+      return { resultPath: filePath, contentType: result.contentType, durationMs: result.durationMs, metadata: result.metadata };
     }
 
     const parsed = screenshotOptionsSchema.parse(schemaInput);
@@ -71,7 +71,7 @@ beforeAll(async () => {
     const ext = parsed.format === 'jpeg' ? 'jpg' : 'png';
     const filePath = join(config.STORAGE_PATH, `${job.data.jobId}.${ext}`);
     await writeFile(filePath, result.buffer);
-    return { resultPath: filePath, contentType: result.contentType, durationMs: result.durationMs };
+    return { resultPath: filePath, contentType: result.contentType, durationMs: result.durationMs, metadata: result.metadata };
   });
 
   // Wait for worker to be ready before accepting requests

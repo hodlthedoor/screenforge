@@ -56,7 +56,6 @@ export async function asyncRenderRoutes(app: FastifyInstance) {
           title: job.metadata_title ?? '',
           finalUrl: job.metadata_final_url ?? '',
           statusCode: job.metadata_status_code ?? 0,
-          durationMs: job.duration_ms ?? 0,
           ...(job.metadata_width !== null ? { width: job.metadata_width } : {}),
           ...(job.metadata_height !== null ? { height: job.metadata_height } : {}),
         }

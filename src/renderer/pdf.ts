@@ -62,7 +62,6 @@ export async function renderPdf(pool: BrowserPool, options: PdfOptions, timeoutM
         title,
         finalUrl,
         statusCode,
-        durationMs,
       },
     };
   } finally {
