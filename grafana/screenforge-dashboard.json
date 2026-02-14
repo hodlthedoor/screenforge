@@ -451,10 +451,10 @@
         "y": 24
       },
       "type": "stat",
-      "title": "Active HTTP Connections",
+      "title": "Active Handles",
       "targets": [
         {
-          "expr": "sum(nodejs_active_handles_total{type=~\"TCP.*|TLS.*\"})",
+          "expr": "nodejs_active_handles_total",
           "refId": "A"
         }
       ],
@@ -483,6 +483,73 @@
       "options": {
         "colorMode": "value",
         "graphMode": "area",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"]
+        }
+      }
+    },
+    {
+      "id": 12,
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 28
+      },
+      "type": "stat",
+      "title": "Circuit Breaker",
+      "description": "0 = Closed (healthy), 1 = Half-Open (testing), 2 = Open (rejecting)",
+      "targets": [
+        {
+          "expr": "screenforge_circuit_breaker_state",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "CLOSED",
+                  "color": "green"
+                },
+                "1": {
+                  "text": "HALF-OPEN",
+                  "color": "yellow"
+                },
+                "2": {
+                  "text": "OPEN",
+                  "color": "red"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": 0,
+                "color": "green"
+              },
+              {
+                "value": 1,
+                "color": "yellow"
+              },
+              {
+                "value": 2,
+                "color": "red"
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
         "reduceOptions": {
           "values": false,
           "calcs": ["lastNotNull"]
