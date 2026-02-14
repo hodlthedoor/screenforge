@@ -1,47 +1,14 @@
 import type { BrowserPool } from './browser-pool.js';
-import type { ScreenshotOptions, RenderResult, WaitStrategy } from './schemas.js';
+import type { ScreenshotOptions, RenderResult } from './schemas.js';
 import { applyPreNavigationFilters, applyPostNavigationFilters } from './filters.js';
+import { applyWaitStrategy } from './wait.js';
 import { toPlaywrightCookies } from '../security/sanitize.js';
 import { imageSize } from 'image-size';
-import type { Page } from 'playwright';
 
 const FORMAT_CONTENT_TYPE: Record<string, string> = {
   png: 'image/png',
   jpeg: 'image/jpeg',
 };
-
-async function applyWaitStrategy(page: Page, wait: WaitStrategy | undefined, legacyWaitFor: string | undefined, timeoutMs: number): Promise<void> {
-  // New wait strategy takes precedence
-  if (wait) {
-    const waitTimeout = Math.min(timeoutMs, 30_000); // Cap wait at navigation timeout or 30s
-
-    switch (wait.type) {
-      case 'networkidle':
-        // Already waited during navigation, no additional action needed
-        break;
-
-      case 'delay':
-        await page.waitForTimeout(wait.value);
-        break;
-
-      case 'selector':
-        await page.waitForSelector(wait.value, { timeout: waitTimeout });
-        break;
-
-      case 'function':
-        // eslint-disable-next-line no-new-func
-        await page.waitForFunction(wait.value, { timeout: waitTimeout });
-        break;
-
-      case 'hidden':
-        await page.waitForSelector(wait.value, { state: 'hidden', timeout: waitTimeout });
-        break;
-    }
-  } else if (legacyWaitFor) {
-    // Backwards compatibility: treat legacy waitFor as selector wait
-    await page.waitForSelector(legacyWaitFor, { timeout: 10_000 });
-  }
-}
 
 export async function takeScreenshot(pool: BrowserPool, options: ScreenshotOptions, timeoutMs = 30_000): Promise<RenderResult> {
   const start = performance.now();

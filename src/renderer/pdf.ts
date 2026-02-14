@@ -1,47 +1,14 @@
 import type { BrowserPool } from './browser-pool.js';
-import type { PdfOptions, RenderResult, WaitStrategy } from './schemas.js';
+import type { PdfOptions, RenderResult } from './schemas.js';
 import { applyPreNavigationFilters, applyPostNavigationFilters } from './filters.js';
+import { applyWaitStrategy } from './wait.js';
 import { toPlaywrightCookies } from '../security/sanitize.js';
-import type { Page } from 'playwright';
 
 const FORMAT_SIZE: Record<string, { width: string; height: string }> = {
   a4: { width: '210mm', height: '297mm' },
   letter: { width: '8.5in', height: '11in' },
   legal: { width: '8.5in', height: '14in' },
 };
-
-async function applyWaitStrategy(page: Page, wait: WaitStrategy | undefined, legacyWaitFor: string | undefined, timeoutMs: number): Promise<void> {
-  // New wait strategy takes precedence
-  if (wait) {
-    const waitTimeout = Math.min(timeoutMs, 30_000); // Cap wait at navigation timeout or 30s
-
-    switch (wait.type) {
-      case 'networkidle':
-        // Already waited during navigation, no additional action needed
-        break;
-
-      case 'delay':
-        await page.waitForTimeout(wait.value);
-        break;
-
-      case 'selector':
-        await page.waitForSelector(wait.value, { timeout: waitTimeout });
-        break;
-
-      case 'function':
-        // eslint-disable-next-line no-new-func
-        await page.waitForFunction(wait.value, { timeout: waitTimeout });
-        break;
-
-      case 'hidden':
-        await page.waitForSelector(wait.value, { state: 'hidden', timeout: waitTimeout });
-        break;
-    }
-  } else if (legacyWaitFor) {
-    // Backwards compatibility: treat legacy waitFor as selector wait
-    await page.waitForSelector(legacyWaitFor, { timeout: 10_000 });
-  }
-}
 
 export async function renderPdf(pool: BrowserPool, options: PdfOptions, timeoutMs = 30_000): Promise<RenderResult> {
   const start = performance.now();

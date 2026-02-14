@@ -87,7 +87,7 @@ const clipSchema = z.object({
 });
 
 // Wait strategy union type for flexible waiting after navigation
-const waitStrategySchema = z.discriminatedUnion('type', [
+export const waitStrategySchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('networkidle') }),
   z.object({ type: z.literal('delay'), value: z.number().int().min(0).max(30_000) }),
   z.object({ type: z.literal('selector'), value: z.string() }),

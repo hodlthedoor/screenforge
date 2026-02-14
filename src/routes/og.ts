@@ -4,20 +4,10 @@ import { authMiddleware } from '../auth/middleware.js';
 import type { BrowserPool } from '../renderer/browser-pool.js';
 import { RenderCache } from '../cache/index.js';
 import { getConfig } from '../config/index.js';
-import { isPrivateUrl, cookieSchema, geolocationSchema, timezoneSchema, localeSchema, type WaitStrategy } from '../renderer/schemas.js';
+import { isPrivateUrl, cookieSchema, geolocationSchema, timezoneSchema, localeSchema, waitStrategySchema } from '../renderer/schemas.js';
+import { applyWaitStrategy } from '../renderer/wait.js';
 import { sendError } from '../security/errors.js';
 import { sanitizeHeaders, sanitizeCookies, toPlaywrightCookies, SanitizeError } from '../security/sanitize.js';
-import type { Page } from 'playwright';
-
-// Wait strategy union type for flexible waiting after navigation
-const waitStrategySchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('networkidle') }),
-  z.object({ type: z.literal('delay'), value: z.number().int().min(0).max(30_000) }),
-  z.object({ type: z.literal('selector'), value: z.string() }),
-  z.object({ type: z.literal('function'), value: z.string() }),
-  z.object({ type: z.literal('hidden'), value: z.string() }),
-]);
-
 const ogRequestSchema = z.object({
   url: z.string().url().optional(),
   title: z.string().max(200).optional(),
@@ -45,39 +35,6 @@ function escapeHtml(str: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
-}
-
-async function applyWaitStrategy(page: Page, wait: WaitStrategy | undefined, legacyWaitFor: string | undefined, timeoutMs: number): Promise<void> {
-  // New wait strategy takes precedence
-  if (wait) {
-    const waitTimeout = Math.min(timeoutMs, 30_000); // Cap wait at navigation timeout or 30s
-
-    switch (wait.type) {
-      case 'networkidle':
-        // Already waited during navigation, no additional action needed
-        break;
-
-      case 'delay':
-        await page.waitForTimeout(wait.value);
-        break;
-
-      case 'selector':
-        await page.waitForSelector(wait.value, { timeout: waitTimeout });
-        break;
-
-      case 'function':
-        // eslint-disable-next-line no-new-func
-        await page.waitForFunction(wait.value, { timeout: waitTimeout });
-        break;
-
-      case 'hidden':
-        await page.waitForSelector(wait.value, { state: 'hidden', timeout: waitTimeout });
-        break;
-    }
-  } else if (legacyWaitFor) {
-    // Backwards compatibility: treat legacy waitFor as selector wait
-    await page.waitForSelector(legacyWaitFor, { timeout: 10_000 });
-  }
 }
 
 function generateOgHtml(data: OgRequest & { fetchedMeta?: { title?: string; description?: string; siteName?: string; image?: string } }): string {
