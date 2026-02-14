@@ -57,6 +57,12 @@ export async function schedulesRoutes(app: FastifyInstance) {
       const apiKeyId = req.apiKey!.id;
       const tier = req.apiKey!.tier;
 
+      // Validate render_config.url is present for screenshot/pdf types
+      if ((render_type === 'screenshot' || render_type === 'pdf') && !render_config.url) {
+        const err = createError('VALIDATION_ERROR', 'render_config.url is required for screenshot and pdf types');
+        return reply.status(err.statusCode).send(err);
+      }
+
       // Validate cron expression
       const validation = validateCronExpression(cron_expression, tier);
       if (!validation.valid) {
@@ -222,6 +228,14 @@ export async function schedulesRoutes(app: FastifyInstance) {
 
       const updates = parsed.data;
       const tier = req.apiKey!.tier;
+
+      // Validate render_config.url for screenshot/pdf types
+      const effectiveType = updates.render_type ?? existing.rows[0].render_type;
+      const effectiveConfig = updates.render_config ?? existing.rows[0].render_config;
+      if ((effectiveType === 'screenshot' || effectiveType === 'pdf') && !effectiveConfig?.url) {
+        const err = createError('VALIDATION_ERROR', 'render_config.url is required for screenshot and pdf types');
+        return reply.status(err.statusCode).send(err);
+      }
 
       // Validate new cron expression if provided
       if (updates.cron_expression) {

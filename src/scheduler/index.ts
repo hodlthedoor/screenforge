@@ -3,6 +3,7 @@ import { getQueue } from '../queue/render-queue.js';
 import { getConfig } from '../config/index.js';
 import { getNextRun } from './cron.js';
 import { randomUUID } from 'node:crypto';
+import { getLogger } from '../logging/index.js';
 
 export interface ScheduleRow {
   id: string;
@@ -23,72 +24,98 @@ let pollTimer: ReturnType<typeof setInterval> | null = null;
 export async function pollDueSchedules(): Promise<number> {
   const pool = getPool();
   const config = getConfig();
+  const client = await pool.connect();
 
-  // SELECT + lock due schedules using FOR UPDATE SKIP LOCKED for concurrency safety
-  const result = await pool.query<ScheduleRow>(
-    `SELECT * FROM schedules
-     WHERE enabled = true AND next_run_at <= NOW()
-     ORDER BY next_run_at ASC
-     LIMIT 100
-     FOR UPDATE SKIP LOCKED`,
-  );
+  try {
+    await client.query('BEGIN');
 
-  if (result.rows.length === 0) return 0;
+    // SELECT + lock due schedules using FOR UPDATE SKIP LOCKED for concurrency safety
+    const result = await client.query<ScheduleRow>(
+      `SELECT * FROM schedules
+       WHERE enabled = true AND next_run_at <= NOW()
+       ORDER BY next_run_at ASC
+       LIMIT 100
+       FOR UPDATE SKIP LOCKED`,
+    );
 
-  const queue = getQueue(config.REDIS_URL);
-  let enqueued = 0;
+    if (result.rows.length === 0) {
+      await client.query('COMMIT');
+      return 0;
+    }
 
-  for (const schedule of result.rows) {
-    const jobId = randomUUID();
+    const queue = getQueue(config.REDIS_URL);
+    let enqueued = 0;
 
-    // Insert a render_jobs row
-    await pool.query(
-      `INSERT INTO render_jobs (id, api_key_id, type, url, options, status, schedule_id)
-       VALUES ($1, $2, $3, $4, $5, 'pending', $6)`,
-      [
+    for (const schedule of result.rows) {
+      const jobId = randomUUID();
+      const url = (schedule.render_config as Record<string, unknown>).url as string | undefined;
+
+      // Insert a render_jobs row
+      await client.query(
+        `INSERT INTO render_jobs (id, api_key_id, type, url, options, status, schedule_id)
+         VALUES ($1, $2, $3, $4, $5, 'pending', $6)`,
+        [
+          jobId,
+          schedule.api_key_id,
+          schedule.render_type,
+          url ?? '',
+          JSON.stringify(schedule.render_config),
+          schedule.id,
+        ],
+      );
+
+      // Enqueue to BullMQ
+      await queue.add('render', {
         jobId,
-        schedule.api_key_id,
-        schedule.render_type,
-        (schedule.render_config as Record<string, unknown>).url ?? '',
-        JSON.stringify(schedule.render_config),
-        schedule.id,
-      ],
-    );
+        apiKeyId: schedule.api_key_id,
+        type: schedule.render_type as 'screenshot' | 'pdf' | 'og',
+        url,
+        options: schedule.render_config,
+        callbackUrl: (schedule.render_config as Record<string, unknown>).webhook_url as string | undefined,
+      });
 
-    // Enqueue to BullMQ
-    await queue.add('render', {
-      jobId,
-      apiKeyId: schedule.api_key_id,
-      type: schedule.render_type as 'screenshot' | 'pdf' | 'og',
-      url: (schedule.render_config as Record<string, unknown>).url as string | undefined,
-      options: schedule.render_config,
-      callbackUrl: (schedule.render_config as Record<string, unknown>).webhook_url as string | undefined,
-    });
+      // Compute next run and update schedule
+      const nextRun = getNextRun(schedule.cron_expression);
+      await client.query(
+        `UPDATE schedules SET last_run_at = NOW(), next_run_at = $1, updated_at = NOW() WHERE id = $2`,
+        [nextRun, schedule.id],
+      );
 
-    // Compute next run and update schedule
-    const nextRun = getNextRun(schedule.cron_expression);
-    await pool.query(
-      `UPDATE schedules SET last_run_at = NOW(), next_run_at = $1, updated_at = NOW() WHERE id = $2`,
-      [nextRun, schedule.id],
-    );
+      enqueued++;
+    }
 
-    enqueued++;
+    await client.query('COMMIT');
+    return enqueued;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
   }
-
-  return enqueued;
 }
+
+let loggerReady = false;
 
 export function startScheduler(): void {
   const config = getConfig();
   if (!config.SCHEDULER_ENABLED) return;
 
+  loggerReady = true;
   const intervalMs = config.SCHEDULER_POLL_INTERVAL_MS;
 
   // Run once immediately, then on interval
-  pollDueSchedules().catch(() => {});
+  pollDueSchedules().catch((err) => {
+    if (loggerReady) {
+      try { getLogger('scheduler').error({ err }, 'Scheduler poll failed'); } catch { /* logger not registered yet */ }
+    }
+  });
 
   pollTimer = setInterval(() => {
-    pollDueSchedules().catch(() => {});
+    pollDueSchedules().catch((err) => {
+      if (loggerReady) {
+        try { getLogger('scheduler').error({ err }, 'Scheduler poll failed'); } catch { /* logger not registered yet */ }
+      }
+    });
   }, intervalMs);
 }
 
