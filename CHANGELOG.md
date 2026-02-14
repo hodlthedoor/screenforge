@@ -21,7 +21,7 @@ All notable changes to ScreenForge are documented here.
 
 ## [1.1.0] - 2026-02-14
 
-### Features
+### Added
 
 - **Docker Hub publishing** — multi-arch (amd64/arm64) images published to Docker Hub on tagged releases
 - **API documentation site** — replaced Swagger UI with polished, developer-focused documentation site
@@ -111,5 +111,5 @@ All notable changes to ScreenForge are documented here.
 [1.2.0]: https://github.com/hodlthedoor/screenforge/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/hodlthedoor/screenforge/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/hodlthedoor/screenforge/releases/tag/v1.0.0
-[0.2.0]: https://github.com/hodlthedoor/screenforge/releases/tag/v1.0.0
-[0.1.0]: https://github.com/hodlthedoor/screenforge/releases/tag/v1.0.0
+[0.2.0]: https://github.com/hodlthedoor/screenforge/releases/tag/v0.2.0
+[0.1.0]: https://github.com/hodlthedoor/screenforge/releases/tag/v0.1.0

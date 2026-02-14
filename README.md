@@ -26,10 +26,10 @@ The API is available at `http://localhost:3100`, Swagger docs at `http://localho
 
 ## Features
 
-- **Screenshots** -- full page, viewport, or element-level capture in PNG/JPEG with custom dimensions, dark mode, device scale factor, and delay
+- **Screenshots** -- full page, viewport, or element-level capture in PNG/JPEG/WebP with custom dimensions, dark mode, device scale factor, and delay
 - **PDF generation** -- render any URL to PDF with A4/Letter/Legal page formats, margins, landscape mode, and custom header/footer templates
 - **OG card generation** -- auto-generate Open Graph preview images with built-in templates and light/dark themes
-- **Pre-capture actions** *(v1.2.0)* -- automate click, scroll, type, hover, wait actions before capture for interactive pages
+- **Pre-capture actions** *(v1.2.0)* -- automate click, scroll, type, hover, wait, delay actions before capture for interactive pages
 - **Element hiding/removal** *(v1.2.0)* -- hide or remove DOM elements via CSS selectors before rendering
 - **Element blurring** *(v1.2.0)* -- blur sensitive content with configurable radius for privacy-safe screenshots
 - **Content validation** *(v1.2.0)* -- fail renders if specific text is present or missing from the page
