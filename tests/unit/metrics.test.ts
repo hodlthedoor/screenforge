@@ -245,6 +245,11 @@ describe('metrics', () => {
   });
 
   describe('circuit breaker metrics', () => {
+    it('is serialized at init with default value 0', async () => {
+      const metrics = await getMetrics();
+      expect(metrics).toMatch(/screenforge_circuit_breaker_state\s+0/);
+    });
+
     it('sets circuit breaker state gauge', async () => {
       setCircuitBreakerState(0); // Closed
       let metrics = await getMetrics();

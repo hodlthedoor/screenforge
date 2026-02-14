@@ -112,11 +112,12 @@ export function initMetrics(): void {
     registers: [register],
   });
 
-  new Gauge({
+  const circuitBreakerGauge = new Gauge({
     name: 'screenforge_circuit_breaker_state',
     help: 'Circuit breaker state (0=closed, 1=half-open, 2=open)',
     registers: [register],
   });
+  circuitBreakerGauge.set(0);
 
   metricsInitialized = true;
 }
