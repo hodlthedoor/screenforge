@@ -118,6 +118,21 @@ describe('toPlaywrightCookies', () => {
       'https://other.com',
     );
     expect(result[0].domain).toBe('.example.com');
+    expect(result[0].path).toBe('/');
     expect(result[0]).not.toHaveProperty('url');
+  });
+
+  it('defaults path to "/" when domain is provided without path', () => {
+    const result = toPlaywrightCookies(
+      [{ name: 'sid', value: 'abc', domain: '.example.com' }],
+    );
+    expect(result).toEqual([{ name: 'sid', value: 'abc', domain: '.example.com', path: '/' }]);
+  });
+
+  it('preserves explicit path when domain is provided', () => {
+    const result = toPlaywrightCookies(
+      [{ name: 'sid', value: 'abc', domain: '.example.com', path: '/app' }],
+    );
+    expect(result).toEqual([{ name: 'sid', value: 'abc', domain: '.example.com', path: '/app' }]);
   });
 });

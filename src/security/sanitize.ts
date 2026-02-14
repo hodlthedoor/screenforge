@@ -154,9 +154,6 @@ export function sanitizeCookies(cookies: Cookie[] | undefined): Cookie[] | undef
     }
 
     // Check name length
-    if (cookie.name.length === 0) {
-      throw new SanitizeError('Cookie name cannot be empty');
-    }
     if (cookie.name.length > MAX_COOKIE_NAME_LENGTH) {
       throw new SanitizeError('Cookie name exceeds maximum length');
     }
@@ -208,6 +205,7 @@ export function toPlaywrightCookies(
     };
     if (cookie.domain) {
       pw.domain = cookie.domain;
+      pw.path = cookie.path ?? '/';
     } else if (fallbackUrl) {
       pw.url = fallbackUrl;
     }
