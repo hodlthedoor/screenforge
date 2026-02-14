@@ -88,6 +88,7 @@ function dashboardLayout(title: string, nav: string, content: string, csrfToken:
     <a href="/dashboard" class="${nav === 'overview' ? 'active' : ''}">Overview</a>
     <a href="/dashboard/keys" class="${nav === 'keys' ? 'active' : ''}">API Keys</a>
     <a href="/dashboard/usage" class="${nav === 'usage' ? 'active' : ''}">Usage</a>
+    <a href="/dashboard/webhooks" class="${nav === 'webhooks' ? 'active' : ''}">Webhooks</a>
     <a href="/dashboard/analytics" class="${nav === 'analytics' ? 'active' : ''}">Analytics</a>
     <a href="/dashboard/signed-urls" class="${nav === 'signed-urls' ? 'active' : ''}">Signed URLs</a>
     <a href="/dashboard/billing" class="${nav === 'billing' ? 'active' : ''}">Billing</a>
@@ -264,9 +265,10 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
     const user = req.dashboardUser!;
     const keys = await getUserApiKeys(user.id);
     const csrfToken = ensureCsrfToken(req);
+    const pool = getPool();
 
     // Daily usage for the last 30 days
-    const dailyResult = await getPool().query(
+    const dailyResult = await pool.query(
       `SELECT ud.date, SUM(ud.count) as total
        FROM usage_daily ud
        JOIN user_api_keys uak ON uak.api_key_id = ud.api_key_id
@@ -277,8 +279,8 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
     );
 
     // Usage by render type
-    const typeResult = await getPool().query(
-      `SELECT rj.type, COUNT(*) as count
+    const typeResult = await pool.query(
+      `SELECT rj.type, COUNT(*)::int as count
        FROM render_jobs rj
        JOIN user_api_keys uak ON uak.api_key_id = rj.api_key_id
        WHERE uak.user_id = $1 AND rj.created_at >= date_trunc('month', CURRENT_DATE)
@@ -286,54 +288,274 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
       [user.id],
     );
 
+    // Recent errors (last 10 failed renders)
+    const errorsResult = await pool.query(
+      `SELECT rj.url, rj.error, rj.created_at
+       FROM render_jobs rj
+       JOIN user_api_keys uak ON uak.api_key_id = rj.api_key_id
+       WHERE uak.user_id = $1 AND rj.status = 'failed'
+       ORDER BY rj.created_at DESC LIMIT 10`,
+      [user.id],
+    );
+
     const dailyData = JSON.stringify(dailyResult.rows.map((r: { date: string; total: number | string }) => ({ date: r.date, count: Number(r.total) })));
     const typeData = JSON.stringify(typeResult.rows.map((r: { type: string; count: number | string }) => ({ type: r.type, count: Number(r.count) })));
+
+    const typeColors: Record<string, string> = { screenshot: '#6c63ff', pdf: '#00d4aa', og: '#ffaa33' };
 
     const statCards = await Promise.all(keys.map(async (k: { id: string; name: string; monthlyQuota: number }) => {
       const stats = await getUsageStats(k.id);
       return `<div class="stat"><div class="label">${escapeHtml(k.name)}</div><div class="value">${stats.thisMonth} / ${k.monthlyQuota.toLocaleString()}</div></div>`;
     }));
 
+    const errorRows = errorsResult.rows.map((r: { url: string; error: string | null; created_at: string }) =>
+      `<tr>
+        <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(r.url)}</td>
+        <td>${escapeHtml(r.error || 'Unknown error')}</td>
+        <td>${new Date(r.created_at).toLocaleString()}</td>
+      </tr>`
+    ).join('');
+
     const html = `
       <h1>Usage</h1>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px">
+        <div style="display:flex;gap:12px">
+          <a href="/dashboard/usage/export?format=csv" class="btn btn-primary btn-sm">Export CSV</a>
+          <a href="/dashboard/usage/export?format=json" class="btn btn-primary btn-sm">Export JSON</a>
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;color:var(--muted);font-size:.85rem;cursor:pointer">
+          <input type="checkbox" id="auto-refresh" style="cursor:pointer">
+          Auto-refresh (30s)
+        </label>
+      </div>
       <div class="stats">
         ${statCards.join('')}
       </div>
       <div class="card">
         <h2 style="margin-bottom:16px">Daily Renders (Last 30 Days)</h2>
-        <canvas id="dailyChart" height="200"></canvas>
+        <canvas id="dailyChart" height="250"></canvas>
       </div>
       <div class="card">
-        <h2 style="margin-bottom:16px">By Render Type</h2>
-        <canvas id="typeChart" height="150"></canvas>
+        <h2 style="margin-bottom:16px">Render Type Breakdown</h2>
+        <div style="max-width:400px;margin:0 auto">
+          <canvas id="typeChart" height="300"></canvas>
+        </div>
       </div>
+      <div class="card">
+        <h2 style="margin-bottom:16px">Recent Errors</h2>
+        ${errorsResult.rows.length > 0
+          ? `<table><thead><tr><th>URL</th><th>Error</th><th>Time</th></tr></thead><tbody>${errorRows}</tbody></table>`
+          : '<p style="color:var(--muted)">No recent errors.</p>'}
+      </div>
+      <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
       <script>
         const dailyData = ${dailyData};
         const typeData = ${typeData};
-        // Simple bar chart rendering with Canvas API
-        function drawBarChart(canvasId, data, labelKey, valueKey) {
-          const canvas = document.getElementById(canvasId);
-          if (!canvas || !data.length) return;
-          const ctx = canvas.getContext('2d');
-          const W = canvas.width = canvas.offsetWidth;
-          const H = canvas.height;
-          const max = Math.max(...data.map(d => d[valueKey]), 1);
-          const barW = Math.max(2, (W - 60) / data.length - 2);
-          ctx.fillStyle = '#1e1e2e';
-          ctx.fillRect(0, 0, W, H);
-          data.forEach((d, i) => {
-            const h = (d[valueKey] / max) * (H - 40);
-            const x = 40 + i * (barW + 2);
-            ctx.fillStyle = '#6c63ff';
-            ctx.fillRect(x, H - 20 - h, barW, h);
+        const typeColors = ${JSON.stringify(typeColors)};
+
+        // Line chart for daily renders
+        if (dailyData.length > 0) {
+          new Chart(document.getElementById('dailyChart'), {
+            type: 'line',
+            data: {
+              labels: dailyData.map(d => new Date(d.date).toLocaleDateString('en', { month: 'short', day: 'numeric' })),
+              datasets: [{
+                label: 'Renders',
+                data: dailyData.map(d => d.count),
+                borderColor: '#6c63ff',
+                backgroundColor: 'rgba(108,99,255,0.1)',
+                fill: true,
+                tension: 0.3,
+              }]
+            },
+            options: {
+              responsive: true,
+              plugins: { legend: { display: false } },
+              scales: {
+                x: { grid: { color: '#1e1e2e' }, ticks: { color: '#8888a0' } },
+                y: { grid: { color: '#1e1e2e' }, ticks: { color: '#8888a0' }, beginAtZero: true }
+              }
+            }
           });
         }
-        drawBarChart('dailyChart', dailyData, 'date', 'count');
-        drawBarChart('typeChart', typeData, 'type', 'count');
+
+        // Doughnut chart for render type breakdown
+        if (typeData.length > 0) {
+          new Chart(document.getElementById('typeChart'), {
+            type: 'doughnut',
+            data: {
+              labels: typeData.map(d => d.type),
+              datasets: [{
+                data: typeData.map(d => d.count),
+                backgroundColor: typeData.map(d => typeColors[d.type] || '#6c63ff'),
+              }]
+            },
+            options: {
+              responsive: true,
+              plugins: {
+                legend: { labels: { color: '#e0e0e8' } }
+              }
+            }
+          });
+        }
+
+        // Auto-refresh toggle
+        const autoRefreshCheckbox = document.getElementById('auto-refresh');
+        let refreshInterval = null;
+
+        function startAutoRefresh() {
+          if (refreshInterval) clearInterval(refreshInterval);
+          refreshInterval = setInterval(async () => {
+            try {
+              const res = await fetch('/v1/analytics', { credentials: 'same-origin' });
+              if (res.ok) {
+                // Reload page to update charts with fresh data
+                window.location.reload();
+              }
+            } catch (e) { /* ignore fetch errors */ }
+          }, 30000);
+        }
+
+        function stopAutoRefresh() {
+          if (refreshInterval) { clearInterval(refreshInterval); refreshInterval = null; }
+        }
+
+        // Restore preference from localStorage
+        const savedPref = localStorage.getItem('screenforge-auto-refresh');
+        if (savedPref === 'true') {
+          autoRefreshCheckbox.checked = true;
+          startAutoRefresh();
+        }
+
+        autoRefreshCheckbox.addEventListener('change', () => {
+          localStorage.setItem('screenforge-auto-refresh', String(autoRefreshCheckbox.checked));
+          if (autoRefreshCheckbox.checked) { startAutoRefresh(); } else { stopAutoRefresh(); }
+        });
       </script>`;
 
     await req.session.save();
     return reply.type('text/html').send(dashboardLayout('Usage', 'usage', html, csrfToken));
+  });
+
+  // Usage export (CSV/JSON)
+  app.get('/dashboard/usage/export', { preHandler: requireAuth }, async (req, reply) => {
+    const user = req.dashboardUser!;
+    const query = req.query as { format?: string };
+    const format = query.format;
+
+    if (format !== 'csv' && format !== 'json') {
+      return reply.status(400).send({ error: 'Invalid format. Use csv or json.' });
+    }
+
+    const pool = getPool();
+    const result = await pool.query(
+      `SELECT rj.id, rj.type, rj.url, rj.status, rj.duration_ms, rj.created_at
+       FROM render_jobs rj
+       JOIN user_api_keys uak ON uak.api_key_id = rj.api_key_id
+       WHERE uak.user_id = $1 AND rj.created_at >= CURRENT_DATE - INTERVAL '90 days'
+       ORDER BY rj.created_at DESC
+       LIMIT 10000`,
+      [user.id],
+    );
+
+    if (format === 'json') {
+      return reply
+        .header('content-disposition', 'attachment; filename="usage-export.json"')
+        .type('application/json')
+        .send(result.rows);
+    }
+
+    // CSV export
+    const headers = ['id', 'type', 'url', 'status', 'duration_ms', 'created_at'];
+    const csvLines = [headers.join(',')];
+    for (const row of result.rows) {
+      csvLines.push(headers.map(h => {
+        const val = String(row[h] ?? '');
+        return val.includes(',') || val.includes('"') ? `"${val.replace(/"/g, '""')}"` : val;
+      }).join(','));
+    }
+
+    return reply
+      .header('content-disposition', 'attachment; filename="usage-export.csv"')
+      .type('text/csv')
+      .send(csvLines.join('\n'));
+  });
+
+  // Webhook delivery log
+  app.get('/dashboard/webhooks', { preHandler: requireAuth }, async (req, reply) => {
+    const user = req.dashboardUser!;
+    const csrfToken = ensureCsrfToken(req);
+    const pool = getPool();
+    const query = req.query as { page?: string; status?: string };
+
+    const page = Math.max(1, parseInt(query.page || '1', 10) || 1);
+    const perPage = 25;
+    const offset = (page - 1) * perPage;
+    const statusFilter = query.status && ['pending', 'retrying', 'delivered', 'failed'].includes(query.status) ? query.status : null;
+
+    const params: (string | number)[] = [user.id];
+    let whereClause = '';
+    if (statusFilter) {
+      params.push(statusFilter);
+      whereClause = ` AND wd.status = $${params.length}`;
+    }
+
+    const countResult = await pool.query(
+      `SELECT COUNT(*)::int as total
+       FROM webhook_deliveries wd
+       JOIN user_api_keys uak ON uak.api_key_id = wd.api_key_id
+       WHERE uak.user_id = $1${whereClause}`,
+      params,
+    );
+    const total = countResult.rows[0]?.total ?? 0;
+    const totalPages = Math.max(1, Math.ceil(total / perPage));
+
+    params.push(perPage, offset);
+    const result = await pool.query(
+      `SELECT wd.url, wd.status, wd.last_status_code, wd.attempts, wd.last_error, wd.created_at
+       FROM webhook_deliveries wd
+       JOIN user_api_keys uak ON uak.api_key_id = wd.api_key_id
+       WHERE uak.user_id = $1${whereClause}
+       ORDER BY wd.created_at DESC
+       LIMIT $${params.length - 1} OFFSET $${params.length}`,
+      params,
+    );
+
+    const rows = result.rows.map((r: { url: string; status: string; last_status_code: number | null; attempts: number; last_error: string | null; created_at: string }) => {
+      const badgeClass = r.status === 'delivered' ? 'badge-active' : r.status === 'failed' ? 'badge-revoked' : '';
+      return `<tr>
+        <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(r.url)}</td>
+        <td><span class="badge ${badgeClass}">${escapeHtml(r.status)}</span></td>
+        <td>${r.last_status_code ?? '—'}</td>
+        <td>${r.attempts}</td>
+        <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(r.last_error || '—')}</td>
+        <td>${new Date(r.created_at).toLocaleString()}</td>
+      </tr>`;
+    }).join('');
+
+    const filterLinks = ['all', 'pending', 'retrying', 'delivered', 'failed'].map(s => {
+      const isActive = (s === 'all' && !statusFilter) || s === statusFilter;
+      const href = s === 'all' ? '/dashboard/webhooks' : `/dashboard/webhooks?status=${s}`;
+      return `<a href="${href}" class="btn btn-sm ${isActive ? 'btn-primary' : ''}" style="text-decoration:none">${s}</a>`;
+    }).join(' ');
+
+    const paginationLinks = [];
+    if (page > 1) paginationLinks.push(`<a href="/dashboard/webhooks?page=${page - 1}${statusFilter ? '&status=' + statusFilter : ''}" class="btn btn-sm">&laquo; Prev</a>`);
+    paginationLinks.push(`<span style="color:var(--muted);font-size:.85rem">Page ${page} of ${totalPages}</span>`);
+    if (page < totalPages) paginationLinks.push(`<a href="/dashboard/webhooks?page=${page + 1}${statusFilter ? '&status=' + statusFilter : ''}" class="btn btn-sm">Next &raquo;</a>`);
+
+    const html = `
+      <h1>Webhook Deliveries</h1>
+      <div style="display:flex;gap:8px;margin-bottom:16px">${filterLinks}</div>
+      <div class="card">
+        ${result.rows.length > 0
+          ? `<table><thead><tr><th>URL</th><th>Status</th><th>Response Code</th><th>Attempts</th><th>Error</th><th>Time</th></tr></thead><tbody>${rows}</tbody></table>`
+          : '<p style="color:var(--muted)">No webhook deliveries found.</p>'}
+      </div>
+      <div style="display:flex;gap:12px;align-items:center;margin-top:16px">${paginationLinks.join('')}</div>`;
+
+    await req.session.save();
+    return reply.type('text/html').send(dashboardLayout('Webhook Deliveries', 'webhooks', html, csrfToken));
   });
 
   // Settings
