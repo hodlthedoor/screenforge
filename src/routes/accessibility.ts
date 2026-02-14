@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import type { Result as AxeViolation, NodeResult as AxeNodeResult } from 'axe-core';
 import { z } from 'zod';
 import { authMiddleware } from '../auth/middleware.js';
 import { getPool } from '../db/index.js';
@@ -7,6 +8,7 @@ import { PLANS } from '../billing/plans.js';
 import { sendError } from '../security/errors.js';
 import { getStorageBackend } from '../storage/index.js';
 import { isPrivateUrl } from '../renderer/schemas.js';
+import { getConfig } from '../config/index.js';
 import sharp from 'sharp';
 
 const accessibilityRequestSchema = z.object({
@@ -30,21 +32,19 @@ const STANDARD_TO_AXE_TAGS: Record<string, string[]> = {
 
 interface FormattedViolation {
   id: string;
-  impact: string | null | undefined;
+  impact: string | null;
   description: string;
   helpUrl: string;
   nodes: { html: string; target: string[]; failureSummary: string }[];
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function formatViolation(v: any): FormattedViolation {
+function formatViolation(v: AxeViolation): FormattedViolation {
   return {
     id: v.id,
     impact: v.impact ?? null,
     description: v.description,
     helpUrl: v.helpUrl,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    nodes: (v.nodes ?? []).map((n: any) => ({
+    nodes: (v.nodes ?? []).map((n: AxeNodeResult) => ({
       html: n.html,
       target: Array.isArray(n.target) ? n.target.map(String) : [],
       failureSummary: n.failureSummary ?? '',
@@ -100,7 +100,25 @@ async function annotateScreenshot(
     .toBuffer();
 }
 
-function formatAudit(row: Record<string, unknown>) {
+interface AccessibilityJobRow {
+  id: string;
+  api_key_id: string;
+  url: string;
+  standard: string;
+  status: string;
+  violations_count: number | null;
+  passes_count: number | null;
+  incomplete_count: number | null;
+  violations: unknown;
+  screenshot_path: string | null;
+  annotated_screenshot_path: string | null;
+  duration_ms: number | null;
+  error: string | null;
+  created_at: string;
+  completed_at: string | null;
+}
+
+function formatAudit(row: AccessibilityJobRow) {
   return {
     id: row.id,
     url: row.url,
@@ -119,7 +137,7 @@ function formatAudit(row: Record<string, unknown>) {
   };
 }
 
-function formatAuditSummary(row: Record<string, unknown>) {
+function formatAuditSummary(row: AccessibilityJobRow) {
   return {
     id: row.id,
     url: row.url,
@@ -227,11 +245,12 @@ export async function accessibilityRoutes(app: FastifyInstance) {
       const { url, standard, screenshot_options, include_screenshot } = parsed.data;
       const apiKeyId = req.apiKey!.id;
       const tier = req.apiKey!.tier;
+      const pool = getPool();
+      const config = getConfig();
 
       // Check daily accessibility limit
       const plan = PLANS[tier];
       if (plan) {
-        const pool = getPool();
         const usageResult = await pool.query(
           'SELECT COALESCE(count, 0)::int as count FROM accessibility_usage_daily WHERE api_key_id = $1 AND date = CURRENT_DATE',
           [apiKeyId],
@@ -249,15 +268,11 @@ export async function accessibilityRoutes(app: FastifyInstance) {
       }
 
       // SSRF protection — check before creating job to avoid orphaned rows
-      const { getConfig } = await import('../config/index.js');
-      const config = getConfig();
       if (!config.ALLOW_PRIVATE_URLS && isPrivateUrl(url)) {
         return sendError(reply, req, 'SSRF_BLOCKED', {
           message: 'Access to private/internal URLs is not allowed',
         });
       }
-
-      const pool = getPool();
       const start = performance.now();
 
       // Create audit job record
@@ -434,6 +449,13 @@ export async function accessibilityRoutes(app: FastifyInstance) {
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       const { id } = req.params as { id: string };
+
+      if (!z.string().uuid().safeParse(id).success) {
+        return sendError(reply, req, 'VALIDATION_ERROR', {
+          message: 'Invalid audit ID format',
+        });
+      }
+
       const apiKeyId = req.apiKey!.id;
       const pool = getPool();
 

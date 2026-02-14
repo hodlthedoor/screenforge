@@ -380,6 +380,17 @@ describe('accessibility routes', () => {
       expect(body.audit.violationsCount).toBe(1);
     });
 
+    it('returns 400 for invalid UUID format', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/v1/accessibility/not-a-uuid',
+        headers: { 'x-api-key': rawApiKey },
+      });
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body);
+      expect(body.error.code).toBe('VALIDATION_ERROR');
+    });
+
     it('returns 404 for non-existent audit', async () => {
       const response = await app.inject({
         method: 'GET',
