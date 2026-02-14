@@ -2,6 +2,41 @@
 
 All notable changes to ScreenForge are documented here.
 
+## [1.1.0] - 2026-02-14
+
+### Features
+
+- **Docker Hub publishing** — multi-arch (amd64/arm64) images published to Docker Hub on tagged releases
+- **API documentation site** — replaced Swagger UI with polished, developer-focused documentation site
+- **Landing page enhancements** — conversion optimization with SEO improvements and social proof
+- **E2E integration tests** — real browser rendering tests for end-to-end validation
+- **Grafana dashboard** — production-ready monitoring dashboard with Prometheus integration
+- **Circuit breaker** — resilience improvements with request timeout and circuit breaker patterns
+- **Graceful shutdown** — health degradation and clean shutdown with inflight request tracking
+- **Automated SDK publishing** — GitHub Actions workflows for npm and PyPI SDK releases
+
+### Fixes
+
+- Hardened CI workflows for SDK publishing and conditional Docker Hub tags
+- Fixed landing page analytics injection, Redis leak, accessibility, and social meta tags
+- Fixed monitoring panel queries for prom-client v15, circuit breaker gauge initialization
+- Made Grafana credentials configurable via environment variables
+- Fixed shutdown sequence with proper inflight tracking and cleanup deduplication
+- Replaced `no-explicit-any` with proper Fastify type augmentation
+- Comprehensive security audit fixes including DNS rebinding protection
+- Removed unnecessary escape characters and unused eslint directives
+
+### Infrastructure
+
+- Prepared repository for dedicated GitHub organization
+- Added automated CI/CD pipelines for SDK publishing to npm and PyPI
+
+### Documentation
+
+- Added DOCKER.md with Docker Hub publishing instructions
+- Added PUBLISHING.md with SDK publishing guide
+- Updated ROI assessment with final development cost and path-to-revenue analysis
+
 ## [1.0.0] - 2026-02-13
 
 ### Added
@@ -56,6 +91,7 @@ All notable changes to ScreenForge are documented here.
 - Health check endpoints
 - OpenAPI/Swagger documentation
 
+[1.1.0]: https://github.com/hodlthedoor/screenforge/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/hodlthedoor/screenforge/compare/v0.2.0...v1.0.0
 [0.2.0]: https://github.com/hodlthedoor/screenforge/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/hodlthedoor/screenforge/releases/tag/v0.1.0
