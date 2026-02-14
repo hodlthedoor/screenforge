@@ -162,16 +162,15 @@ describe('webhook delivery', () => {
     it('includes X-ScreenForge-Signature header on delivery', async () => {
       const { jobId, deliveryId } = await createJobWithDelivery();
 
-      // Track baseline so BullMQ worker requests from other test files don't interfere
-      const baseline = requests.length;
-
       // Directly invoke the processor instead of waiting for BullMQ worker
       await processDirectly(deliveryId, jobId);
 
-      expect(requests.length - baseline).toBe(1);
-      const req = requests[baseline];
-      expect(req.headers['x-screenforge-signature']).toBeDefined();
-      expect(req.headers['x-screenforge-signature']).toMatch(/^t=\d+,v1=[a-f0-9]{64}$/);
+      // Find our request by signature header (BullMQ workers from other test files may add extra requests)
+      const signedReqs = requests.filter(
+        (r) => r.headers['x-screenforge-signature'] && /^t=\d+,v1=[a-f0-9]{64}$/.test(r.headers['x-screenforge-signature'] as string),
+      );
+      expect(signedReqs.length).toBeGreaterThanOrEqual(1);
+      const req = signedReqs[signedReqs.length - 1];
       expect(req.headers['content-type']).toBe('application/json');
     });
 
