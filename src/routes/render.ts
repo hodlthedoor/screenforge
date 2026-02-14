@@ -15,19 +15,7 @@ import { sanitizeUrl, sanitizeSelector, sanitizeWaitFor, sanitizeTemplate, sanit
 import { sendError } from '../security/errors.js';
 import type { RenderMetadata } from '../renderer/schemas.js';
 
-const FORMAT_EXT: Record<string, string> = {
-  'image/png': 'png',
-  'image/jpeg': 'jpg',
-  'image/webp': 'webp',
-  'application/pdf': 'pdf',
-};
-
-function getFormatFromContentType(contentType: string): 'png' | 'jpeg' | 'webp' | 'pdf' {
-  if (contentType.includes('pdf')) return 'pdf';
-  if (contentType.includes('jpeg')) return 'jpeg';
-  if (contentType.includes('webp')) return 'webp';
-  return 'png';
-}
+import { FORMAT_EXT, getFormatFromContentType } from '../utils/format.js';
 
 function sendMetadataEnvelope(
   reply: import('fastify').FastifyReply,

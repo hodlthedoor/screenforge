@@ -5,6 +5,7 @@ import { enqueueWebhook } from '../webhooks/delivery.js';
 import { getWebhookConfig } from '../db/api-keys.js';
 import { incrementRenderCounter, observeRenderDuration } from '../metrics/index.js';
 import { getConfig } from '../config/index.js';
+import { getFormatFromContentType } from '../utils/format.js';
 
 export interface RenderJobData {
   jobId: string;
@@ -76,7 +77,7 @@ export function createWorker(
     );
 
     // Record metrics (always record, even if cache hit, since this was a job completion)
-    const format = result.contentType === 'application/pdf' ? 'pdf' : (result.contentType.includes('jpeg') ? 'jpeg' : (result.contentType.includes('webp') ? 'webp' : 'png'));
+    const format = getFormatFromContentType(result.contentType);
     incrementRenderCounter(job.data.type, format, 'completed', false);
     observeRenderDuration(job.data.type, format, result.durationMs / 1000);
 

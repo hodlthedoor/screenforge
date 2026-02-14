@@ -18,6 +18,7 @@ import { ogRoutes } from './routes/og.js';
 import { signedRoutes } from './routes/signed.js';
 import { devicesRoutes } from './routes/devices.js';
 import { requestIdHook } from './security/request-id.js';
+import { getExtFromFormat, getFormatFromContentType } from './utils/format.js';
 import { requestTimeoutHook, requestTimeoutCleanupHook } from './renderer/timeout.js';
 import { ActionError } from './renderer/actions.js';
 import { getQueueMetrics, createWorker, type RenderJobData, type RenderJobResult } from './queue/render-queue.js';
@@ -423,7 +424,7 @@ export async function start() {
     // Default: screenshot (including og type)
     const parsed = screenshotOptionsSchema.parse(schemaInput);
     const result = await takeScreenshot(browserPool, parsed, config.NAVIGATION_TIMEOUT_MS);
-    const ext = parsed.format === 'jpeg' ? 'jpg' : (parsed.format === 'webp' ? 'webp' : 'png');
+    const ext = getExtFromFormat(parsed.format);
     const key = `${job.data.jobId}.${ext}`;
     const resultPath = await storage.upload(key, result.buffer, result.contentType);
     return {
@@ -437,7 +438,7 @@ export async function start() {
   // Log render job completions
   worker.on('completed', (job) => {
     const result = job.returnvalue;
-    const format = result.contentType.includes('pdf') ? 'pdf' : (result.contentType.includes('jpeg') ? 'jpeg' : (result.contentType.includes('webp') ? 'webp' : 'png'));
+    const format = getFormatFromContentType(result.contentType);
     queueLogger.info({
       url: job.data.url,
       type: job.data.type,

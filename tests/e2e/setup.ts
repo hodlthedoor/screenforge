@@ -13,6 +13,7 @@ import { screenshotOptionsSchema, pdfOptionsSchema } from '../../src/renderer/sc
 import type { Job } from 'bullmq';
 import type { FastifyInstance } from 'fastify';
 import { Redis } from 'ioredis';
+import { getExtFromFormat } from '../../src/utils/format.js';
 
 export const TEST_STORAGE = resolve(__dirname, '../../storage-e2e-test');
 
@@ -70,7 +71,7 @@ beforeAll(async () => {
 
     const parsed = screenshotOptionsSchema.parse(schemaInput);
     const result = await takeScreenshot(browserPool, parsed, config.NAVIGATION_TIMEOUT_MS);
-    const ext = parsed.format === 'jpeg' ? 'jpg' : (parsed.format === 'webp' ? 'webp' : 'png');
+    const ext = getExtFromFormat(parsed.format);
     const filePath = join(config.STORAGE_PATH, `${job.data.jobId}.${ext}`);
     await writeFile(filePath, result.buffer);
     return { resultPath: filePath, contentType: result.contentType, durationMs: result.durationMs, metadata: result.metadata };
