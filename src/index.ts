@@ -61,7 +61,7 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
   await app.register(session, {
     secret: config.SESSION_SECRET,
     cookie: {
-      secure: config.NODE_ENV === 'production',
+      secure: 'auto',
       httpOnly: true,
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     },
