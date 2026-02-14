@@ -121,8 +121,8 @@ export const actionSchema = z.object({
   type: z.enum(['click', 'scroll', 'type', 'hover', 'wait']),
   selector: z.string().max(500).optional(),
   value: z.string().max(500).optional(),
-  x: z.number().optional(),
-  y: z.number().optional(),
+  x: z.number().int().min(0).optional(),
+  y: z.number().int().min(0).optional(),
 });
 
 export type Action = z.infer<typeof actionSchema>;

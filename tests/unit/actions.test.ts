@@ -149,6 +149,56 @@ describe('executeActions', { timeout: 60_000 }, () => {
 
     await expect(executeActions(page, actions)).rejects.toThrow(ActionError);
   });
+
+  it('throws error when scroll action has neither selector nor coordinates', async () => {
+    const actions = [
+      { type: 'scroll' as const },
+    ];
+
+    await expect(executeActions(page, actions)).rejects.toThrow(ActionError);
+    try {
+      await executeActions(page, actions);
+    } catch (error) {
+      if (error instanceof ActionError) {
+        expect(error.actionIndex).toBe(0);
+        expect(error.actionType).toBe('scroll');
+        expect(error.message).toContain('requires either selector or x,y coordinates');
+      }
+    }
+  });
+
+  it('throws error when wait action value is non-numeric', async () => {
+    const actions = [
+      { type: 'wait' as const, value: 'abc' },
+    ];
+
+    await expect(executeActions(page, actions)).rejects.toThrow(ActionError);
+    try {
+      await executeActions(page, actions);
+    } catch (error) {
+      if (error instanceof ActionError) {
+        expect(error.actionIndex).toBe(0);
+        expect(error.actionType).toBe('wait');
+        expect(error.message).toContain('non-negative integer');
+      }
+    }
+  });
+
+  it('throws error when wait action value is negative', async () => {
+    const actions = [
+      { type: 'wait' as const, value: '-500' },
+    ];
+
+    await expect(executeActions(page, actions)).rejects.toThrow(ActionError);
+  });
+
+  it('throws error when hover action selector not found', async () => {
+    const actions = [
+      { type: 'hover' as const, selector: '.nonexistent-hover-target' },
+    ];
+
+    await expect(executeActions(page, actions, 200)).rejects.toThrow(ActionError);
+  });
 });
 
 describe('actions schema validation', () => {
@@ -219,6 +269,39 @@ describe('actions schema validation', () => {
       url: 'https://example.com',
       actions: [
         { type: 'click', selector: 'a'.repeat(500) },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects negative scroll coordinates', () => {
+    const result = screenshotOptionsSchema.safeParse({
+      url: 'https://example.com',
+      actions: [
+        { type: 'scroll', x: -10, y: 100 },
+      ],
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects non-integer scroll coordinates', () => {
+    const result = screenshotOptionsSchema.safeParse({
+      url: 'https://example.com',
+      actions: [
+        { type: 'scroll', x: 0, y: 100.5 },
+      ],
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts valid scroll coordinates', () => {
+    const result = screenshotOptionsSchema.safeParse({
+      url: 'https://example.com',
+      actions: [
+        { type: 'scroll', x: 0, y: 500 },
       ],
     });
 

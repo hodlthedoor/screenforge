@@ -51,7 +51,7 @@ export async function executeActions(
             // Scroll to coordinates
             await page.evaluate(
               ({ x, y }) => {
-                // @ts-expect-error - window exists in browser context
+                // @ts-expect-error - window is available in browser evaluate context but not in Node types
                 window.scrollTo(x, y); // eslint-disable-line no-undef
               },
               { x: action.x, y: action.y },
@@ -86,8 +86,12 @@ export async function executeActions(
           if (!action.value) {
             throw new Error('wait action requires value (ms as string)');
           }
+          const parsed = parseInt(action.value, 10);
+          if (isNaN(parsed) || parsed < 0) {
+            throw new Error('wait action value must be a non-negative integer (milliseconds)');
+          }
           // Cap wait time at MAX_WAIT_MS
-          const waitMs = Math.min(parseInt(action.value, 10), MAX_WAIT_MS);
+          const waitMs = Math.min(parsed, MAX_WAIT_MS);
           await page.waitForTimeout(waitMs);
           break;
         }
