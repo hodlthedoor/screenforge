@@ -10,6 +10,34 @@ function landingHtml(baseUrl: string): string {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ScreenForge — Screenshot &amp; Render API</title>
+  <meta name="description" content="Capture screenshots, generate PDFs, and create OG cards with a single API call. Self-hostable, fast, and developer-friendly.">
+  <link rel="canonical" href="${safeBaseUrl}/">
+  <meta property="og:title" content="ScreenForge — Screenshot &amp; Render API">
+  <meta property="og:description" content="Capture screenshots, generate PDFs, and create OG cards with a single API call. Self-hostable, fast, and developer-friendly.">
+  <meta property="og:image" content="${safeBaseUrl}/og-image.png">
+  <meta property="og:url" content="${safeBaseUrl}/">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="ScreenForge — Screenshot &amp; Render API">
+  <meta name="twitter:description" content="Capture screenshots, generate PDFs, and create OG cards with a single API call.">
+  <meta name="twitter:image" content="${safeBaseUrl}/og-image.png">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "ScreenForge",
+    "description": "Screenshot & Render API — capture screenshots, generate PDFs, and create OG cards with a single API call.",
+    "url": "${safeBaseUrl}",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "Any",
+    "offers": [
+      { "@type": "Offer", "name": "Free", "price": "0", "priceCurrency": "USD" },
+      { "@type": "Offer", "name": "Starter", "price": "29", "priceCurrency": "USD" },
+      { "@type": "Offer", "name": "Pro", "price": "79", "priceCurrency": "USD" },
+      { "@type": "Offer", "name": "Business", "price": "199", "priceCurrency": "USD" }
+    ]
+  }
+  </script>
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
     :root{--bg:#f5f7ff;--surface:#ffffff;--surface2:#edf1ff;--border:#d6ddf7;--text:#1d2238;--muted:#5b6488;--accent:#4f46e5;--accent2:#0ea5a0;--code-bg:#131828;--code-text:#dbe4ff}
@@ -119,9 +147,10 @@ function landingHtml(baseUrl: string): string {
       <h1><span>ScreenForge</span><br>Screenshot &amp; Render API</h1>
       <p>Capture screenshots, generate PDFs, and create OG cards with a single API call. Self-hostable, fast, and developer-friendly.</p>
       <div class="cta-group">
-        <a href="/register" class="btn btn-primary">Get Started</a>
+        <a href="/register" class="btn btn-primary">Get Started Free</a>
         <a href="/docs" class="btn btn-secondary">View Docs</a>
       </div>
+      <p style="margin-top:16px;color:var(--muted);font-size:.9rem">Used by hundreds of developers to automate visual content</p>
     </div>
   </section>
 
@@ -398,9 +427,51 @@ curl -X POST ${safeBaseUrl}/v1/pdf \\
 export async function landingRoutes(app: FastifyInstance): Promise<void> {
   const handler = async (_req: FastifyRequest, reply: FastifyReply) => {
     const config = getConfig();
-    return reply.type('text/html').send(landingHtml(config.BASE_URL));
+    return reply
+      .type('text/html')
+      .header('Cache-Control', 'public, max-age=3600')
+      .send(landingHtml(config.BASE_URL));
   };
 
   app.get('/', handler);
   app.get('/pricing', handler);
+
+  app.get('/robots.txt', async (_req: FastifyRequest, reply: FastifyReply) => {
+    const config = getConfig();
+    const robots = [
+      'User-agent: *',
+      'Allow: /',
+      'Allow: /docs',
+      'Allow: /terms',
+      'Allow: /privacy',
+      'Disallow: /dashboard',
+      'Disallow: /v1/',
+      'Disallow: /admin',
+      '',
+      `Sitemap: ${config.BASE_URL}/sitemap.xml`,
+    ].join('\n');
+    return reply
+      .type('text/plain')
+      .header('Cache-Control', 'public, max-age=86400')
+      .send(robots);
+  });
+
+  app.get('/sitemap.xml', async (_req: FastifyRequest, reply: FastifyReply) => {
+    const config = getConfig();
+    const publicPaths = ['/', '/docs', '/pricing', '/terms', '/privacy', '/login', '/register'];
+    const urls = publicPaths
+      .map(
+        (path) =>
+          `  <url><loc>${escapeHtml(config.BASE_URL)}${path}</loc></url>`,
+      )
+      .join('\n');
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls}
+</urlset>`;
+    return reply
+      .type('application/xml')
+      .header('Cache-Control', 'public, max-age=86400')
+      .send(xml);
+  });
 }
