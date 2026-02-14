@@ -87,4 +87,42 @@ describe('config', () => {
       loadConfig({ ...validEnv, GRACEFUL_SHUTDOWN_TIMEOUT_MS: '500' }),
     ).toThrow('Invalid environment configuration');
   });
+
+  it('defaults RENDER_TIMEOUT_MS to 30000', () => {
+    const config = loadConfig(validEnv);
+    expect(config.RENDER_TIMEOUT_MS).toBe(30_000);
+  });
+
+  it('accepts custom RENDER_TIMEOUT_MS', () => {
+    const config = loadConfig({ ...validEnv, RENDER_TIMEOUT_MS: '45000' });
+    expect(config.RENDER_TIMEOUT_MS).toBe(45_000);
+  });
+
+  it('rejects RENDER_TIMEOUT_MS less than 1000', () => {
+    expect(() =>
+      loadConfig({ ...validEnv, RENDER_TIMEOUT_MS: '500' }),
+    ).toThrow('Invalid environment configuration');
+  });
+
+  it('rejects RENDER_TIMEOUT_MS greater than 120000', () => {
+    expect(() =>
+      loadConfig({ ...validEnv, RENDER_TIMEOUT_MS: '150000' }),
+    ).toThrow('Invalid environment configuration');
+  });
+
+  it('defaults CIRCUIT_BREAKER_THRESHOLD to 3', () => {
+    const config = loadConfig(validEnv);
+    expect(config.CIRCUIT_BREAKER_THRESHOLD).toBe(3);
+  });
+
+  it('accepts custom CIRCUIT_BREAKER_THRESHOLD', () => {
+    const config = loadConfig({ ...validEnv, CIRCUIT_BREAKER_THRESHOLD: '5' });
+    expect(config.CIRCUIT_BREAKER_THRESHOLD).toBe(5);
+  });
+
+  it('rejects CIRCUIT_BREAKER_THRESHOLD less than 1', () => {
+    expect(() =>
+      loadConfig({ ...validEnv, CIRCUIT_BREAKER_THRESHOLD: '0' }),
+    ).toThrow('Invalid environment configuration');
+  });
 });

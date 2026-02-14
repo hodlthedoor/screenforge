@@ -106,6 +106,18 @@ export function initMetrics(): void {
     registers: [register],
   });
 
+  new Counter({
+    name: 'screenforge_render_timeouts_total',
+    help: 'Total number of render requests that timed out',
+    registers: [register],
+  });
+
+  new Gauge({
+    name: 'screenforge_circuit_breaker_state',
+    help: 'Circuit breaker state (0=closed, 1=half-open, 2=open)',
+    registers: [register],
+  });
+
   metricsInitialized = true;
 }
 
@@ -191,5 +203,19 @@ export function incrementStorageReclaimedBytes(bytes: number): void {
   const counter = register.getSingleMetric('screenforge_storage_reclaimed_bytes_total') as Counter<string>;
   if (counter) {
     counter.inc(bytes);
+  }
+}
+
+export function incrementRenderTimeouts(): void {
+  const counter = register.getSingleMetric('screenforge_render_timeouts_total') as Counter<string>;
+  if (counter) {
+    counter.inc();
+  }
+}
+
+export function setCircuitBreakerState(state: 0 | 1 | 2): void {
+  const gauge = register.getSingleMetric('screenforge_circuit_breaker_state') as Gauge<string>;
+  if (gauge) {
+    gauge.set(state);
   }
 }

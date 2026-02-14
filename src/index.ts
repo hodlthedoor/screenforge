@@ -17,6 +17,7 @@ import { batchRoutes } from './routes/batch.js';
 import { ogRoutes } from './routes/og.js';
 import { signedRoutes } from './routes/signed.js';
 import { requestIdHook } from './security/request-id.js';
+import { requestTimeoutHook, requestTimeoutCleanupHook } from './renderer/timeout.js';
 import { getQueueMetrics, createWorker, type RenderJobData, type RenderJobResult } from './queue/render-queue.js';
 import { closePool } from './db/index.js';
 import { closeQueue } from './queue/render-queue.js';
@@ -93,6 +94,11 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
   // Request ID tracking
   app.addHook('onRequest', requestIdHook);
 
+  // Request timeout (all routes)
+  app.addHook('onRequest', requestTimeoutHook);
+  app.addHook('onResponse', requestTimeoutCleanupHook);
+  app.addHook('onError', requestTimeoutCleanupHook);
+
   // Security headers
   app.addHook('onRequest', async (req, reply) => {
     reply.header('X-Content-Type-Options', 'nosniff');
@@ -137,7 +143,11 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
   // Register loggers for modules
   registerLoggers(app);
 
-  const pool = new BrowserPool(config.BROWSER_POOL_SIZE, config.MAX_RENDERS_PER_CONTEXT);
+  const pool = new BrowserPool(
+    config.BROWSER_POOL_SIZE,
+    config.MAX_RENDERS_PER_CONTEXT,
+    config.CIRCUIT_BREAKER_THRESHOLD
+  );
   if (!opts?.skipBrowserInit) {
     await pool.init();
   }

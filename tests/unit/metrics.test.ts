@@ -12,6 +12,8 @@ import {
   updateBrowserPoolGauge,
   updateCacheGauges,
   incrementStorageReclaimedBytes,
+  incrementRenderTimeouts,
+  setCircuitBreakerState,
 } from '../../src/metrics/index.js';
 
 describe('metrics', () => {
@@ -73,6 +75,8 @@ describe('metrics', () => {
       expect(result).toContain('# TYPE screenforge_cache_entries gauge');
       expect(result).toContain('# TYPE screenforge_cache_size_bytes gauge');
       expect(result).toContain('# TYPE screenforge_storage_reclaimed_bytes_total counter');
+      expect(result).toContain('# TYPE screenforge_render_timeouts_total counter');
+      expect(result).toContain('# TYPE screenforge_circuit_breaker_state gauge');
     });
   });
 
@@ -227,6 +231,41 @@ describe('metrics', () => {
       const metrics = await getMetrics();
       // Should still emit the counter even with 0
       expect(metrics).toContain('screenforge_storage_reclaimed_bytes_total');
+    });
+  });
+
+  describe('timeout metrics', () => {
+    it('increments render timeout counter', async () => {
+      incrementRenderTimeouts();
+      incrementRenderTimeouts();
+
+      const metrics = await getMetrics();
+      expect(metrics).toMatch(/screenforge_render_timeouts_total\s+\d+/);
+    });
+  });
+
+  describe('circuit breaker metrics', () => {
+    it('sets circuit breaker state gauge', async () => {
+      setCircuitBreakerState(0); // Closed
+      let metrics = await getMetrics();
+      expect(metrics).toMatch(/screenforge_circuit_breaker_state\s+0/);
+
+      setCircuitBreakerState(1); // Half-open
+      metrics = await getMetrics();
+      expect(metrics).toMatch(/screenforge_circuit_breaker_state\s+1/);
+
+      setCircuitBreakerState(2); // Open
+      metrics = await getMetrics();
+      expect(metrics).toMatch(/screenforge_circuit_breaker_state\s+2/);
+    });
+
+    it('overwrites previous state value', async () => {
+      setCircuitBreakerState(2);
+      setCircuitBreakerState(0);
+
+      const metrics = await getMetrics();
+      expect(metrics).toMatch(/screenforge_circuit_breaker_state\s+0/);
+      expect(metrics).not.toMatch(/screenforge_circuit_breaker_state\s+2/);
     });
   });
 });
