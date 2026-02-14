@@ -68,6 +68,8 @@ jobs:
           cache: npm
           cache-dependency-path: packages/mcp-server/package-lock.json
       - run: npm ci --prefix packages/mcp-server
+      - name: Verify sequential session reconnect contract
+        run: npm --prefix packages/mcp-server run test:sequential-session
       - run: npm --prefix packages/mcp-server test
 
   docker-build:

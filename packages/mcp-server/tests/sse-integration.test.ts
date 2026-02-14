@@ -45,7 +45,7 @@ describe('SSE transport integration', () => {
     await client.close();
   });
 
-  it('returns 409 for concurrent SSE session and allows reconnect after close', async () => {
+  it('enforces sequential-session contract with full MCP calls after reconnect', async () => {
     const server = await startSseServer(
       {
         apiKey: 'sk_test',
@@ -76,19 +76,34 @@ describe('SSE transport integration', () => {
       await firstClient.close();
     }
 
-    let reconnectResponse: Response | null = null;
+    let reconnectSucceeded = false;
+    let reconnectClient: Client | null = null;
+
     for (let attempt = 0; attempt < 20; attempt += 1) {
-      const response = await fetch(`http://127.0.0.1:${server.port}/sse`);
-      if (response.status === 200) {
-        reconnectResponse = response;
+      const transport = new SSEClientTransport(new URL(`http://127.0.0.1:${server.port}/sse`));
+      const client = new Client({ name: 'mcp-integration-test-reconnect', version: '0.0.0' });
+      try {
+        await client.connect(transport);
+        const result = await client.listTools();
+        expect(result.tools.length).toBeGreaterThan(0);
+        reconnectSucceeded = true;
+        reconnectClient = client;
         break;
+      } catch (error) {
+        await client.close().catch(() => undefined);
+        const isReconnectRace409 =
+          error instanceof Error &&
+          (error.message.includes('HTTP 409') || error.message.includes('status code (409)'));
+
+        if (!isReconnectRace409) {
+          throw error;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
       }
-      expect(response.status).toBe(409);
-      await new Promise((resolve) => setTimeout(resolve, 50));
     }
 
-    expect(reconnectResponse?.status).toBe(200);
-    await reconnectResponse?.body?.cancel();
+    expect(reconnectSucceeded).toBe(true);
+    await reconnectClient?.close();
   });
 
   it('still allows MCP tool listing after a rejected concurrent connect attempt', async () => {

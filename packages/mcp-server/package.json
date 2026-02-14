@@ -33,6 +33,7 @@
   "scripts": {
     "build": "tsup",
     "test": "vitest run --config vitest.config.ts",
+    "test:sequential-session": "vitest run --config vitest.config.ts tests/sse-integration.test.ts -t \"enforces sequential-session contract with full MCP calls after reconnect\"",
     "test:watch": "vitest --config vitest.config.ts",
     "typecheck": "tsc --noEmit"
   },
