@@ -69,34 +69,61 @@ export interface SseServerOptions {
   messagesPath?: string;
 }
 
+function writeJson(res: ServerResponse, statusCode: number, payload: Record<string, unknown>): void {
+  if (res.writableEnded) {
+    return;
+  }
+
+  if (!res.headersSent) {
+    res.writeHead(statusCode, { 'content-type': 'application/json' });
+  }
+
+  res.end(JSON.stringify(payload));
+}
+
 export async function startSseServer(config: McpServerConfig, options: SseServerOptions): Promise<void> {
   const server = createScreenforgeMcpServer(config);
   const ssePath = options.ssePath ?? '/sse';
   const messagesPath = options.messagesPath ?? '/messages';
-
-  let transport: SSEServerTransport | null = null;
+  const transports = new Map<string, SSEServerTransport>();
 
   const httpServer = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const requestUrl = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
 
     try {
       if (req.method === 'GET' && requestUrl.pathname === '/health') {
-        res.writeHead(200, { 'content-type': 'application/json' });
-        res.end(JSON.stringify({ ok: true }));
+        writeJson(res, 200, { ok: true });
         return;
       }
 
       if (req.method === 'GET' && requestUrl.pathname === ssePath) {
-        transport = new SSEServerTransport(messagesPath, res);
+        const transport = new SSEServerTransport(messagesPath, res);
+        transports.set(transport.sessionId, transport);
+        transport.onclose = () => {
+          transports.delete(transport.sessionId);
+        };
+
+        if (typeof res.on === 'function') {
+          res.on('close', () => {
+            transports.delete(transport.sessionId);
+          });
+        }
+
         await server.connect(transport);
         await transport.start();
         return;
       }
 
       if (req.method === 'POST' && requestUrl.pathname === messagesPath) {
+        const sessionId = requestUrl.searchParams.get('sessionId');
+        if (!sessionId) {
+          writeJson(res, 400, { error: 'Missing required query parameter: sessionId' });
+          return;
+        }
+
+        const transport = transports.get(sessionId);
         if (!transport) {
-          res.writeHead(400, { 'content-type': 'application/json' });
-          res.end(JSON.stringify({ error: 'No active SSE session. Connect to SSE endpoint first.' }));
+          writeJson(res, 404, { error: 'SSE session not found' });
           return;
         }
 
@@ -104,11 +131,18 @@ export async function startSseServer(config: McpServerConfig, options: SseServer
         return;
       }
 
-      res.writeHead(404, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Not found' }));
+      writeJson(res, 404, { error: 'Not found' });
     } catch (error) {
-      res.writeHead(500, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }));
+      if (res.writableEnded) {
+        return;
+      }
+
+      if (res.headersSent) {
+        res.end();
+        return;
+      }
+
+      writeJson(res, 500, { error: error instanceof Error ? error.message : String(error) });
     }
   });
 

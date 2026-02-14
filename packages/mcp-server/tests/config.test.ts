@@ -10,7 +10,7 @@ describe('loadConfigFromEnv', () => {
   it('uses default API URL and inline limit', () => {
     const config = loadConfigFromEnv({ SCREENFORGE_API_KEY: 'sk_test' });
 
-    expect(config.apiUrl).toBe('http://localhost:3200');
+    expect(config.apiUrl).toBe('http://localhost:3100');
     expect(config.inlineDataLimitBytes).toBe(524288);
   });
 

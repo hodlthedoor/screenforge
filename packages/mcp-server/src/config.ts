@@ -5,7 +5,7 @@ export interface McpServerConfig {
   artifactDir?: string;
 }
 
-const DEFAULT_API_URL = 'http://localhost:3200';
+const DEFAULT_API_URL = 'http://localhost:3100';
 const DEFAULT_INLINE_DATA_LIMIT_BYTES = 512 * 1024;
 
 export function loadConfigFromEnv(env: NodeJS.ProcessEnv = process.env): McpServerConfig {

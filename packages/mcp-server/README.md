@@ -35,7 +35,7 @@ Required:
 
 Optional:
 
-- `SCREENFORGE_API_URL`: ScreenForge API base URL (default `http://localhost:3200`)
+- `SCREENFORGE_API_URL`: ScreenForge API base URL (default `http://localhost:3100`)
 - `SCREENFORGE_MCP_INLINE_LIMIT_BYTES`: inline base64 limit in bytes (default `524288`)
 - `SCREENFORGE_MCP_ARTIFACT_DIR`: directory for large payload files
 - `MCP_TRANSPORT`: `stdio` (default) or `sse`
@@ -51,6 +51,8 @@ Optional:
 ```bash
 SCREENFORGE_API_KEY=sk_xxx npx @screenforge/mcp-server
 ```
+
+Installed binary name: `screenforge-mcp`
 
 ### SSE mode
 
@@ -73,7 +75,7 @@ SSE endpoints:
       "command": "npx",
       "args": ["-y", "@screenforge/mcp-server"],
       "env": {
-        "SCREENFORGE_API_URL": "http://localhost:3200",
+        "SCREENFORGE_API_URL": "http://localhost:3100",
         "SCREENFORGE_API_KEY": "sk_your_key"
       }
     }
@@ -93,7 +95,7 @@ SSE endpoints:
       "command": "npx",
       "args": ["-y", "@screenforge/mcp-server"],
       "env": {
-        "SCREENFORGE_API_URL": "http://localhost:3200",
+        "SCREENFORGE_API_URL": "http://localhost:3100",
         "SCREENFORGE_API_KEY": "sk_your_key"
       }
     }
