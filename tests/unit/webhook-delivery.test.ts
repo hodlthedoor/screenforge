@@ -2,7 +2,8 @@ import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { getPool, closePool } from '../../src/db/index.js';
 import { createApiKey } from '../../src/db/api-keys.js';
 import { loadConfig } from '../../src/config/index.js';
-import { enqueueWebhook, getDeliveryStatus, RETRY_DELAYS, createWebhookWorker, closeWebhookQueue } from '../../src/webhooks/delivery.js';
+import { enqueueWebhook, getDeliveryStatus, RETRY_DELAYS, createWebhookWorker, closeWebhookQueue, type WebhookJobData } from '../../src/webhooks/delivery.js';
+import type { Worker } from 'bullmq';
 import { createServer, type Server } from 'node:http';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
@@ -12,6 +13,7 @@ describe('webhook delivery', () => {
   let requests: Array<{ headers: IncomingMessage['headers']; body: string }> = [];
   let responseStatus = 200;
   let apiKeyId: string;
+  let webhookWorker: Worker<WebhookJobData>;
 
   beforeAll(async () => {
     process.env.API_KEY_SALT = 'test-salt-must-be-16-chars-long';
@@ -22,7 +24,7 @@ describe('webhook delivery', () => {
     loadConfig();
 
     // Start webhook worker
-    createWebhookWorker('redis://127.0.0.1:6379/15');
+    webhookWorker = createWebhookWorker('redis://127.0.0.1:6379/15');
 
     // Create test API key
     const result = await createApiKey('webhook-test', 'free');
@@ -78,6 +80,9 @@ describe('webhook delivery', () => {
 
   describe('enqueueWebhook', () => {
     it('creates a delivery record with pending status', async () => {
+      // Pause the worker so it doesn't process the job before we can check
+      await webhookWorker.pause(true);
+
       // Create a real render job for testing
       const jobResult = await getPool().query(
         `INSERT INTO render_jobs (api_key_id, type, url, options)
@@ -111,6 +116,9 @@ describe('webhook delivery', () => {
       expect(delivery.attempts).toBe(0);
       expect(delivery.payload.jobId).toBe(jobId);
       expect(delivery.payload.status).toBe('completed');
+
+      // Resume the worker for subsequent tests
+      webhookWorker.resume();
     });
   });
 
