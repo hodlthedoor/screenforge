@@ -18,5 +18,23 @@ export default defineConfig({
     },
     testTimeout: 10000,
     hookTimeout: 10000,
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'lcov', 'json-summary'],
+      exclude: [
+        'node_modules/**',
+        'dist/**',
+        'tests/**',
+        'vitest.config.ts',
+        'vitest.e2e.config.ts',
+        '**/*.d.ts',
+      ],
+      thresholds: {
+        lines: 70,
+        branches: 69.9,
+        functions: 70,
+        statements: 70,
+      },
+    },
   },
 });
