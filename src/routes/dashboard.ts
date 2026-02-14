@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { getUserById, getUserApiKeys, linkApiKeyToUser, revokeUserApiKey, verifyUserPassword, deleteUser } from '../db/users.js';
-import { createApiKey, getUsageStats, getBatchUsageStats, rotateApiKey, getApiKeyWithSigningSecret } from '../db/api-keys.js';
+import { createApiKey, getBatchUsageStats, rotateApiKey, getApiKeyWithSigningSecret } from '../db/api-keys.js';
 import { generateSignedUrl, type SignedUrlOptions } from '../auth/signed-urls.js';
 import { getPool } from '../db/index.js';
 import { escapeHtml, generateCsrfToken } from '../utils/html.js';
