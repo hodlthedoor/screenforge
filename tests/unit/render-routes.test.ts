@@ -452,5 +452,19 @@ describe('render routes', () => {
       const body = JSON.parse(res.body);
       expect(body.error).toBeDefined();
     });
+
+    it('returns 400 for PDF URL exceeding max length (sanitization)', async () => {
+      const longUrl = 'https://example.com/' + 'a'.repeat(2040);
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/pdf',
+        headers: { 'x-api-key': rawKey, 'content-type': 'application/json' },
+        payload: { url: longUrl },
+      });
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.body);
+      expect(body.error).toHaveProperty('code', 'VALIDATION_ERROR');
+      expect(body.error.message).toContain('URL exceeds');
+    });
   });
 });

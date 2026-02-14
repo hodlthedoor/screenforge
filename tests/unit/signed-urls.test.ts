@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { buildServer } from '../../src/index.js';
 import { getPool, closePool } from '../../src/db/index.js';
@@ -593,6 +594,104 @@ describe('signed URLs', () => {
       expect(res.statusCode).toBe(400);
       const body = JSON.parse(res.body);
       expect(body.error).toHaveProperty('code', 'VALIDATION_ERROR');
+    });
+
+    // Helper: build a signed URL with proper array params (repeated keys)
+    // that Fastify will parse as arrays, with a valid HMAC signature.
+    function buildSignedUrlWithArrays(
+      apiKeyId: string,
+      secret: string,
+      type: 'screenshot' | 'pdf',
+      baseParams: Record<string, string>,
+      arrayParams: Record<string, string[]>,
+    ): string {
+      const expiresAt = Date.now() + 3600_000;
+      // Build canonical form: arrays become comma-joined via String()
+      const allParams: Record<string, unknown> = {
+        api_key_id: apiKeyId,
+        expires: expiresAt,
+        ...baseParams,
+      };
+      for (const [k, v] of Object.entries(arrayParams)) {
+        allParams[k] = v; // array value — String([...]) produces comma-joined
+      }
+      const sorted = Object.keys(allParams).sort();
+      const pairs: string[] = [];
+      for (const key of sorted) {
+        const val = allParams[key];
+        if (val === undefined || val === null) continue;
+        pairs.push(`${key}=${encodeURIComponent(String(val))}`);
+      }
+      const canonicalQuery = pairs.join('&');
+      const hmac = createHmac('sha256', secret);
+      hmac.update(canonicalQuery + expiresAt);
+      const signature = hmac.digest('hex');
+
+      // Build actual URL with repeated keys for arrays
+      const path = type === 'screenshot' ? '/v1/signed/screenshot' : '/v1/signed/pdf';
+      const urlParts: string[] = [];
+      for (const key of sorted) {
+        const val = allParams[key];
+        if (val === undefined || val === null) continue;
+        if (Array.isArray(val)) {
+          for (const item of val) {
+            urlParts.push(`${key}=${encodeURIComponent(String(item))}`);
+          }
+        } else {
+          urlParts.push(`${key}=${encodeURIComponent(String(val))}`);
+        }
+      }
+      urlParts.push(`signature=${signature}`);
+      return `${path}?${urlParts.join('&')}`;
+    }
+
+    it('rejects signed URL with malicious hide_selectors array (sanitization)', async () => {
+      // Use 2 values so Fastify qs parser creates an array (single value → string)
+      const signedUrl = buildSignedUrlWithArrays(
+        testApiKeyId,
+        testSigningSecret,
+        'screenshot',
+        { url: 'https://example.com' },
+        { hide_selectors: ['<script>alert(1)</script>', '.valid'] },
+      );
+
+      const res = await app.inject({ method: 'GET', url: signedUrl });
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.body);
+      expect(body.error).toHaveProperty('code', 'VALIDATION_ERROR');
+      expect(body.error.message).toContain('hide_selectors');
+    });
+
+    it('rejects signed URL with malicious remove_selectors array (sanitization)', async () => {
+      const signedUrl = buildSignedUrlWithArrays(
+        testApiKeyId,
+        testSigningSecret,
+        'screenshot',
+        { url: 'https://example.com' },
+        { remove_selectors: ['javascript:alert(1)', '.valid'] },
+      );
+
+      const res = await app.inject({ method: 'GET', url: signedUrl });
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.body);
+      expect(body.error).toHaveProperty('code', 'VALIDATION_ERROR');
+      expect(body.error.message).toContain('remove_selectors');
+    });
+
+    it('rejects signed URL with malicious blur_selectors array (sanitization)', async () => {
+      const signedUrl = buildSignedUrlWithArrays(
+        testApiKeyId,
+        testSigningSecret,
+        'screenshot',
+        { url: 'https://example.com' },
+        { blur_selectors: ['<img onerror=alert(1)>', '.valid'] },
+      );
+
+      const res = await app.inject({ method: 'GET', url: signedUrl });
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.body);
+      expect(body.error).toHaveProperty('code', 'VALIDATION_ERROR');
+      expect(body.error.message).toContain('blur_selectors');
     });
 
     it('rate limits signed URL requests when REQUIRE_AUTH is true', async () => {
