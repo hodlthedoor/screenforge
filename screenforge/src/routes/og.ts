@@ -161,6 +161,7 @@ export async function ogRoutes(app: FastifyInstance, pool: BrowserPool, cache: R
 
     // Render the OG card
     const start = performance.now();
+    app.incrementInflightRenders();
     const context = await pool.acquire({ viewport: { width: 1200, height: 630 } });
     try {
       const page = await context.newPage();
@@ -177,6 +178,7 @@ export async function ogRoutes(app: FastifyInstance, pool: BrowserPool, cache: R
         .send(buffer);
     } finally {
       await context.close();
+      app.decrementInflightRenders();
     }
   });
 }

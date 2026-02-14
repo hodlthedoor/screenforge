@@ -200,19 +200,24 @@ export async function renderRoutes(
         .send(buffer);
     }
 
-    const result = await takeScreenshot(pool, options, config.NAVIGATION_TIMEOUT_MS);
-    const ext = FORMAT_EXT[result.contentType] ?? 'bin';
-    await cache.set(optionsHash, result.buffer, result.contentType, ext);
+    app.incrementInflightRenders();
+    try {
+      const result = await takeScreenshot(pool, options, config.NAVIGATION_TIMEOUT_MS);
+      const ext = FORMAT_EXT[result.contentType] ?? 'bin';
+      await cache.set(optionsHash, result.buffer, result.contentType, ext);
 
-    const format = result.contentType.includes('jpeg') ? 'jpeg' : 'png';
-    incrementRenderCounter('screenshot', format, 'completed', false);
-    observeRenderDuration('screenshot', format, result.durationMs / 1000);
+      const format = result.contentType.includes('jpeg') ? 'jpeg' : 'png';
+      incrementRenderCounter('screenshot', format, 'completed', false);
+      observeRenderDuration('screenshot', format, result.durationMs / 1000);
 
-    return reply
-      .header('Content-Type', result.contentType)
-      .header('X-Cache', 'MISS')
-      .header('X-Render-Duration-Ms', String(result.durationMs))
-      .send(result.buffer);
+      return reply
+        .header('Content-Type', result.contentType)
+        .header('X-Cache', 'MISS')
+        .header('X-Render-Duration-Ms', String(result.durationMs))
+        .send(result.buffer);
+    } finally {
+      app.decrementInflightRenders();
+    }
   });
 
   app.post('/v1/pdf', {
@@ -319,16 +324,21 @@ export async function renderRoutes(
         .send(buffer);
     }
 
-    const result = await renderPdf(pool, options, config.NAVIGATION_TIMEOUT_MS);
-    await cache.set(optionsHash, result.buffer, result.contentType, 'pdf');
+    app.incrementInflightRenders();
+    try {
+      const result = await renderPdf(pool, options, config.NAVIGATION_TIMEOUT_MS);
+      await cache.set(optionsHash, result.buffer, result.contentType, 'pdf');
 
-    incrementRenderCounter('pdf', 'pdf', 'completed', false);
-    observeRenderDuration('pdf', 'pdf', result.durationMs / 1000);
+      incrementRenderCounter('pdf', 'pdf', 'completed', false);
+      observeRenderDuration('pdf', 'pdf', result.durationMs / 1000);
 
-    return reply
-      .header('Content-Type', result.contentType)
-      .header('X-Cache', 'MISS')
-      .header('X-Render-Duration-Ms', String(result.durationMs))
-      .send(result.buffer);
+      return reply
+        .header('Content-Type', result.contentType)
+        .header('X-Cache', 'MISS')
+        .header('X-Render-Duration-Ms', String(result.durationMs))
+        .send(result.buffer);
+    } finally {
+      app.decrementInflightRenders();
+    }
   });
 }

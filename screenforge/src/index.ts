@@ -269,17 +269,6 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
     reply.status(statusCode).send(response);
   });
 
-  app.addHook('onClose', async () => {
-    storageLifecycle.stop();
-    await pool.close();
-    await cache.close();
-    await rateLimiter.close();
-    await closeQueue();
-    await closeWebhookQueue();
-    await closeUsageMonitor();
-    await closePool();
-  });
-
   // Graceful shutdown function
   const gracefulShutdown = async (): Promise<void> => {
     // Idempotency: if shutdown already in progress, return the existing promise
@@ -357,12 +346,10 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
     inflightRenders--;
   };
 
-  // Reset shutdown state (for testing)
-  const resetShutdownState = () => {
-    shuttingDown = false;
-    shutdownPromise = null;
-    inflightRenders = 0;
-  };
+  // Delegate onClose to gracefulShutdown (idempotent — safe if already called)
+  app.addHook('onClose', async () => {
+    await gracefulShutdown();
+  });
 
   app.decorate('browserPool', pool);
   app.decorate('renderCache', cache);
@@ -370,7 +357,6 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
   app.decorate('gracefulShutdown', gracefulShutdown);
   app.decorate('incrementInflightRenders', incrementInflightRenders);
   app.decorate('decrementInflightRenders', decrementInflightRenders);
-  app.decorate('resetShutdownState', resetShutdownState);
 
   return app;
 }
