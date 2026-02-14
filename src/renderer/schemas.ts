@@ -313,3 +313,31 @@ export interface RenderResult {
   metadata?: RenderMetadata;
   thumbnailBuffer?: Buffer;
 }
+
+// GIF recording options
+export const gifOptionsSchema = z.object({
+  url: httpUrlSchema,
+  width: z.number().int().min(1).max(1280).default(1280),
+  height: z.number().int().min(1).max(720).default(720),
+  duration: z.number().min(0.1).max(10).default(3),
+  fps: z.number().int().min(1).max(30).default(10),
+  darkMode: z.boolean().default(false),
+  deviceScaleFactor: z.number().min(0.5).max(4).default(1),
+  delay: z.number().int().min(0).max(30_000).default(0),
+  actions: z.array(actionSchema).max(10).optional(),
+  // Content filters
+  ...contentFilterSchema.shape,
+  // Request overrides
+  ...requestOverridesSchema.shape,
+  // Emulation
+  ...emulationSchema.shape,
+  proxy: proxySchema,
+  // Wait strategy
+  waitFor: z.string().optional(),
+  wait: waitStrategySchema.optional(),
+  userAgent: z.string().optional(),
+}).refine((data) => !(data.waitFor && data.wait), {
+  message: 'waitFor and wait are mutually exclusive',
+});
+
+export type GifOptions = z.infer<typeof gifOptionsSchema>;

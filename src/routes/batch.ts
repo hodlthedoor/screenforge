@@ -4,13 +4,13 @@ import { getPool } from '../db/index.js';
 import { getQueue, type RenderJobData } from '../queue/render-queue.js';
 import { authMiddleware } from '../auth/middleware.js';
 import { getConfig } from '../config/index.js';
-import { screenshotOptionsSchema, pdfOptionsSchema, isPrivateUrl } from '../renderer/schemas.js';
+import { screenshotOptionsSchema, pdfOptionsSchema, gifOptionsSchema, isPrivateUrl } from '../renderer/schemas.js';
 import { sanitizeCallbackUrl, SanitizeError } from '../security/sanitize.js';
 import { sendError } from '../security/errors.js';
 import { getStorageBackend } from '../storage/index.js';
 
 const batchItemSchema = z.object({
-  type: z.enum(['screenshot', 'pdf']).default('screenshot'),
+  type: z.enum(['screenshot', 'pdf', 'gif']).default('screenshot'),
   url: z.string().url().optional(),
   html: z.string().optional(),
   options: z.record(z.string(), z.unknown()).optional(),
@@ -43,7 +43,7 @@ export async function batchRoutes(app: FastifyInstance) {
             items: {
               type: 'object',
               properties: {
-                type: { type: 'string', enum: ['screenshot', 'pdf'], default: 'screenshot' },
+                type: { type: 'string', enum: ['screenshot', 'pdf', 'gif'], default: 'screenshot' },
                 url: { type: 'string', },
                 html: { type: 'string' },
                 options: { type: 'object', additionalProperties: true },
@@ -71,7 +71,7 @@ export async function batchRoutes(app: FastifyInstance) {
         ...(item.url ? { url: item.url } : { html: item.html }),
         ...(item.options ?? {}),
       };
-      const schema = item.type === 'pdf' ? pdfOptionsSchema : screenshotOptionsSchema;
+      const schema = item.type === 'pdf' ? pdfOptionsSchema : item.type === 'gif' ? gifOptionsSchema : screenshotOptionsSchema;
       const check = schema.safeParse(fullOptions);
       if (!check.success) {
         sendError(reply, req, 'VALIDATION_ERROR', {

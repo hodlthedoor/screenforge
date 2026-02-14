@@ -15,6 +15,7 @@ import { usageRoutes } from './routes/usage.js';
 import { asyncRenderRoutes } from './routes/async-render.js';
 import { batchRoutes } from './routes/batch.js';
 import { ogRoutes } from './routes/og.js';
+import { gifRoutes } from './routes/gif.js';
 import { signedRoutes } from './routes/signed.js';
 import { devicesRoutes } from './routes/devices.js';
 import { requestIdHook } from './security/request-id.js';
@@ -43,7 +44,8 @@ import { registerLoggers, getLogger } from './logging/index.js';
 import { buildErrorResponse } from './security/errors.js';
 import { takeScreenshot } from './renderer/screenshot.js';
 import { renderPdf } from './renderer/pdf.js';
-import { screenshotOptionsSchema, pdfOptionsSchema } from './renderer/schemas.js';
+import { screenshotOptionsSchema, pdfOptionsSchema, gifOptionsSchema } from './renderer/schemas.js';
+import { captureGif } from './renderer/gif.js';
 import { mkdir } from 'node:fs/promises';
 import type { Job } from 'bullmq';
 import { getStorageBackend } from './storage/index.js';
@@ -253,6 +255,7 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
   await usageRoutes(app);
   await asyncRenderRoutes(app);
   await batchRoutes(app);
+  await gifRoutes(app, pool, cache, rateLimiter);
   await ogRoutes(app, pool, cache);
   await webhooksRoutes(app);
   await analyticsRoutes(app);
@@ -425,6 +428,19 @@ export async function start() {
       const parsed = pdfOptionsSchema.parse(schemaInput);
       const result = await renderPdf(browserPool, parsed, config.NAVIGATION_TIMEOUT_MS);
       const key = `${job.data.jobId}.pdf`;
+      const resultPath = await storage.upload(key, result.buffer, result.contentType);
+      return {
+        resultPath,
+        contentType: result.contentType,
+        durationMs: result.durationMs,
+        metadata: result.metadata,
+      };
+    }
+
+    if (type === 'gif') {
+      const parsed = gifOptionsSchema.parse(schemaInput);
+      const result = await captureGif(browserPool, parsed, config.NAVIGATION_TIMEOUT_MS);
+      const key = `${job.data.jobId}.gif`;
       const resultPath = await storage.upload(key, result.buffer, result.contentType);
       return {
         resultPath,

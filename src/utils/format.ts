@@ -6,6 +6,7 @@ export const FORMAT_EXT: Record<string, string> = {
   'image/jpeg': 'jpg',
   'image/webp': 'webp',
   'application/pdf': 'pdf',
+  'image/gif': 'gif',
 };
 
 /** Maps a user-facing format name to a file extension. */
@@ -19,7 +20,8 @@ export function getExtFromFormat(format: string): string {
 }
 
 /** Derives the canonical format name from a content-type header. */
-export function getFormatFromContentType(contentType: string): 'png' | 'jpeg' | 'webp' | 'pdf' {
+export function getFormatFromContentType(contentType: string): 'png' | 'jpeg' | 'webp' | 'pdf' | 'gif' {
+  if (contentType.includes('gif')) return 'gif';
   if (contentType.includes('pdf')) return 'pdf';
   if (contentType.includes('jpeg')) return 'jpeg';
   if (contentType.includes('webp')) return 'webp';

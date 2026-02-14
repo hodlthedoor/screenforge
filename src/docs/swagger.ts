@@ -27,7 +27,7 @@ export async function registerDocs(app: FastifyInstance) {
         },
       },
       tags: [
-        { name: 'render', description: 'Screenshot and PDF rendering' },
+        { name: 'render', description: 'Screenshot, PDF, and GIF rendering' },
         { name: 'async', description: 'Async render job management' },
         { name: 'batch', description: 'Batch rendering' },
         { name: 'og', description: 'OpenGraph card generation' },
