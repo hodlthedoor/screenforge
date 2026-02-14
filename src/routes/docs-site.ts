@@ -865,7 +865,7 @@ og = sf.og(title="Hello World", template="default")
   <div class="code-panel active" data-panel="curl"><pre><code class="language-json">{
   "error": {
     "code": "VALIDATION_ERROR",
-    "message": "\"url\" must be a valid URL",
+    "message": "'url' must be a valid URL",
     "request_id": "req_abc123xyz"
   }
 }</code></pre></div>
