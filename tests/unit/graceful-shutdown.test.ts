@@ -12,7 +12,7 @@ describe('graceful shutdown', () => {
     app = await buildServer({ skipBrowserInit: true });
 
     // Reset shutdown state before each test
-    (app as any).resetShutdownState();
+    app.resetShutdownState();
   });
 
   afterEach(async () => {
@@ -31,7 +31,7 @@ describe('graceful shutdown', () => {
     expect(healthBefore.json()).toMatchObject({ status: 'ok' });
 
     // Trigger shutdown (this will be exported from index.ts)
-    const shutdownFn = (app as any).gracefulShutdown;
+    const shutdownFn = app.gracefulShutdown;
     expect(shutdownFn).toBeDefined();
 
     // Start shutdown (but don't await it)
@@ -53,8 +53,7 @@ describe('graceful shutdown', () => {
     expect(healthBefore.statusCode).toBe(200);
     expect(healthBefore.json()).toMatchObject({ status: 'ok' });
 
-    const shutdownFn = (app as any).gracefulShutdown;
-    const shutdownPromise = shutdownFn();
+    const shutdownPromise = app.gracefulShutdown();
 
     const healthDuring = await app.inject({ method: 'GET', url: '/v1/health' });
     expect(healthDuring.statusCode).toBe(503);
@@ -67,15 +66,14 @@ describe('graceful shutdown', () => {
     await app.listen({ port: 0, host: '127.0.0.1' });
 
     // Simulate an in-flight render by incrementing the counter
-    const incrementInflight = (app as any).incrementInflightRenders;
-    const decrementInflight = (app as any).decrementInflightRenders;
+    const incrementInflight = app.incrementInflightRenders;
+    const decrementInflight = app.decrementInflightRenders;
     expect(incrementInflight).toBeDefined();
     expect(decrementInflight).toBeDefined();
 
     incrementInflight();
 
-    const shutdownFn = (app as any).gracefulShutdown;
-    const shutdownPromise = shutdownFn();
+    const shutdownPromise = app.gracefulShutdown();
 
     // Give shutdown a moment to start
     await new Promise((resolve) => setTimeout(resolve, 100));
@@ -100,14 +98,12 @@ describe('graceful shutdown', () => {
   it('shutdown proceeds after timeout even with in-flight renders', async () => {
     await app.listen({ port: 0, host: '127.0.0.1' });
 
-    const incrementInflight = (app as any).incrementInflightRenders;
-    incrementInflight();
+    app.incrementInflightRenders();
 
-    const shutdownFn = (app as any).gracefulShutdown;
     const startTime = Date.now();
 
     // Shutdown should timeout after GRACEFUL_SHUTDOWN_TIMEOUT_MS (5000ms in test)
-    await shutdownFn();
+    await app.gracefulShutdown();
 
     const elapsed = Date.now() - startTime;
     // Should have waited close to the timeout (allow some variance)
@@ -119,14 +115,10 @@ describe('graceful shutdown', () => {
     await app.listen({ port: 0, host: '127.0.0.1' });
 
     // Spy on close methods
-    const browserPool = (app as any).browserPool;
-    const renderCache = (app as any).renderCache;
+    const poolCloseSpy = vi.spyOn(app.browserPool, 'close');
+    const cacheCloseSpy = vi.spyOn(app.renderCache, 'close');
 
-    const poolCloseSpy = vi.spyOn(browserPool, 'close');
-    const cacheCloseSpy = vi.spyOn(renderCache, 'close');
-
-    const shutdownFn = (app as any).gracefulShutdown;
-    await shutdownFn();
+    await app.gracefulShutdown();
 
     // All close methods should have been called
     expect(poolCloseSpy).toHaveBeenCalledOnce();
@@ -136,13 +128,10 @@ describe('graceful shutdown', () => {
   it('multiple shutdown calls are idempotent', async () => {
     await app.listen({ port: 0, host: '127.0.0.1' });
 
-    const browserPool = (app as any).browserPool;
-    const poolCloseSpy = vi.spyOn(browserPool, 'close');
-
-    const shutdownFn = (app as any).gracefulShutdown;
+    const poolCloseSpy = vi.spyOn(app.browserPool, 'close');
 
     // Call shutdown multiple times
-    await Promise.all([shutdownFn(), shutdownFn(), shutdownFn()]);
+    await Promise.all([app.gracefulShutdown(), app.gracefulShutdown(), app.gracefulShutdown()]);
 
     // Close should only be called once
     expect(poolCloseSpy).toHaveBeenCalledOnce();
@@ -151,17 +140,12 @@ describe('graceful shutdown', () => {
   it('shutdown handles errors during resource cleanup', async () => {
     await app.listen({ port: 0, host: '127.0.0.1' });
 
-    const browserPool = (app as any).browserPool;
-    const renderCache = (app as any).renderCache;
-
     // Make pool.close throw an error, but cache.close succeeds
-    const poolCloseSpy = vi.spyOn(browserPool, 'close').mockRejectedValue(new Error('Pool close failed'));
-    const cacheCloseSpy = vi.spyOn(renderCache, 'close').mockResolvedValue(undefined);
-
-    const shutdownFn = (app as any).gracefulShutdown;
+    const poolCloseSpy = vi.spyOn(app.browserPool, 'close').mockRejectedValue(new Error('Pool close failed'));
+    const cacheCloseSpy = vi.spyOn(app.renderCache, 'close').mockResolvedValue(undefined);
 
     // Shutdown should not throw, should log the error and continue
-    await expect(shutdownFn()).resolves.toBeUndefined();
+    await expect(app.gracefulShutdown()).resolves.toBeUndefined();
 
     // Both close methods should have been called despite the error
     expect(poolCloseSpy).toHaveBeenCalledOnce();

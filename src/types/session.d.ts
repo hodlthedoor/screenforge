@@ -1,5 +1,8 @@
 import 'fastify';
 import type { User } from '../db/users.js';
+import type { BrowserPool } from '../renderer/browser-pool.js';
+import type { RenderCache } from '../cache/index.js';
+import type { StorageLifecycleManager } from '../storage/lifecycle.js';
 
 declare module 'fastify' {
   interface Session {
@@ -9,5 +12,14 @@ declare module 'fastify' {
   }
   interface FastifyRequest {
     dashboardUser?: User;
+  }
+  interface FastifyInstance {
+    browserPool: BrowserPool;
+    renderCache: RenderCache;
+    storageLifecycle: StorageLifecycleManager;
+    gracefulShutdown: () => Promise<void>;
+    incrementInflightRenders: () => void;
+    decrementInflightRenders: () => void;
+    resetShutdownState: () => void;
   }
 }

@@ -380,7 +380,7 @@ export async function start() {
   const app = await buildServer();
 
   // Start queue worker so async/batch jobs are processed
-  const browserPool = (app as unknown as { browserPool: BrowserPool }).browserPool;
+  const browserPool = app.browserPool;
   await mkdir(config.STORAGE_PATH, { recursive: true });
   const queueLogger = getLogger('queue');
 
@@ -458,7 +458,7 @@ export async function start() {
   }
 
   // Register graceful shutdown handlers
-  const gracefulShutdown = (app as any).gracefulShutdown;
+  const gracefulShutdown = app.gracefulShutdown;
   process.once('SIGTERM', async () => {
     app.log.info('SIGTERM received, initiating graceful shutdown');
     await gracefulShutdown();
