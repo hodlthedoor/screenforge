@@ -164,6 +164,7 @@ function docsHtml(baseUrl: string): string {
     <a href="#webhooks">Webhooks</a>
     <a href="#visual-diff">Visual Diff</a>
     <a href="#schedules">Schedules</a>
+    <a href="#extraction">Extraction</a>
     <div class="nav-label">Resources</div>
     <a href="#sdks">SDKs</a>
     <a href="#rate-limits">Rate Limits</a>
@@ -968,6 +969,183 @@ schedule = resp.json()["schedule"]</code></pre></div>
 </section>
 
 <!-- ════════════════════════════════════════════ -->
+<!-- EXTRACTION -->
+<!-- ════════════════════════════════════════════ -->
+<section id="extraction">
+<h2>Extraction</h2>
+
+<p>Extract structured data from any screenshot using LLM vision. Provide a URL to capture or reference an existing render job, then describe what to extract in natural language. Optionally provide a JSON Schema to constrain the output shape.</p>
+
+<h3>Extract Data</h3>
+<div class="endpoint"><span class="method method-post">POST</span> /v1/extract</div>
+
+<h4>Parameters</h4>
+<div style="overflow-x:auto">
+<table class="param-table">
+  <thead><tr><th>Name</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td class="param-name">url</td><td class="param-type">string</td><td></td><td>URL to capture and extract from. Provide either <code>url</code> or <code>job_id</code>.</td></tr>
+    <tr><td class="param-name">job_id</td><td class="param-type">string</td><td></td><td>Existing render job ID to extract from (must be a completed screenshot job).</td></tr>
+    <tr><td class="param-name">prompt</td><td class="param-type">string</td><td class="param-req">*</td><td>What to extract, in natural language (1&ndash;4000 chars). E.g. <code>"extract all product names and prices"</code>.</td></tr>
+    <tr><td class="param-name">schema</td><td class="param-type">object</td><td></td><td>Optional JSON Schema to constrain the output shape.</td></tr>
+    <tr><td class="param-name">model</td><td class="param-type">string</td><td></td><td><code>sonnet</code> (best quality, default) or <code>haiku</code> (faster/cheaper).</td></tr>
+    <tr><td class="param-name">screenshot_options</td><td class="param-type">object</td><td></td><td>Screenshot capture options (only used with <code>url</code>). See below.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h4>Screenshot options</h4>
+<div style="overflow-x:auto">
+<table class="param-table">
+  <thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td class="param-name">viewport_width</td><td class="param-type">integer</td><td>1280</td><td>Viewport width in pixels (1&ndash;7680).</td></tr>
+    <tr><td class="param-name">viewport_height</td><td class="param-type">integer</td><td>800</td><td>Viewport height in pixels (1&ndash;4320).</td></tr>
+    <tr><td class="param-name">format</td><td class="param-type">string</td><td>png</td><td>Image format: <code>png</code>, <code>jpeg</code>, or <code>webp</code>.</td></tr>
+    <tr><td class="param-name">full_page</td><td class="param-type">boolean</td><td>false</td><td>Capture the full scrollable page.</td></tr>
+    <tr><td class="param-name">delay_ms</td><td class="param-type">integer</td><td>0</td><td>Wait before capturing (0&ndash;30000 ms).</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h4>Headers</h4>
+<div style="overflow-x:auto">
+<table class="param-table">
+  <thead><tr><th>Name</th><th>Required</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td class="param-name">x-api-key</td><td class="param-req">*</td><td>Your ScreenForge API key.</td></tr>
+    <tr><td class="param-name">x-llm-api-key</td><td></td><td>Your own Anthropic API key (BYOK). Overrides the server default.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="code-group" data-tabs>
+  <div class="code-tabs">
+    <button class="code-tab active" data-tab="curl">curl</button>
+    <button class="code-tab" data-tab="js">JavaScript</button>
+    <button class="code-tab" data-tab="py">Python</button>
+  </div>
+  <div class="code-panel active" data-panel="curl"><pre><code class="language-bash">curl -X POST ${safeBaseUrl}/v1/extract \\
+  -H "x-api-key: sf_live_your_key_here" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "url": "https://example.com/products",
+    "prompt": "Extract all product names and prices as a list",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "products": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {"type": "string"},
+              "price": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
+    "model": "sonnet"
+  }'</code></pre></div>
+  <div class="code-panel" data-panel="js"><pre><code class="language-javascript">const res = await fetch("${safeBaseUrl}/v1/extract", {
+  method: "POST",
+  headers: {
+    "x-api-key": "sf_live_your_key_here",
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    url: "https://example.com/products",
+    prompt: "Extract all product names and prices as a list",
+    schema: {
+      type: "object",
+      properties: {
+        products: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string" },
+              price: { type: "string" },
+            },
+          },
+        },
+      },
+    },
+    model: "sonnet",
+  }),
+});
+const { extractionId, data, tokensUsed } = await res.json();</code></pre></div>
+  <div class="code-panel" data-panel="py"><pre><code class="language-python">resp = requests.post(
+    "${safeBaseUrl}/v1/extract",
+    headers={"x-api-key": "sf_live_your_key_here"},
+    json={
+        "url": "https://example.com/products",
+        "prompt": "Extract all product names and prices as a list",
+        "schema": {
+            "type": "object",
+            "properties": {
+                "products": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string"},
+                            "price": {"type": "string"},
+                        },
+                    },
+                },
+            },
+        },
+        "model": "sonnet",
+    },
+)
+result = resp.json()</code></pre></div>
+</div>
+
+<h4>Response</h4>
+<div class="code-group" data-tabs>
+  <div class="code-tabs">
+    <button class="code-tab active" data-tab="curl">JSON</button>
+  </div>
+  <div class="code-panel active" data-panel="curl"><pre><code class="language-json">{
+  "extractionId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "data": {
+    "products": [
+      {"name": "Widget Pro", "price": "$29.99"},
+      {"name": "Gadget Max", "price": "$49.99"}
+    ]
+  },
+  "modelUsed": "claude-sonnet-4-5-20250929",
+  "tokensUsed": 1523,
+  "screenshotPath": "extract-a1b2c3d4.png",
+  "durationMs": 3200
+}</code></pre></div>
+</div>
+
+<h3>Get Extraction Result</h3>
+<div class="endpoint"><span class="method method-get">GET</span> /v1/extract/:id</div>
+<p>Retrieve the result of a previous extraction job. Returns the full extraction record including status, extracted data, and metadata.</p>
+
+<h3>List Extractions</h3>
+<div class="endpoint"><span class="method method-get">GET</span> /v1/extract</div>
+<p>Returns all extraction jobs for the authenticated API key, ordered by most recent first. Supports <code>?limit</code> and <code>?offset</code> query parameters for pagination.</p>
+
+<h4>Extraction limits by plan</h4>
+<div style="overflow-x:auto">
+<table class="param-table">
+  <thead><tr><th>Plan</th><th>Daily Extractions</th></tr></thead>
+  <tbody>
+    <tr><td>Free</td><td>10</td></tr>
+    <tr><td>Starter</td><td>50</td></tr>
+    <tr><td>Pro</td><td>100</td></tr>
+    <tr><td>Business</td><td>1,000</td></tr>
+  </tbody>
+</table>
+</div>
+</section>
+
+<!-- ════════════════════════════════════════════ -->
 <!-- SDKs -->
 <!-- ════════════════════════════════════════════ -->
 <section id="sdks">
@@ -1113,6 +1291,9 @@ og = sf.og(title="Hello World", template="default")
     <tr><td class="err-code">RENDER_FAILED</td><td class="err-status">500</td><td>An internal error occurred during rendering.</td><td>Yes &mdash; retry with backoff</td></tr>
     <tr><td class="err-code">JOB_NOT_FOUND</td><td class="err-status">404</td><td>The requested render job was not found.</td><td>No &mdash; check job ID</td></tr>
     <tr><td class="err-code">SCHEDULE_NOT_FOUND</td><td class="err-status">404</td><td>The requested schedule was not found.</td><td>No &mdash; check schedule ID</td></tr>
+    <tr><td class="err-code">EXTRACTION_LIMIT_EXCEEDED</td><td class="err-status">429</td><td>Daily extraction limit for your plan has been reached.</td><td>No &mdash; wait or upgrade plan</td></tr>
+    <tr><td class="err-code">EXTRACTION_FAILED</td><td class="err-status">502</td><td>LLM vision API call failed during extraction.</td><td>Yes &mdash; retry with backoff</td></tr>
+    <tr><td class="err-code">EXTRACTION_NO_API_KEY</td><td class="err-status">400</td><td>No Anthropic API key available for extraction.</td><td>No &mdash; provide x-llm-api-key header</td></tr>
   </tbody>
 </table>
 </section>

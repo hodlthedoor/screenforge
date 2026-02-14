@@ -77,6 +77,18 @@ const ERROR_DOCUMENTATION: Record<string, Omit<ErrorCodeDoc, 'code' | 'http_stat
     description: 'Batch request exceeds the maximum of 50 items.',
     retry_guidance: 'Split the batch into multiple requests of 50 items or fewer.',
   },
+  EXTRACTION_LIMIT_EXCEEDED: {
+    description: 'Daily extraction limit for your plan has been reached. The response includes limit, used, and tier details.',
+    retry_guidance: 'Wait until the next day for the limit to reset, or upgrade your plan for a higher daily limit.',
+  },
+  EXTRACTION_FAILED: {
+    description: 'The LLM vision API call failed during data extraction. This usually indicates an issue with the Anthropic API.',
+    retry_guidance: 'Retry with exponential backoff. If using BYOK, verify your API key is valid and has sufficient credits.',
+  },
+  EXTRACTION_NO_API_KEY: {
+    description: 'No Anthropic API key is available for LLM extraction. The server has no default key configured and no BYOK key was provided.',
+    retry_guidance: 'Provide your own Anthropic API key via the x-llm-api-key header, or ask the server admin to configure ANTHROPIC_API_KEY.',
+  },
   ADMIN_NOT_CONFIGURED: {
     description: 'Admin API is not configured on this server.',
     retry_guidance: 'Configure the ADMIN_API_KEY environment variable.',
