@@ -3,6 +3,7 @@
 [![CI](https://github.com/hodlthedoor/screenforge/actions/workflows/ci.yml/badge.svg)](https://github.com/hodlthedoor/screenforge/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker)](docker-compose.yml)
+[![Docker Pulls](https://img.shields.io/docker/pulls/hodlthedoor/screenforge)](https://hub.docker.com/r/hodlthedoor/screenforge)
 
 **Self-hostable screenshot, PDF, and OG image API.** Open-source alternative to ScreenshotOne, Urlbox, and similar services.
 
