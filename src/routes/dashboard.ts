@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { getUserById, getUserApiKeys, linkApiKeyToUser, revokeUserApiKey, verifyUserPassword, deleteUser } from '../db/users.js';
-import { createApiKey, getUsageStats, rotateApiKey, getApiKeyWithSigningSecret } from '../db/api-keys.js';
+import { createApiKey, getUsageStats, getBatchUsageStats, rotateApiKey, getApiKeyWithSigningSecret } from '../db/api-keys.js';
 import { generateSignedUrl, type SignedUrlOptions } from '../auth/signed-urls.js';
 import { getPool } from '../db/index.js';
 import { escapeHtml, generateCsrfToken } from '../utils/html.js';
@@ -116,57 +116,72 @@ function dashboardLayout(title: string, nav: string, content: string, csrfToken:
 </div></body></html>`;
 }
 
+function renderError(title: string, message: string, csrfToken: string): string {
+  const content = `
+    <h1>${escapeHtml(title)}</h1>
+    <div class="card" style="border-color:var(--err)">
+      <p style="color:var(--err)">${escapeHtml(message)}</p>
+      <a href="javascript:location.reload()" class="btn btn-primary" style="margin-top:16px">Retry</a>
+    </div>`;
+  return dashboardLayout(title, '', content, csrfToken);
+}
+
 export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
   // Overview
   app.get('/dashboard', { preHandler: requireAuth }, async (req, reply) => {
-    const user = req.dashboardUser!;
-    const keys = await getUserApiKeys(user.id);
     const csrfToken = ensureCsrfToken(req);
+    try {
+      const user = req.dashboardUser!;
+      const keys = await getUserApiKeys(user.id);
 
-    let totalToday = 0;
-    let totalMonth = 0;
-    let totalQuota = 0;
-    for (const key of keys) {
-      const stats = await getUsageStats(key.id);
-      totalToday += stats.today;
-      totalMonth += stats.thisMonth;
-      totalQuota += key.monthlyQuota;
+      const batchStats = await getBatchUsageStats(keys.map(k => k.id));
+      let totalToday = 0;
+      let totalMonth = 0;
+      let totalQuota = 0;
+      for (const key of keys) {
+        const stats = batchStats.get(key.id) ?? { today: 0, thisMonth: 0 };
+        totalToday += stats.today;
+        totalMonth += stats.thisMonth;
+        totalQuota += key.monthlyQuota;
+      }
+
+      const recentResult = await getPool().query(
+        `SELECT rj.id, rj.type, rj.url, rj.status, rj.created_at, rj.duration_ms
+         FROM render_jobs rj
+         JOIN user_api_keys uak ON uak.api_key_id = rj.api_key_id
+         WHERE uak.user_id = $1
+         ORDER BY rj.created_at DESC LIMIT 10`,
+        [user.id],
+      );
+
+      const recentRows = recentResult.rows.map((r: {
+        type: string;
+        url: string;
+        status: string;
+        duration_ms: number | null;
+      }) =>
+        `<tr><td>${escapeHtml(r.type)}</td><td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(r.url)}</td><td><span class="badge ${r.status === 'completed' ? 'badge-active' : 'badge-revoked'}">${r.status}</span></td><td>${r.duration_ms ? r.duration_ms + 'ms' : '—'}</td></tr>`
+      ).join('');
+
+      const html = `
+        <h1>Dashboard</h1>
+        <div class="stats">
+          <div class="stat"><div class="label">Renders Today</div><div class="value">${totalToday}</div></div>
+          <div class="stat"><div class="label">This Month</div><div class="value">${totalMonth.toLocaleString()}</div></div>
+          <div class="stat"><div class="label">Monthly Quota</div><div class="value">${totalQuota.toLocaleString()}</div></div>
+          <div class="stat"><div class="label">API Keys</div><div class="value">${keys.length}</div></div>
+        </div>
+        <div class="card">
+          <h2 style="margin-bottom:16px">Recent Renders</h2>
+          ${recentResult.rows.length > 0 ? `<table><thead><tr><th>Type</th><th>URL</th><th>Status</th><th>Duration</th></tr></thead><tbody>${recentRows}</tbody></table>` : '<p style="color:var(--muted)">No renders yet. Create an API key and start making requests.</p>'}
+        </div>`;
+
+      await req.session.save();
+      return reply.type('text/html').send(dashboardLayout('Dashboard', 'overview', html, csrfToken));
+    } catch (err) {
+      req.log.error(err, 'Dashboard overview error');
+      return reply.status(500).type('text/html').send(renderError('Dashboard Error', 'Failed to load dashboard data. Please try again.', csrfToken));
     }
-
-    // Recent renders
-    const recentResult = await getPool().query(
-      `SELECT rj.id, rj.type, rj.url, rj.status, rj.created_at, rj.duration_ms
-       FROM render_jobs rj
-       JOIN user_api_keys uak ON uak.api_key_id = rj.api_key_id
-       WHERE uak.user_id = $1
-       ORDER BY rj.created_at DESC LIMIT 10`,
-      [user.id],
-    );
-
-    const recentRows = recentResult.rows.map((r: {
-      type: string;
-      url: string;
-      status: string;
-      duration_ms: number | null;
-    }) =>
-      `<tr><td>${escapeHtml(r.type)}</td><td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(r.url)}</td><td><span class="badge ${r.status === 'completed' ? 'badge-active' : 'badge-revoked'}">${r.status}</span></td><td>${r.duration_ms ? r.duration_ms + 'ms' : '—'}</td></tr>`
-    ).join('');
-
-    const html = `
-      <h1>Dashboard</h1>
-      <div class="stats">
-        <div class="stat"><div class="label">Renders Today</div><div class="value">${totalToday}</div></div>
-        <div class="stat"><div class="label">This Month</div><div class="value">${totalMonth.toLocaleString()}</div></div>
-        <div class="stat"><div class="label">Monthly Quota</div><div class="value">${totalQuota.toLocaleString()}</div></div>
-        <div class="stat"><div class="label">API Keys</div><div class="value">${keys.length}</div></div>
-      </div>
-      <div class="card">
-        <h2 style="margin-bottom:16px">Recent Renders</h2>
-        ${recentResult.rows.length > 0 ? `<table><thead><tr><th>Type</th><th>URL</th><th>Status</th><th>Duration</th></tr></thead><tbody>${recentRows}</tbody></table>` : '<p style="color:var(--muted)">No renders yet. Create an API key and start making requests.</p>'}
-      </div>`;
-
-    await req.session.save();
-    return reply.type('text/html').send(dashboardLayout('Dashboard', 'overview', html, csrfToken));
   });
 
   // API Keys
@@ -277,9 +292,10 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
 
   // Usage
   app.get('/dashboard/usage', { preHandler: requireAuth }, async (req, reply) => {
+    const csrfToken = ensureCsrfToken(req);
+    try {
     const user = req.dashboardUser!;
     const keys = await getUserApiKeys(user.id);
-    const csrfToken = ensureCsrfToken(req);
     const pool = getPool();
 
     // Daily usage for the last 30 days
@@ -308,10 +324,11 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
     const dailyData = JSON.stringify(dailyResult.rows.map((r: { date: string; total: number | string }) => ({ date: r.date, count: Number(r.total) })));
     const typeData = JSON.stringify(typeBreakdown);
 
-    const statCards = await Promise.all(keys.map(async (k: { id: string; name: string; monthlyQuota: number }) => {
-      const stats = await getUsageStats(k.id);
+    const usageBatchStats = await getBatchUsageStats(keys.map(k => k.id));
+    const statCards = keys.map((k: { id: string; name: string; monthlyQuota: number }) => {
+      const stats = usageBatchStats.get(k.id) ?? { today: 0, thisMonth: 0 };
       return `<div class="stat"><div class="label">${escapeHtml(k.name)}</div><div class="value">${stats.thisMonth} / ${k.monthlyQuota.toLocaleString()}</div></div>`;
-    }));
+    });
 
     const errorRows = errorsResult.rows.map((r: { url: string; error: string | null; created_at: string }) =>
       `<tr>
@@ -438,6 +455,10 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
 
     await req.session.save();
     return reply.type('text/html').send(dashboardLayout('Usage', 'usage', html, csrfToken));
+    } catch (err) {
+      req.log.error(err, 'Dashboard usage error');
+      return reply.status(500).type('text/html').send(renderError('Usage Error', 'Failed to load usage data. Please try again.', csrfToken));
+    }
   });
 
   // Usage export (CSV/JSON)
@@ -841,9 +862,10 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
 
   // Analytics
   app.get('/dashboard/analytics', { preHandler: requireAuth }, async (req, reply) => {
+    const csrfToken = ensureCsrfToken(req);
+    try {
     const user = req.dashboardUser!;
     const keys = await getUserApiKeys(user.id);
-    const csrfToken = ensureCsrfToken(req);
     const pool = getPool();
 
     // Aggregate across all user's API keys
@@ -1054,5 +1076,9 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
 
     await req.session.save();
     return reply.type('text/html').send(dashboardLayout('Analytics', 'analytics', html, csrfToken));
+    } catch (err) {
+      req.log.error(err, 'Dashboard analytics error');
+      return reply.status(500).type('text/html').send(renderError('Analytics Error', 'Failed to load analytics data. Please try again.', csrfToken));
+    }
   });
 }

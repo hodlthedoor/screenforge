@@ -119,6 +119,45 @@ export async function getUsageStats(apiKeyId: string): Promise<{ today: number; 
   };
 }
 
+export async function getBatchUsageStats(apiKeyIds: string[]): Promise<Map<string, { today: number; thisMonth: number }>> {
+  const result = new Map<string, { today: number; thisMonth: number }>();
+  if (apiKeyIds.length === 0) return result;
+
+  // Initialize all keys with zeros
+  for (const id of apiKeyIds) {
+    result.set(id, { today: 0, thisMonth: 0 });
+  }
+
+  const pool = getPool();
+  const placeholders = apiKeyIds.map((_, i) => `$${i + 1}`).join(',');
+
+  const [todayResult, monthResult] = await Promise.all([
+    pool.query(
+      `SELECT api_key_id, COALESCE(count, 0)::int as count FROM usage_daily
+       WHERE api_key_id = ANY(ARRAY[${placeholders}]::uuid[]) AND date = CURRENT_DATE`,
+      apiKeyIds,
+    ),
+    pool.query(
+      `SELECT api_key_id, COALESCE(SUM(count), 0)::int as total FROM usage_daily
+       WHERE api_key_id = ANY(ARRAY[${placeholders}]::uuid[]) AND date >= date_trunc('month', CURRENT_DATE)
+       GROUP BY api_key_id`,
+      apiKeyIds,
+    ),
+  ]);
+
+  for (const row of todayResult.rows) {
+    const entry = result.get(row.api_key_id);
+    if (entry) entry.today = row.count;
+  }
+
+  for (const row of monthResult.rows) {
+    const entry = result.get(row.api_key_id);
+    if (entry) entry.thisMonth = Number(row.total);
+  }
+
+  return result;
+}
+
 export async function listApiKeys(): Promise<ApiKey[]> {
   const result = await getPool().query(
     `SELECT id, prefix, name, tier, rate_limit, monthly_quota, active, created_at

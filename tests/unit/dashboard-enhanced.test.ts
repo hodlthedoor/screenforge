@@ -250,4 +250,119 @@ describe('dashboard enhancements', () => {
       expect(res.body).toContain('/dashboard/usage/export');
     });
   });
+
+  describe('GET /dashboard/analytics', () => {
+    it('requires auth', async () => {
+      const res = await app.inject({ method: 'GET', url: '/dashboard/analytics' });
+      expect(res.statusCode).toBe(302);
+      expect(res.headers.location).toBe('/login');
+    });
+
+    it('returns analytics page with stats, charts, and top URLs', async () => {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/dashboard/analytics',
+        headers: { cookie: sessionCookie },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.headers['content-type']).toContain('text/html');
+      expect(res.body).toContain('Analytics');
+      expect(res.body).toContain('Renders This Month');
+      expect(res.body).toContain('Avg Duration');
+      expect(res.body).toContain('Quota Usage');
+      expect(res.body).toContain('dailyChart');
+      expect(res.body).toContain('typeChart');
+      expect(res.body).toContain('Top Rendered URLs');
+    });
+
+    it('shows render data from seeded jobs', async () => {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/dashboard/analytics',
+        headers: { cookie: sessionCookie },
+      });
+      // Should contain at least some of the seeded URLs
+      expect(res.body).toContain('example.com');
+    });
+  });
+
+  describe('GET /dashboard/signed-urls', () => {
+    it('requires auth', async () => {
+      const res = await app.inject({ method: 'GET', url: '/dashboard/signed-urls' });
+      expect(res.statusCode).toBe(302);
+      expect(res.headers.location).toBe('/login');
+    });
+
+    it('returns signed URLs page with form', async () => {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/dashboard/signed-urls',
+        headers: { cookie: sessionCookie },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.headers['content-type']).toContain('text/html');
+      expect(res.body).toContain('Signed URLs');
+      expect(res.body).toContain('Generate Signed URL');
+      expect(res.body).toContain('api-key');
+      expect(res.body).toContain('enhanced-test-key');
+    });
+  });
+
+  describe('POST /dashboard/signed-urls/generate', () => {
+    it('requires auth', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/dashboard/signed-urls/generate',
+        payload: { apiKeyId: 'fake', options: { type: 'screenshot', url: 'https://example.com' }, expiry: 3600 },
+      });
+      expect(res.statusCode).toBe(302);
+    });
+
+    it('returns 403 for non-owned API key', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/dashboard/signed-urls/generate',
+        headers: { cookie: sessionCookie, 'content-type': 'application/json' },
+        payload: { apiKeyId: '00000000-0000-0000-0000-000000000000', options: { type: 'screenshot', url: 'https://example.com' }, expiry: 3600 },
+      });
+      expect(res.statusCode).toBe(403);
+    });
+
+    it('generates signed URL for owned API key', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/dashboard/signed-urls/generate',
+        headers: { cookie: sessionCookie, 'content-type': 'application/json' },
+        payload: { apiKeyId: apiKeyId, options: { type: 'screenshot', url: 'https://example.com' }, expiry: 3600 },
+      });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body).toHaveProperty('signedUrl');
+      expect(body).toHaveProperty('expiresAt');
+      expect(body.signedUrl).toContain('signature=');
+      expect(body.expiresAt).toBeGreaterThan(Date.now());
+    });
+  });
+
+  describe('GET /dashboard/settings', () => {
+    it('requires auth', async () => {
+      const res = await app.inject({ method: 'GET', url: '/dashboard/settings' });
+      expect(res.statusCode).toBe(302);
+      expect(res.headers.location).toBe('/login');
+    });
+
+    it('returns settings page with account info and forms', async () => {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/dashboard/settings',
+        headers: { cookie: sessionCookie },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.body).toContain('Settings');
+      expect(res.body).toContain('dash-enhanced@example.com');
+      expect(res.body).toContain('Change Password');
+      expect(res.body).toContain('Danger Zone');
+      expect(res.body).toContain('Delete Account');
+    });
+  });
 });
