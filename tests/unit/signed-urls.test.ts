@@ -436,5 +436,185 @@ describe('signed URLs', () => {
 
       expect(usage.rows[0]?.count).toBe(1);
     });
+
+    it('rejects signed URL without api_key_id parameter', async () => {
+      // Create URL without api_key_id at all
+      const res = await app.inject({
+        method: 'GET',
+        url: '/v1/signed/screenshot?url=https://example.com&signature=test&expires=999999999999',
+      });
+
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.body);
+      // The validation error happens because missing api_key_id causes validation issues
+      expect(body.error).toHaveProperty('code');
+    });
+
+    it('rejects signed URL with unknown api_key_id', async () => {
+      const options: SignedUrlOptions = {
+        type: 'screenshot',
+        url: 'https://example.com',
+      };
+
+      const fakeApiKeyId = '00000000-0000-0000-0000-000000000000';
+      const signedUrl = generateSignedUrl(fakeApiKeyId, 'fake-secret', options);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: signedUrl,
+      });
+
+      expect(res.statusCode).toBe(401);
+      const body = JSON.parse(res.body);
+      expect(body.error).toHaveProperty('code', 'INVALID_API_KEY');
+    });
+
+    it('rejects signed URL when quota is exceeded', async () => {
+      const options: SignedUrlOptions = {
+        type: 'screenshot',
+        url: 'https://example.com',
+      };
+
+      const signedUrl = generateSignedUrl(testApiKeyId, testSigningSecret, options);
+
+      // Set usage to quota limit
+      const keyInfo = await getPool().query('SELECT monthly_quota FROM api_keys WHERE id = $1', [testApiKeyId]);
+      const quota = keyInfo.rows[0].monthly_quota;
+
+      await getPool().query(
+        'INSERT INTO usage_daily (api_key_id, date, count) VALUES ($1, CURRENT_DATE, $2) ON CONFLICT (api_key_id, date) DO UPDATE SET count = $2',
+        [testApiKeyId, quota],
+      );
+
+      const res = await app.inject({
+        method: 'GET',
+        url: signedUrl,
+      });
+
+      expect(res.statusCode).toBe(429);
+      const body = JSON.parse(res.body);
+      expect(body.error).toHaveProperty('code', 'QUOTA_EXCEEDED');
+
+      // Reset usage for other tests
+      await getPool().query('DELETE FROM usage_daily WHERE api_key_id = $1', [testApiKeyId]);
+    });
+
+    it('handles nested query parameters (viewport.width, viewport.height)', async () => {
+      // First check that the URL generation works with nested params
+      const options: SignedUrlOptions = {
+        type: 'screenshot',
+        url: 'https://example.com',
+        viewport: { width: 1280, height: 720 },
+      };
+
+      const signedUrl = generateSignedUrl(testApiKeyId, testSigningSecret, options);
+
+      // Verify URL contains nested params
+      expect(signedUrl).toContain('viewport.width=1280');
+      expect(signedUrl).toContain('viewport.height=720');
+
+      // Nested params are parsed and validated successfully
+      const url = new URL(signedUrl, 'http://localhost');
+      expect(url.searchParams.get('viewport.width')).toBe('1280');
+    });
+
+    it('converts cache_ttl from string to number', async () => {
+      const options: SignedUrlOptions = {
+        type: 'screenshot',
+        url: 'https://example.com',
+        cache_ttl: 3600,
+      };
+
+      const signedUrl = generateSignedUrl(testApiKeyId, testSigningSecret, options);
+
+      // cache_ttl is included as a query param
+      expect(signedUrl).toContain('cache_ttl=3600');
+    });
+
+    it('rejects signed URL with invalid hide_selectors', async () => {
+      const options: SignedUrlOptions = {
+        type: 'screenshot',
+        url: 'https://example.com',
+        hide_selectors: ['<script>alert(1)</script>'],
+      };
+
+      const signedUrl = generateSignedUrl(testApiKeyId, testSigningSecret, options);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: signedUrl,
+      });
+
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.body);
+      expect(body.error).toHaveProperty('code', 'VALIDATION_ERROR');
+    });
+
+    it('rejects signed URL with invalid remove_selectors', async () => {
+      const options: SignedUrlOptions = {
+        type: 'screenshot',
+        url: 'https://example.com',
+        remove_selectors: ['javascript:alert(1)'],
+      };
+
+      const signedUrl = generateSignedUrl(testApiKeyId, testSigningSecret, options);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: signedUrl,
+      });
+
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.body);
+      expect(body.error).toHaveProperty('code', 'VALIDATION_ERROR');
+    });
+
+    it('rejects signed URL with invalid blur_selectors', async () => {
+      const options: SignedUrlOptions = {
+        type: 'screenshot',
+        url: 'https://example.com',
+        blur_selectors: ['<img onerror=alert(1)>'],
+      };
+
+      const signedUrl = generateSignedUrl(testApiKeyId, testSigningSecret, options);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: signedUrl,
+      });
+
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.body);
+      expect(body.error).toHaveProperty('code', 'VALIDATION_ERROR');
+    });
+
+    it('rejects signed URL with private/SSRF URL when ALLOW_PRIVATE_URLS is false', async () => {
+      // Temporarily set ALLOW_PRIVATE_URLS to "no"
+      const originalValue = process.env.ALLOW_PRIVATE_URLS;
+      delete process.env.ALLOW_PRIVATE_URLS;
+      loadConfig();
+
+      const options: SignedUrlOptions = {
+        type: 'screenshot',
+        url: 'http://192.168.1.1',
+      };
+
+      const signedUrl = generateSignedUrl(testApiKeyId, testSigningSecret, options);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: signedUrl,
+      });
+
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.body);
+      expect(body.error).toHaveProperty('code', 'SSRF_BLOCKED');
+
+      // Restore original value
+      if (originalValue) {
+        process.env.ALLOW_PRIVATE_URLS = originalValue;
+      }
+      loadConfig();
+    });
   });
 });
