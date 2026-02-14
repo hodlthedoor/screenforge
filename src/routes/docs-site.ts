@@ -286,8 +286,8 @@ signed_url = resp.json()["signedUrl"]</code></pre></div>
     <tr><td class="param-name">url</td><td class="param-type">string</td><td class="param-req">*</td><td>URL to capture. Required unless <code>html</code> is provided.</td></tr>
     <tr><td class="param-name">html</td><td class="param-type">string</td><td></td><td>Raw HTML to render instead of a URL.</td></tr>
     <tr><td class="param-name">viewport</td><td class="param-type">object</td><td></td><td><code>{ width: 1280, height: 720 }</code> &mdash; viewport dimensions in pixels.</td></tr>
-    <tr><td class="param-name">format</td><td class="param-type">string</td><td></td><td><code>png</code> (default) or <code>jpeg</code>.</td></tr>
-    <tr><td class="param-name">quality</td><td class="param-type">number</td><td></td><td>JPEG quality 1&ndash;100 (default 80). Ignored for PNG.</td></tr>
+    <tr><td class="param-name">format</td><td class="param-type">string</td><td></td><td><code>png</code> (default), <code>jpeg</code>, or <code>webp</code>.</td></tr>
+    <tr><td class="param-name">quality</td><td class="param-type">number</td><td></td><td>Quality 1&ndash;100 for JPEG and WebP (default 80). Ignored for PNG.</td></tr>
     <tr><td class="param-name">fullPage</td><td class="param-type">boolean</td><td></td><td>Capture full scrollable page (default <code>false</code>).</td></tr>
     <tr><td class="param-name">darkMode</td><td class="param-type">boolean</td><td></td><td>Emulate dark color scheme (default <code>false</code>).</td></tr>
     <tr><td class="param-name">css</td><td class="param-type">string</td><td></td><td>Custom CSS to inject before capture.</td></tr>

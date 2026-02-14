@@ -131,7 +131,7 @@ export type Action = z.infer<typeof actionSchema>;
 
 const screenshotBaseOptionsSchema = z.object({
   viewport: viewportSchema.default({ width: 1920, height: 1080 }),
-  format: z.enum(['png', 'jpeg']).default('png'),
+  format: z.enum(['png', 'jpeg', 'webp']).default('png'),
   quality: z.number().int().min(0).max(100).optional(),
   fullPage: z.boolean().default(false),
   selector: z.string().optional(),

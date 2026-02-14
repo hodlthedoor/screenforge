@@ -26,7 +26,7 @@ class ScreenshotOptions(TypedDict, total=False):
     url: str
     html: str
     viewport: Viewport
-    format: Literal["png", "jpeg"]
+    format: Literal["png", "jpeg", "webp"]
     quality: int
     fullPage: bool
     selector: str

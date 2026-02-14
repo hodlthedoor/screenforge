@@ -78,6 +78,38 @@ describe('E2E: Screenshot rendering', () => {
     expect(duration2).toBeLessThan(duration1);
   });
 
+  it('renders webp format with correct content type and file extension', async () => {
+    const res = await fetch(`${baseUrl}/v1/screenshot`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        url: fixtureUrl,
+        format: 'webp',
+        quality: 85,
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('image/webp');
+    expect(res.headers.get('x-cache')).toBe('MISS');
+
+    const buffer = Buffer.from(await res.arrayBuffer());
+    expect(buffer.length).toBeGreaterThan(0);
+
+    // Verify WebP magic bytes
+    expect(buffer.toString('ascii', 0, 4)).toBe('RIFF');
+    expect(buffer.toString('ascii', 8, 12)).toBe('WEBP');
+
+    // Check image-size library correctly identifies WebP
+    const dimensions = imageSize(buffer);
+    expect(dimensions.type).toBe('webp');
+    expect(dimensions.width).toBeDefined();
+    expect(dimensions.height).toBeDefined();
+  });
+
   it('renders HTML content directly', async () => {
     const res = await fetch(`${baseUrl}/v1/screenshot`, {
       method: 'POST',

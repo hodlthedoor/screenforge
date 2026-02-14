@@ -132,6 +132,42 @@ describe('renderer', { timeout: 60_000 }, () => {
       expect(result.buffer.length).toBeGreaterThan(0);
     });
 
+    it('renders webp format with correct content type', async () => {
+      const result = await takeScreenshot(pool, {
+        url: FIXTURE_URL,
+        viewport: { width: 1280, height: 720 },
+        format: 'webp',
+        quality: 80,
+        fullPage: false,
+        darkMode: false,
+        deviceScaleFactor: 1,
+      });
+
+      expect(result.buffer).toBeInstanceOf(Buffer);
+      expect(result.buffer.length).toBeGreaterThan(0);
+      expect(result.contentType).toBe('image/webp');
+
+      // Verify WebP magic bytes (RIFF....WEBP)
+      expect(result.buffer.toString('ascii', 0, 4)).toBe('RIFF');
+      expect(result.buffer.toString('ascii', 8, 12)).toBe('WEBP');
+    });
+
+    it('handles webp quality=0 by clamping to 1', async () => {
+      const result = await takeScreenshot(pool, {
+        url: FIXTURE_URL,
+        viewport: { width: 1280, height: 720 },
+        format: 'webp',
+        quality: 0, // Should be clamped to 1
+        fullPage: false,
+        darkMode: false,
+        deviceScaleFactor: 1,
+      });
+
+      expect(result.buffer).toBeInstanceOf(Buffer);
+      expect(result.buffer.length).toBeGreaterThan(0);
+      expect(result.contentType).toBe('image/webp');
+    });
+
     it('applies geolocation emulation', async () => {
       const result = await takeScreenshot(pool, {
         html: '<div id="geo">Loading...</div><script>navigator.geolocation.getCurrentPosition(p => document.getElementById("geo").textContent = p.coords.latitude + "," + p.coords.longitude);</script>',

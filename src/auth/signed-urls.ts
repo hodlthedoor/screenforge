@@ -5,7 +5,7 @@ export interface SignedUrlOptions {
   url?: string;
   html?: string;
   viewport?: { width: number; height: number };
-  format?: 'png' | 'jpeg';
+  format?: 'png' | 'jpeg' | 'webp';
   quality?: number;
   fullPage?: boolean;
   selector?: string;

@@ -6,10 +6,12 @@ import { executeActions } from './actions.js';
 import { toPlaywrightCookies } from '../security/sanitize.js';
 import { imageSize } from 'image-size';
 import { getConfig } from '../config/index.js';
+import sharp from 'sharp';
 
 const FORMAT_CONTENT_TYPE: Record<string, string> = {
   png: 'image/png',
   jpeg: 'image/jpeg',
+  webp: 'image/webp',
 };
 
 export async function takeScreenshot(pool: BrowserPool, options: ScreenshotOptions, timeoutMs = 30_000): Promise<RenderResult> {
@@ -74,14 +76,28 @@ export async function takeScreenshot(pool: BrowserPool, options: ScreenshotOptio
 
     const screenshotTarget = options.selector ? page.locator(options.selector) : page;
 
-    const buffer = Buffer.from(
+    // Playwright doesn't support WebP natively, so capture as PNG first and convert
+    const playwrightFormat = options.format === 'webp' ? 'png' : options.format;
+    const playwrightQuality = options.format === 'jpeg' ? options.quality : undefined;
+
+    let buffer = Buffer.from(
       await screenshotTarget.screenshot({
-        type: options.format,
-        quality: options.format === 'png' ? undefined : options.quality,
+        type: playwrightFormat,
+        quality: playwrightQuality,
         fullPage: options.fullPage,
         clip: options.clip,
       }),
     );
+
+    // Convert to WebP if requested
+    if (options.format === 'webp') {
+      // Sharp requires quality 1-100, clamp 0 to 1
+      const quality = options.quality !== undefined ? Math.max(1, options.quality) : 80;
+      const webpBuffer = await sharp(buffer)
+        .webp({ quality })
+        .toBuffer();
+      buffer = Buffer.from(webpBuffer);
+    }
 
     // Extract image dimensions
     const dimensions = imageSize(buffer);

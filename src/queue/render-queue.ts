@@ -76,7 +76,7 @@ export function createWorker(
     );
 
     // Record metrics (always record, even if cache hit, since this was a job completion)
-    const format = result.contentType === 'application/pdf' ? 'pdf' : 'png';
+    const format = result.contentType === 'application/pdf' ? 'pdf' : (result.contentType.includes('jpeg') ? 'jpeg' : (result.contentType.includes('webp') ? 'webp' : 'png'));
     incrementRenderCounter(job.data.type, format, 'completed', false);
     observeRenderDuration(job.data.type, format, result.durationMs / 1000);
 
@@ -105,6 +105,7 @@ export function createWorker(
     );
 
     // Record metrics for failed jobs
+    // For failed jobs we don't have result.contentType, so best effort based on type only
     const format = job.data.type === 'pdf' ? 'pdf' : 'png';
     incrementRenderCounter(job.data.type, format, 'failed', false);
 

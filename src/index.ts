@@ -423,7 +423,7 @@ export async function start() {
     // Default: screenshot (including og type)
     const parsed = screenshotOptionsSchema.parse(schemaInput);
     const result = await takeScreenshot(browserPool, parsed, config.NAVIGATION_TIMEOUT_MS);
-    const ext = parsed.format === 'jpeg' ? 'jpg' : 'png';
+    const ext = parsed.format === 'jpeg' ? 'jpg' : (parsed.format === 'webp' ? 'webp' : 'png');
     const key = `${job.data.jobId}.${ext}`;
     const resultPath = await storage.upload(key, result.buffer, result.contentType);
     return {
@@ -437,7 +437,7 @@ export async function start() {
   // Log render job completions
   worker.on('completed', (job) => {
     const result = job.returnvalue;
-    const format = result.contentType.includes('pdf') ? 'pdf' : (result.contentType.includes('jpeg') ? 'jpeg' : 'png');
+    const format = result.contentType.includes('pdf') ? 'pdf' : (result.contentType.includes('jpeg') ? 'jpeg' : (result.contentType.includes('webp') ? 'webp' : 'png'));
     queueLogger.info({
       url: job.data.url,
       type: job.data.type,

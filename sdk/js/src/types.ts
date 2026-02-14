@@ -14,7 +14,7 @@ export interface ScreenshotOptions {
   url?: string;
   html?: string;
   viewport?: Viewport;
-  format?: 'png' | 'jpeg';
+  format?: 'png' | 'jpeg' | 'webp';
   quality?: number;
   fullPage?: boolean;
   selector?: string;

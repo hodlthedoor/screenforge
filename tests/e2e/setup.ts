@@ -70,7 +70,7 @@ beforeAll(async () => {
 
     const parsed = screenshotOptionsSchema.parse(schemaInput);
     const result = await takeScreenshot(browserPool, parsed, config.NAVIGATION_TIMEOUT_MS);
-    const ext = parsed.format === 'jpeg' ? 'jpg' : 'png';
+    const ext = parsed.format === 'jpeg' ? 'jpg' : (parsed.format === 'webp' ? 'webp' : 'png');
     const filePath = join(config.STORAGE_PATH, `${job.data.jobId}.${ext}`);
     await writeFile(filePath, result.buffer);
     return { resultPath: filePath, contentType: result.contentType, durationMs: result.durationMs, metadata: result.metadata };

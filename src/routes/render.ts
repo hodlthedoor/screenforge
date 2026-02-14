@@ -18,8 +18,16 @@ import type { RenderMetadata } from '../renderer/schemas.js';
 const FORMAT_EXT: Record<string, string> = {
   'image/png': 'png',
   'image/jpeg': 'jpg',
+  'image/webp': 'webp',
   'application/pdf': 'pdf',
 };
+
+function getFormatFromContentType(contentType: string): 'png' | 'jpeg' | 'webp' | 'pdf' {
+  if (contentType.includes('pdf')) return 'pdf';
+  if (contentType.includes('jpeg')) return 'jpeg';
+  if (contentType.includes('webp')) return 'webp';
+  return 'png';
+}
 
 function sendMetadataEnvelope(
   reply: import('fastify').FastifyReply,
@@ -134,7 +142,7 @@ export async function renderRoutes(
     schema: {
       tags: ['render'],
       summary: 'Take a screenshot',
-      description: 'Capture a screenshot of a URL or HTML content. Returns binary image data (PNG or JPEG).',
+      description: 'Capture a screenshot of a URL or HTML content. Returns binary image data (PNG, JPEG, or WebP).',
       security: [{ apiKey: [] }],
       querystring: {
         type: 'object',
@@ -148,7 +156,7 @@ export async function renderRoutes(
         properties: {
           url: { type: 'string', description: 'URL to screenshot' },
           html: { type: 'string', description: 'HTML content to render' },
-          format: { type: 'string', enum: ['png', 'jpeg'], default: 'png' },
+          format: { type: 'string', enum: ['png', 'jpeg', 'webp'], default: 'png' },
           viewport: {
             type: 'object',
             properties: {
@@ -398,7 +406,7 @@ export async function renderRoutes(
       try {
         const result = await takeScreenshot(pool, options, config.NAVIGATION_TIMEOUT_MS);
 
-        const format = result.contentType.includes('jpeg') ? 'jpeg' : 'png';
+        const format = getFormatFromContentType(result.contentType);
         incrementRenderCounter('screenshot', format, 'completed', false);
         observeRenderDuration('screenshot', format, result.durationMs / 1000);
 
@@ -414,7 +422,7 @@ export async function renderRoutes(
     // Normal cache flow (cache_ttl is undefined or > 0)
     const cached = await cache.get(optionsHash);
     if (cached) {
-      const format = cached.contentType.includes('jpeg') ? 'jpeg' : 'png';
+      const format = getFormatFromContentType(cached.contentType);
       incrementRenderCounter('screenshot', format, 'completed', true);
       const buffer = await cache.readFile(cached.filePath);
 
@@ -430,7 +438,7 @@ export async function renderRoutes(
       const ext = FORMAT_EXT[result.contentType] ?? 'bin';
       await cache.set(optionsHash, result.buffer, result.contentType, ext, result.metadata, cacheTtl);
 
-      const format = result.contentType.includes('jpeg') ? 'jpeg' : 'png';
+      const format = getFormatFromContentType(result.contentType);
       incrementRenderCounter('screenshot', format, 'completed', false);
       observeRenderDuration('screenshot', format, result.durationMs / 1000);
 

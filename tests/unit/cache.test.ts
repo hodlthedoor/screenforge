@@ -39,6 +39,15 @@ describe('RenderCache', () => {
     expect(hash1).not.toBe(hash2);
   });
 
+  it('hashOptions produces different hashes for different formats', () => {
+    const hashPng = RenderCache.hashOptions({ url: 'https://example.com', format: 'png' });
+    const hashJpeg = RenderCache.hashOptions({ url: 'https://example.com', format: 'jpeg' });
+    const hashWebp = RenderCache.hashOptions({ url: 'https://example.com', format: 'webp' });
+    expect(hashPng).not.toBe(hashJpeg);
+    expect(hashPng).not.toBe(hashWebp);
+    expect(hashJpeg).not.toBe(hashWebp);
+  });
+
   it('hashOptions deep-sorts nested objects', () => {
     const hash1 = RenderCache.hashOptions({
       url: 'https://example.com',

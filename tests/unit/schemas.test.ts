@@ -123,9 +123,25 @@ describe('screenshotOptionsSchema', () => {
     expect(result.success).toBe(false);
   });
 
-  it('rejects webp format (unsupported by Playwright)', () => {
+  it('accepts webp format', () => {
     const result = screenshotOptionsSchema.safeParse({ url: 'https://example.com', format: 'webp' });
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.format).toBe('webp');
+    }
+  });
+
+  it('accepts webp format with quality', () => {
+    const result = screenshotOptionsSchema.safeParse({
+      url: 'https://example.com',
+      format: 'webp',
+      quality: 85,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.format).toBe('webp');
+      expect(result.data.quality).toBe(85);
+    }
   });
 
   it('rejects invalid format', () => {

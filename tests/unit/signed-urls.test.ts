@@ -67,6 +67,21 @@ describe('signed URLs', () => {
       expect(signedUrl).toContain('&expires=');
     });
 
+    it('generates signed URL with webp format', () => {
+      const options: SignedUrlOptions = {
+        type: 'screenshot',
+        url: 'https://example.com',
+        format: 'webp',
+        quality: 85,
+      };
+
+      const signedUrl = generateSignedUrl(testApiKeyId, testSigningSecret, options);
+
+      expect(signedUrl).toContain('/v1/signed/screenshot?');
+      expect(signedUrl).toContain('format=webp');
+      expect(signedUrl).toContain('quality=85');
+    });
+
     it('includes viewport parameters in signed URL', () => {
       const options: SignedUrlOptions = {
         type: 'screenshot',
