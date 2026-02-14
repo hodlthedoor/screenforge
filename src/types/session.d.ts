@@ -20,6 +20,5 @@ declare module 'fastify' {
     gracefulShutdown: () => Promise<void>;
     incrementInflightRenders: () => void;
     decrementInflightRenders: () => void;
-    resetShutdownState: () => void;
   }
 }

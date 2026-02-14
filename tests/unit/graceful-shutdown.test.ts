@@ -10,9 +10,6 @@ describe('graceful shutdown', () => {
     process.env.NODE_ENV = 'test';
     process.env.GRACEFUL_SHUTDOWN_TIMEOUT_MS = '5000'; // Short timeout for tests
     app = await buildServer({ skipBrowserInit: true });
-
-    // Reset shutdown state before each test
-    app.resetShutdownState();
   });
 
   afterEach(async () => {
