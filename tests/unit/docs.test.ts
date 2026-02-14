@@ -18,14 +18,14 @@ describe('API documentation', () => {
     await app.close();
   });
 
-  it('GET /docs returns 200', async () => {
-    const res = await app.inject({ method: 'GET', url: '/docs/' });
+  it('GET /docs/swagger returns 200', async () => {
+    const res = await app.inject({ method: 'GET', url: '/docs/swagger/' });
     expect(res.statusCode).toBe(200);
     expect(res.headers['content-type']).toContain('text/html');
   });
 
-  it('GET /docs/json returns valid OpenAPI spec', async () => {
-    const res = await app.inject({ method: 'GET', url: '/docs/json' });
+  it('GET /docs/swagger/json returns valid OpenAPI spec', async () => {
+    const res = await app.inject({ method: 'GET', url: '/docs/swagger/json' });
     expect(res.statusCode).toBe(200);
     const spec = JSON.parse(res.body);
     expect(spec.openapi).toMatch(/^3\./);
