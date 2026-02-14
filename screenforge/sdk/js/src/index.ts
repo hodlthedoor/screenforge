@@ -7,6 +7,11 @@ export {
 } from './client';
 
 export type {
+  AnalyticsData,
+  AnalyticsDailyEntry,
+  AnalyticsTypeBreakdown,
+  AnalyticsTopUrl,
+  AnalyticsSummary,
   ScreenshotOptions,
   PdfOptions,
   OgOptions,
