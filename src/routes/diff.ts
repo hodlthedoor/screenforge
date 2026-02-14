@@ -42,6 +42,8 @@ export async function diffRoutes(
               darkMode: { type: 'boolean', default: false },
               deviceScaleFactor: { type: 'number', minimum: 0.5, maximum: 4, default: 1 },
               delay: { type: 'integer', minimum: 0, maximum: 30000, default: 0 },
+              waitFor: { type: 'string', description: 'CSS selector to wait for before capturing' },
+              wait: { type: 'object', description: 'Advanced wait strategy (e.g. {"type":"delay","value":1000})' },
             },
           },
           threshold: { type: 'number', minimum: 0, maximum: 1, default: 0.1, description: 'Pixel sensitivity (0=exact, 1=lenient)' },
@@ -110,6 +112,10 @@ export async function diffRoutes(
       const ssOpts = options.screenshot_options;
 
       // Build full screenshot options via schema parse to get all defaults
+      // Convert convenience `delay` field to a wait strategy if no explicit wait/waitFor
+      const resolvedWait = ssOpts?.wait
+        ?? (ssOpts?.delay ? { type: 'delay' as const, value: ssOpts.delay } : undefined);
+
       const buildScreenshotOpts = (url: string): ScreenshotOptions => {
         const parsed = screenshotOptionsSchema.safeParse({
           url,
@@ -117,6 +123,8 @@ export async function diffRoutes(
           fullPage: ssOpts?.fullPage,
           darkMode: ssOpts?.darkMode,
           deviceScaleFactor: ssOpts?.deviceScaleFactor,
+          waitFor: ssOpts?.waitFor,
+          wait: resolvedWait,
           format: 'png',
         });
         if (!parsed.success) {
@@ -179,6 +187,15 @@ export async function diffRoutes(
       output_format: options.output_format,
     });
     const durationMs = Math.round(performance.now() - start);
+
+    const inputMode = options.url_a ? 'url' : 'job_id';
+    req.log.info({
+      input_mode: inputMode,
+      mismatch_percentage: diffResult.mismatch_percentage,
+      diff_pixels: diffResult.diff_pixels,
+      total_pixels: diffResult.total_pixels,
+      diff_duration_ms: durationMs,
+    }, 'diff completed');
 
     const response: Record<string, unknown> = {
       mismatch_percentage: diffResult.mismatch_percentage,

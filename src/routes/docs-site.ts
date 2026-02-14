@@ -10,7 +10,7 @@ function docsHtml(baseUrl: string): string {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>API Documentation — ScreenForge</title>
-  <meta name="description" content="Complete API documentation for ScreenForge. Screenshots, PDFs, OG cards, batch rendering, webhooks, and SDKs.">
+  <meta name="description" content="Complete API documentation for ScreenForge. Screenshots, PDFs, OG cards, batch rendering, webhooks, visual diff, and SDKs.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -162,6 +162,7 @@ function docsHtml(baseUrl: string): string {
     <a href="#batch-rendering">Batch Rendering</a>
     <a href="#async-rendering">Async Rendering</a>
     <a href="#webhooks">Webhooks</a>
+    <a href="#visual-diff">Visual Diff</a>
     <div class="nav-label">Resources</div>
     <a href="#sdks">SDKs</a>
     <a href="#rate-limits">Rate Limits</a>
@@ -739,6 +740,121 @@ def verify_webhook(body: bytes, signature: str, secret: str) -> bool:
 <p>Send a test event to your registered webhook URL to verify integration.</p>
 
 <a href="/playground" class="try-btn">&#9654; Try it in Playground</a>
+</section>
+
+<!-- ════════════════════════════════════════════ -->
+<!-- Visual Diff -->
+<!-- ════════════════════════════════════════════ -->
+<section id="visual-diff">
+<h2>Visual Diff</h2>
+
+<p>Compare two screenshots pixel-by-pixel and get a diff image highlighting the differences. Useful for visual regression testing, A/B comparisons, and detecting page changes.</p>
+
+<h3>Compare Screenshots</h3>
+<div class="endpoint"><span class="method method-post">POST</span> /v1/diff</div>
+
+<h4>URL Mode</h4>
+<p>Provide two URLs — ScreenForge renders both and compares them:</p>
+
+<div class="code-group" data-tabs>
+  <div class="code-tabs">
+    <button class="code-tab active" data-tab="curl">cURL</button>
+    <button class="code-tab" data-tab="js">JavaScript</button>
+    <button class="code-tab" data-tab="python">Python</button>
+  </div>
+  <div class="code-panel active" data-panel="curl"><pre><code class="language-bash">curl -X POST ${safeBaseUrl}/v1/diff \\
+  -H "Authorization: Bearer YOUR_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "url_a": "https://example.com/v1",
+    "url_b": "https://example.com/v2",
+    "screenshot_options": {
+      "width": 1280,
+      "height": 900,
+      "delay": 1000
+    },
+    "threshold": 0.1,
+    "include_diff_image": true
+  }'</code></pre></div>
+  <div class="code-panel" data-panel="js"><pre><code class="language-javascript">const res = await fetch("${safeBaseUrl}/v1/diff", {
+  method: "POST",
+  headers: {
+    "Authorization": "Bearer YOUR_API_KEY",
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    url_a: "https://example.com/v1",
+    url_b: "https://example.com/v2",
+    screenshot_options: { width: 1280, height: 900, delay: 1000 },
+    threshold: 0.1,
+    include_diff_image: true,
+  }),
+});
+const diff = await res.json();</code></pre></div>
+  <div class="code-panel" data-panel="python"><pre><code class="language-python">import requests
+
+resp = requests.post(
+    "${safeBaseUrl}/v1/diff",
+    headers={"Authorization": "Bearer YOUR_API_KEY"},
+    json={
+        "url_a": "https://example.com/v1",
+        "url_b": "https://example.com/v2",
+        "screenshot_options": {"width": 1280, "height": 900, "delay": 1000},
+        "threshold": 0.1,
+        "include_diff_image": True,
+    },
+)
+diff = resp.json()</code></pre></div>
+</div>
+
+<h4>Job ID Mode</h4>
+<p>Compare two previously rendered screenshots by job ID:</p>
+
+<div class="code-group" data-tabs>
+  <div class="code-tabs">
+    <button class="code-tab active" data-tab="curl">cURL</button>
+  </div>
+  <div class="code-panel active" data-panel="curl"><pre><code class="language-bash">curl -X POST ${safeBaseUrl}/v1/diff \\
+  -H "Authorization: Bearer YOUR_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "job_id_a": "abc12345-...",
+    "job_id_b": "def67890-...",
+    "threshold": 0.05
+  }'</code></pre></div>
+</div>
+
+<h4>Screenshot Options</h4>
+<p>When using URL mode, control how both pages are rendered:</p>
+<table class="params-table">
+  <tr><td class="param-name">width</td><td>Viewport width in pixels (default: 1920)</td></tr>
+  <tr><td class="param-name">height</td><td>Viewport height in pixels (default: 1080)</td></tr>
+  <tr><td class="param-name">fullPage</td><td>Capture the entire scrollable page (default: false)</td></tr>
+  <tr><td class="param-name">darkMode</td><td>Emulate dark color scheme (default: false)</td></tr>
+  <tr><td class="param-name">deviceScaleFactor</td><td>Device pixel ratio, 0.5–4 (default: 1)</td></tr>
+  <tr><td class="param-name">delay</td><td>Wait N milliseconds after page load, 0–30000 (default: 0)</td></tr>
+  <tr><td class="param-name">waitFor</td><td>CSS selector to wait for before capturing</td></tr>
+  <tr><td class="param-name">wait</td><td>Advanced wait strategy: <code>{"type":"selector","value":".loaded"}</code>, <code>{"type":"networkidle"}</code>, etc.</td></tr>
+</table>
+
+<h4>Diff Options</h4>
+<table class="params-table">
+  <tr><td class="param-name">threshold</td><td>Pixel sensitivity, 0 = exact match, 1 = lenient (default: 0.1)</td></tr>
+  <tr><td class="param-name">include_diff_image</td><td>Return a base64-encoded diff image (default: true)</td></tr>
+  <tr><td class="param-name">anti_aliasing_detection</td><td>Ignore anti-aliasing differences (default: false)</td></tr>
+  <tr><td class="param-name">output_format</td><td>Diff image format: png, jpeg, webp (default: png)</td></tr>
+</table>
+
+<h4>Response</h4>
+<pre><code class="language-json">{
+  "mismatch_percentage": 2.34,
+  "total_pixels": 2073600,
+  "diff_pixels": 48523,
+  "duration_ms": 145,
+  "diff_image": "iVBORw0KGgo...",
+  "diff_image_content_type": "image/png"
+}</code></pre>
+
 </section>
 
 <!-- ════════════════════════════════════════════ -->
