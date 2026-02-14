@@ -248,6 +248,15 @@ export async function accessibilityRoutes(app: FastifyInstance) {
         }
       }
 
+      // SSRF protection — check before creating job to avoid orphaned rows
+      const { getConfig } = await import('../config/index.js');
+      const config = getConfig();
+      if (!config.ALLOW_PRIVATE_URLS && isPrivateUrl(url)) {
+        return sendError(reply, req, 'SSRF_BLOCKED', {
+          message: 'Access to private/internal URLs is not allowed',
+        });
+      }
+
       const pool = getPool();
       const start = performance.now();
 
@@ -259,15 +268,6 @@ export async function accessibilityRoutes(app: FastifyInstance) {
         [apiKeyId, url, standard],
       );
       const auditId = jobInsert.rows[0].id;
-
-      // SSRF protection
-      const { getConfig } = await import('../config/index.js');
-      const config = getConfig();
-      if (!config.ALLOW_PRIVATE_URLS && isPrivateUrl(url)) {
-        return sendError(reply, req, 'SSRF_BLOCKED', {
-          message: 'Access to private/internal URLs is not allowed',
-        });
-      }
 
       let context: Awaited<ReturnType<typeof app.browserPool.acquire>> | undefined;
       try {
