@@ -36,7 +36,7 @@ The release workflow requires two GitHub repository secrets for Docker Hub publi
    - `DOCKER_USERNAME` = your Docker Hub username
    - `DOCKER_TOKEN` = the access token from above
 
-If these secrets are not configured, the Docker Hub login step will fail gracefully and images will only be pushed to ghcr.io.
+If these secrets are not configured, the Docker Hub login step will be skipped and images will only be pushed to ghcr.io. The workflow detects the login outcome and conditionally includes Docker Hub tags only when authentication succeeds.
 
 ## Manual Build & Push (Fallback)
 
