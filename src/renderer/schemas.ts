@@ -8,7 +8,10 @@ const httpUrlSchema = z.string().url().refine((url) => {
   }
 }, { message: 'URL must use http or https protocol' });
 
-const PRIVATE_HOSTS = /^(localhost|127\.\d+\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|192\.168\.\d+\.\d+|0\.0\.0\.0|\[::1\]|\[::ffff:)/i;
+// Comprehensive SSRF protection: blocks all private/internal IP ranges
+// IPv4: 127.0.0.0/8, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 0.0.0.0
+// IPv6: ::1 (loopback), ::ffff:0:0/96 (IPv4-mapped), fd00::/8 (unique local), fe80::/10 (link-local)
+const PRIVATE_HOSTS = /^(localhost|127\.\d+\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|192\.168\.\d+\.\d+|169\.254\.\d+\.\d+|0\.0\.0\.0|\[::1\]|\[::ffff:|\[fd[0-9a-f]{2}:|\[fe[89ab][0-9a-f]:)/i;
 
 export function isPrivateUrl(url: string): boolean {
   try {

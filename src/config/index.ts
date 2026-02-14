@@ -18,6 +18,8 @@ const envSchema = z.object({
   DB_POOL_MAX: z.coerce.number().int().min(1).max(100).default(10),
   ALLOW_PRIVATE_URLS: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
   REQUIRE_AUTH: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
+  METRICS_AUTH_REQUIRED: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
+  CORS_ORIGINS: z.string().optional().transform((v) => v ? v.split(',').map(s => s.trim()) : []),
   MAX_CONTENT_SIZE_MB: z.coerce.number().int().min(1).max(100).default(50),
   BASE_URL: z.string().default('http://localhost:3100'),
   SESSION_SECRET: z.string().min(32).default('change-me-in-production-this-is-32-chars!'),

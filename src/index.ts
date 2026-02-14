@@ -7,6 +7,7 @@ import { loadConfig } from './config/index.js';
 import { BrowserPool } from './renderer/browser-pool.js';
 import { RenderCache } from './cache/index.js';
 import { SlidingWindowRateLimiter } from './auth/rate-limiter.js';
+import { authMiddleware } from './auth/middleware.js';
 import { StorageLifecycleManager } from './storage/lifecycle.js';
 import { renderRoutes } from './routes/render.js';
 import { adminRoutes } from './routes/admin.js';
@@ -58,7 +59,15 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
         },
   });
 
-  await app.register(cors, { origin: true });
+  // CORS configuration: restrict origins in production
+  const corsOrigins = config.CORS_ORIGINS.length > 0
+    ? config.CORS_ORIGINS
+    : (config.NODE_ENV === 'development' ? true : false);
+
+  await app.register(cors, {
+    origin: corsOrigins,
+    credentials: true,
+  });
   await app.register(formbody);
   await app.register(cookie);
   await app.register(session, {
@@ -78,6 +87,17 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
 
   // Request ID tracking
   app.addHook('onRequest', requestIdHook);
+
+  // Security headers
+  app.addHook('onRequest', async (req, reply) => {
+    reply.header('X-Content-Type-Options', 'nosniff');
+    reply.header('X-Frame-Options', 'DENY');
+
+    // HSTS only in production when served over HTTPS
+    if (config.NODE_ENV === 'production') {
+      reply.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    }
+  });
 
   // Request logging and metrics
   app.addHook('onResponse', (req, reply, done) => {
@@ -164,9 +184,11 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
     },
   }, async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
 
-  // Prometheus metrics endpoint (no auth required for scraping)
+  // Prometheus metrics endpoint
   if (config.METRICS_ENABLED) {
-    app.get('/metrics', async (req, reply) => {
+    app.get('/metrics', {
+      preHandler: config.METRICS_AUTH_REQUIRED ? [authMiddleware] : [],
+    }, async (req, reply) => {
       const metrics = await getMetrics();
       reply.type('text/plain; version=0.0.4; charset=utf-8');
       return metrics;
