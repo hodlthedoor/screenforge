@@ -41,6 +41,7 @@ When deploying ScreenForge in production, follow these security best practices:
 ### Authentication & Authorization
 
 - **Enable Authentication**: Set `REQUIRE_AUTH=true` to require API keys for all render endpoints
+- **Async Poll Endpoints**: Note that `/v1/render/:id` and `/v1/batch/:id` are intentionally public - the job ID itself acts as an authentication token (UUIDs are unguessable). These endpoints only expose job metadata and the URL being rendered, not API keys or sensitive user data.
 - **Rotate API Keys**: Regularly rotate API keys, especially if they may have been compromised
 - **Admin Endpoints**: Secure the `/v1/keys` admin endpoint with `ADMIN_API_KEY`
 - **Metrics Access**: Set `METRICS_AUTH_REQUIRED=true` if your metrics contain sensitive data
