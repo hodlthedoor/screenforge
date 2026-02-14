@@ -3,7 +3,7 @@
 import asyncio
 import time
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Literal, Optional, Union
 from urllib.parse import quote
 
 import httpx
@@ -18,6 +18,7 @@ from .exceptions import (
 from .types import (
     AccessibilityOptions,
     AccessibilityReport,
+    AccessibilityScreenshotOptions,
     AccessibilityViolation,
     AccessibilityViolationNode,
     AsyncRenderResponse,
@@ -39,7 +40,313 @@ DEFAULT_MAX_RETRIES = 2
 DEFAULT_RETRY_BASE_DELAY_MS = 200
 
 
-class ScreenForgeClient:
+class _ClientMixin:
+    """Shared logic for sync and async clients."""
+
+    retry_base_delay_ms: int
+
+    @staticmethod
+    def _normalize_non_empty_string(value: Any) -> Optional[str]:
+        """Normalize a value to a non-empty string or None."""
+        if not isinstance(value, str):
+            return None
+        trimmed = value.strip()
+        return trimmed if trimmed else None
+
+    def _normalize_async_response(self, result: Dict[str, Any]) -> AsyncRenderResponse:
+        """Normalize async render response."""
+        job_id = self._normalize_non_empty_string(result.get("jobId")) or self._normalize_non_empty_string(
+            result.get("id")
+        )
+        poll_url = self._normalize_non_empty_string(result.get("pollUrl"))
+
+        if not job_id or not poll_url:
+            raise ScreenForgeError(
+                "Malformed API response: expected jobId/id and pollUrl",
+                code="MALFORMED_RESPONSE",
+                details=result,
+            )
+
+        return AsyncRenderResponse(jobId=job_id, pollUrl=poll_url)
+
+    def _normalize_batch_response(self, result: Dict[str, Any]) -> BatchRenderResponse:
+        """Normalize batch render response."""
+        batch_id = self._normalize_non_empty_string(result.get("batchId"))
+        jobs = result.get("jobs", [])
+
+        if not batch_id or not isinstance(jobs, list):
+            raise ScreenForgeError(
+                "Malformed API response: expected batchId and jobs array",
+                code="MALFORMED_RESPONSE",
+                details=result,
+            )
+
+        normalized_jobs = []
+        for job in jobs:
+            if not isinstance(job, dict):
+                raise ScreenForgeError(
+                    "Malformed API response: expected job object in batch jobs array",
+                    code="MALFORMED_RESPONSE",
+                    details=job,
+                )
+            job_id = self._normalize_non_empty_string(job.get("jobId")) or self._normalize_non_empty_string(
+                job.get("id")
+            )
+            poll_url = self._normalize_non_empty_string(job.get("pollUrl"))
+            if not job_id or not poll_url:
+                raise ScreenForgeError(
+                    "Malformed API response: expected jobId/id and pollUrl for each batch job",
+                    code="MALFORMED_RESPONSE",
+                    details=job,
+                )
+            normalized_jobs.append({"jobId": job_id, "pollUrl": poll_url})
+
+        return BatchRenderResponse(batchId=batch_id, jobs=normalized_jobs)
+
+    def _normalize_extract_response(self, result: Dict[str, Any]) -> ExtractResult:
+        """Normalize extract response."""
+        extraction_id = self._normalize_non_empty_string(result.get("extractionId"))
+        model_used = self._normalize_non_empty_string(result.get("modelUsed"))
+        tokens_used = result.get("tokensUsed")
+        duration_ms = result.get("durationMs")
+
+        if (
+            not extraction_id
+            or not model_used
+            or not isinstance(tokens_used, int)
+            or not isinstance(duration_ms, int)
+        ):
+            raise ScreenForgeError(
+                "Malformed API response: expected extractionId, modelUsed, tokensUsed, and durationMs",
+                code="MALFORMED_RESPONSE",
+                details=result,
+            )
+
+        return ExtractResult(
+            extractionId=extraction_id,
+            data=result.get("data"),
+            modelUsed=model_used,
+            tokensUsed=tokens_used,
+            screenshotPath=result.get("screenshotPath"),
+            durationMs=duration_ms,
+        )
+
+    def _normalize_accessibility_response(self, result: Dict[str, Any]) -> AccessibilityReport:
+        """Normalize accessibility response."""
+        audit_id = self._normalize_non_empty_string(result.get("auditId"))
+        violations_data = result.get("violations")
+        passes_count = result.get("passesCount")
+
+        if not audit_id or not isinstance(violations_data, list) or not isinstance(passes_count, int):
+            raise ScreenForgeError(
+                "Malformed API response: expected auditId, violations array, and passesCount",
+                code="MALFORMED_RESPONSE",
+                details=result,
+            )
+
+        violations = [
+            AccessibilityViolation(
+                id=v["id"],
+                impact=v["impact"],
+                description=v["description"],
+                helpUrl=v["helpUrl"],
+                nodes=[
+                    AccessibilityViolationNode(
+                        html=n["html"],
+                        target=n["target"],
+                        failureSummary=n.get("failureSummary"),
+                    )
+                    for n in v.get("nodes", [])
+                ],
+            )
+            for v in violations_data
+        ]
+
+        return AccessibilityReport(
+            auditId=audit_id,
+            url=result["url"],
+            standard=result["standard"],
+            violations=violations,
+            passesCount=passes_count,
+            violationsCount=result["violationsCount"],
+            incompleteCount=result["incompleteCount"],
+            durationMs=result["durationMs"],
+            timestamp=result["timestamp"],
+            screenshotPath=result.get("screenshotPath"),
+            annotatedScreenshotPath=result.get("annotatedScreenshotPath"),
+        )
+
+    @staticmethod
+    def _should_retry_status(status: int) -> bool:
+        """Check if a status code should trigger a retry."""
+        return status in (429, 500, 502, 503, 504)
+
+    def _retry_delay(self, attempt: int, retry_after_seconds: Optional[float] = None) -> int:
+        """Calculate retry delay in milliseconds."""
+        if retry_after_seconds is not None and retry_after_seconds > 0:
+            return int(retry_after_seconds * 1000)
+        return self.retry_base_delay_ms * (2**attempt)
+
+    @staticmethod
+    def _parse_error_response(response: httpx.Response) -> Dict[str, Any]:
+        """Parse error response body."""
+        content_type = response.headers.get("content-type", "")
+        if "application/json" not in content_type:
+            return {"error": response.text or "Request failed"}
+
+        try:
+            return response.json()
+        except Exception:
+            return {"error": response.text or "Request failed"}
+
+    def _extract_error_metadata(self, parsed: Dict[str, Any], status: int) -> Dict[str, Any]:
+        """Extract error metadata from nested response."""
+        queue: List[Dict[str, Any]] = []
+        seen: set[int] = set()
+
+        def enqueue(value: Any) -> None:
+            if not isinstance(value, dict):
+                return
+            value_id = id(value)
+            if value_id in seen:
+                return
+            seen.add(value_id)
+            queue.append(value)
+
+        enqueue(parsed)
+        enqueue(parsed.get("error"))
+
+        message = None
+        code = None
+        details = None
+        request_id = None
+        retry_after = None
+
+        top_level_error = self._normalize_non_empty_string(parsed.get("error"))
+        if top_level_error:
+            message = top_level_error
+
+        while queue:
+            current = queue.pop(0)
+
+            if message is None and isinstance(current.get("message"), str):
+                message = current["message"] or None
+
+            if code is None and isinstance(current.get("code"), str):
+                code = current["code"] or None
+
+            if details is None and "details" in current:
+                details = current["details"]
+
+            if request_id is None and isinstance(current.get("request_id"), str):
+                request_id = current["request_id"] or None
+
+            if request_id is None and isinstance(current.get("requestId"), str):
+                request_id = current["requestId"] or None
+
+            if retry_after is None:
+                retry_after = self._to_retry_after_seconds(
+                    current.get("retryAfter")
+                ) or self._to_retry_after_seconds(current.get("retry_after"))
+
+            enqueue(current.get("error"))
+
+        if retry_after is None and isinstance(details, dict):
+            retry_after = self._to_retry_after_seconds(details.get("retryAfter")) or self._to_retry_after_seconds(
+                details.get("retry_after")
+            )
+
+        return {
+            "message": message or f"Request failed with status {status}",
+            "code": code,
+            "details": details,
+            "request_id": request_id,
+            "retry_after": retry_after,
+        }
+
+    @staticmethod
+    def _parse_retry_after_header(retry_after_header: Optional[str]) -> Optional[float]:
+        """Parse Retry-After header value."""
+        if not retry_after_header:
+            return None
+
+        as_number = _ClientMixin._to_retry_after_seconds(retry_after_header)
+        if as_number is not None:
+            return as_number
+
+        try:
+            date_value = datetime.strptime(retry_after_header, "%a, %d %b %Y %H:%M:%S GMT")
+            seconds = date_value.timestamp() - time.time()
+            return seconds if seconds > 0 else None
+        except Exception:
+            return None
+
+    @staticmethod
+    def _to_retry_after_seconds(value: Any) -> Optional[float]:
+        """Convert value to retry-after seconds."""
+        if isinstance(value, (int, float)) and value > 0:
+            return float(value)
+        if isinstance(value, str):
+            try:
+                parsed = float(value)
+                return parsed if parsed > 0 else None
+            except ValueError:
+                return None
+        return None
+
+    @staticmethod
+    def _map_http_error(status: int, metadata: Dict[str, Any]) -> ScreenForgeError:
+        """Map HTTP status to appropriate exception."""
+        kwargs = {
+            "status": status,
+            "code": metadata.get("code"),
+            "details": metadata.get("details"),
+            "request_id": metadata.get("request_id"),
+            "retry_after": metadata.get("retry_after"),
+        }
+
+        message = metadata.get("message", f"Request failed with status {status}")
+
+        if status == 429:
+            return RateLimitError(message, **kwargs)
+        if status == 400:
+            return ValidationError(message, **kwargs)
+        if status in (401, 403):
+            return AuthenticationError(message, **kwargs)
+
+        return ScreenForgeError(message, **kwargs)
+
+    def _handle_error_response(self, response: httpx.Response) -> Dict[str, Any]:
+        """Parse error response and extract metadata with retry-after."""
+        parsed_error = self._parse_error_response(response)
+        metadata = self._extract_error_metadata(parsed_error, response.status_code)
+
+        retry_after_header = self._parse_retry_after_header(response.headers.get("retry-after"))
+        retry_after_seconds = metadata.get("retry_after") or retry_after_header
+        if retry_after_seconds is not None:
+            metadata["retry_after"] = retry_after_seconds
+
+        return metadata
+
+    @staticmethod
+    def _build_accessibility_body(
+        url: str,
+        standard: Optional[Literal["WCAG2A", "WCAG2AA", "WCAG2AAA"]] = None,
+        screenshot_options: Optional[AccessibilityScreenshotOptions] = None,
+        include_screenshot: Optional[bool] = None,
+    ) -> AccessibilityOptions:
+        """Build accessibility request body from typed parameters."""
+        body: AccessibilityOptions = {"url": url}
+        if standard is not None:
+            body["standard"] = standard
+        if screenshot_options is not None:
+            body["screenshot_options"] = screenshot_options
+        if include_screenshot is not None:
+            body["include_screenshot"] = include_screenshot
+        return body
+
+
+class ScreenForgeClient(_ClientMixin):
     """Synchronous ScreenForge API client."""
 
     def __init__(
@@ -198,37 +505,7 @@ class ScreenForgeClient:
             BatchRenderResponse with batchId and jobs
         """
         result = self._request("POST", "/v1/batch", {"items": items})
-        batch_id = self._normalize_non_empty_string(result.get("batchId"))
-        jobs = result.get("jobs", [])
-
-        if not batch_id or not isinstance(jobs, list):
-            raise ScreenForgeError(
-                "Malformed API response: expected batchId and jobs array",
-                code="MALFORMED_RESPONSE",
-                details=result,
-            )
-
-        normalized_jobs = []
-        for job in jobs:
-            if not isinstance(job, dict):
-                raise ScreenForgeError(
-                    "Malformed API response: expected job object in batch jobs array",
-                    code="MALFORMED_RESPONSE",
-                    details=job,
-                )
-            job_id = self._normalize_non_empty_string(job.get("jobId")) or self._normalize_non_empty_string(
-                job.get("id")
-            )
-            poll_url = self._normalize_non_empty_string(job.get("pollUrl"))
-            if not job_id or not poll_url:
-                raise ScreenForgeError(
-                    "Malformed API response: expected jobId/id and pollUrl for each batch job",
-                    code="MALFORMED_RESPONSE",
-                    details=job,
-                )
-            normalized_jobs.append({"jobId": job_id, "pollUrl": poll_url})
-
-        return BatchRenderResponse(batchId=batch_id, jobs=normalized_jobs)
+        return self._normalize_batch_response(result)
 
     def get_usage(self) -> UsageStats:
         """Get API usage statistics.
@@ -249,111 +526,29 @@ class ScreenForgeClient:
             ExtractResult with extracted data and metadata
         """
         result = self._request("POST", "/v1/extract", options)
+        return self._normalize_extract_response(result)
 
-        extraction_id = self._normalize_non_empty_string(result.get("extractionId"))
-        model_used = self._normalize_non_empty_string(result.get("modelUsed"))
-        tokens_used = result.get("tokensUsed")
-        duration_ms = result.get("durationMs")
-
-        if (
-            not extraction_id
-            or not model_used
-            or not isinstance(tokens_used, int)
-            or not isinstance(duration_ms, int)
-        ):
-            raise ScreenForgeError(
-                "Malformed API response: expected extractionId, modelUsed, tokensUsed, and durationMs",
-                code="MALFORMED_RESPONSE",
-                details=result,
-            )
-
-        return ExtractResult(
-            extractionId=extraction_id,
-            data=result.get("data"),
-            modelUsed=model_used,
-            tokensUsed=tokens_used,
-            screenshotPath=result.get("screenshotPath"),
-            durationMs=duration_ms,
-        )
-
-    def accessibility(self, url: str, **options) -> AccessibilityReport:
+    def accessibility(
+        self,
+        url: str,
+        standard: Optional[Literal["WCAG2A", "WCAG2AA", "WCAG2AAA"]] = None,
+        screenshot_options: Optional[AccessibilityScreenshotOptions] = None,
+        include_screenshot: Optional[bool] = None,
+    ) -> AccessibilityReport:
         """Run WCAG accessibility audit on a webpage.
 
         Args:
             url: URL to audit
-            **options: Additional options (standard, screenshot_options, include_screenshot)
+            standard: WCAG standard level (default: WCAG2AA)
+            screenshot_options: Screenshot configuration for the audit
+            include_screenshot: Whether to include screenshot in the report
 
         Returns:
             AccessibilityReport with violations and metadata
         """
-        body: AccessibilityOptions = {"url": url, **options}  # type: ignore
+        body = self._build_accessibility_body(url, standard, screenshot_options, include_screenshot)
         result = self._request("POST", "/v1/accessibility", body)
-
-        audit_id = self._normalize_non_empty_string(result.get("auditId"))
-        violations_data = result.get("violations")
-        passes_count = result.get("passesCount")
-
-        if not audit_id or not isinstance(violations_data, list) or not isinstance(passes_count, int):
-            raise ScreenForgeError(
-                "Malformed API response: expected auditId, violations array, and passesCount",
-                code="MALFORMED_RESPONSE",
-                details=result,
-            )
-
-        violations = [
-            AccessibilityViolation(
-                id=v["id"],
-                impact=v["impact"],
-                description=v["description"],
-                helpUrl=v["helpUrl"],
-                nodes=[
-                    AccessibilityViolationNode(
-                        html=n["html"],
-                        target=n["target"],
-                        failureSummary=n.get("failureSummary"),
-                    )
-                    for n in v.get("nodes", [])
-                ],
-            )
-            for v in violations_data
-        ]
-
-        return AccessibilityReport(
-            auditId=audit_id,
-            url=result["url"],
-            standard=result["standard"],
-            violations=violations,
-            passesCount=passes_count,
-            violationsCount=result["violationsCount"],
-            incompleteCount=result["incompleteCount"],
-            durationMs=result["durationMs"],
-            timestamp=result["timestamp"],
-            screenshotPath=result.get("screenshotPath"),
-            annotatedScreenshotPath=result.get("annotatedScreenshotPath"),
-        )
-
-    def _normalize_async_response(self, result: Dict[str, Any]) -> AsyncRenderResponse:
-        """Normalize async render response."""
-        job_id = self._normalize_non_empty_string(result.get("jobId")) or self._normalize_non_empty_string(
-            result.get("id")
-        )
-        poll_url = self._normalize_non_empty_string(result.get("pollUrl"))
-
-        if not job_id or not poll_url:
-            raise ScreenForgeError(
-                "Malformed API response: expected jobId/id and pollUrl",
-                code="MALFORMED_RESPONSE",
-                details=result,
-            )
-
-        return AsyncRenderResponse(jobId=job_id, pollUrl=poll_url)
-
-    def _normalize_non_empty_string(self, value: Any) -> Optional[str]:
-        """Normalize a value to a non-empty string or None."""
-        if not isinstance(value, str):
-            return None
-        trimmed = value.strip()
-        return trimmed if trimmed else None
+        return self._normalize_accessibility_response(result)
 
     def _request(
         self,
@@ -386,23 +581,14 @@ class ScreenForgeClient:
                         return response.content
                     return response.json()
 
-                # Parse error response
-                parsed_error = self._parse_error_response(response)
-                metadata = self._extract_error_metadata(parsed_error, response.status_code)
+                metadata = self._handle_error_response(response)
+                retry_after_seconds = metadata.get("retry_after")
 
-                # Check for Retry-After header
-                retry_after_header = self._parse_retry_after_header(response.headers.get("retry-after"))
-                retry_after_seconds = metadata.get("retry_after") or retry_after_header
-                if retry_after_seconds is not None:
-                    metadata["retry_after"] = retry_after_seconds
-
-                # Retry on specific status codes
                 if self._should_retry_status(response.status_code) and attempt < self.max_retries:
                     delay = self._retry_delay(attempt, retry_after_seconds)
                     time.sleep(delay / 1000.0)
                     continue
 
-                # Raise appropriate error
                 raise self._map_http_error(response.status_code, metadata)
 
             except ScreenForgeError:
@@ -422,148 +608,8 @@ class ScreenForgeClient:
                     continue
                 raise ScreenForgeError("Network request failed", code="NETWORK_ERROR", cause=e)
 
-    def _should_retry_status(self, status: int) -> bool:
-        """Check if a status code should trigger a retry."""
-        return status in (429, 500, 502, 503, 504)
 
-    def _retry_delay(self, attempt: int, retry_after_seconds: Optional[float] = None) -> int:
-        """Calculate retry delay in milliseconds."""
-        if retry_after_seconds is not None and retry_after_seconds > 0:
-            return int(retry_after_seconds * 1000)
-        return self.retry_base_delay_ms * (2**attempt)
-
-    def _parse_error_response(self, response: httpx.Response) -> Dict[str, Any]:
-        """Parse error response body."""
-        content_type = response.headers.get("content-type", "")
-        if "application/json" not in content_type:
-            return {"error": response.text or "Request failed"}
-
-        try:
-            return response.json()
-        except Exception:
-            return {"error": response.text or "Request failed"}
-
-    def _extract_error_metadata(self, parsed: Dict[str, Any], status: int) -> Dict[str, Any]:
-        """Extract error metadata from nested response."""
-        queue = []
-        seen = set()
-
-        def enqueue(value: Any):
-            if not isinstance(value, dict):
-                return
-            value_id = id(value)
-            if value_id in seen:
-                return
-            seen.add(value_id)
-            queue.append(value)
-
-        enqueue(parsed)
-        enqueue(parsed.get("error"))
-
-        message = None
-        code = None
-        details = None
-        request_id = None
-        retry_after = None
-
-        # Check for top-level error string
-        top_level_error = self._normalize_non_empty_string(parsed.get("error"))
-        if top_level_error:
-            message = top_level_error
-
-        # BFS through nested objects
-        while queue:
-            current = queue.pop(0)
-
-            if message is None and isinstance(current.get("message"), str):
-                message = current["message"] or None
-
-            if code is None and isinstance(current.get("code"), str):
-                code = current["code"] or None
-
-            if details is None and "details" in current:
-                details = current["details"]
-
-            if request_id is None and isinstance(current.get("request_id"), str):
-                request_id = current["request_id"] or None
-
-            if request_id is None and isinstance(current.get("requestId"), str):
-                request_id = current["requestId"] or None
-
-            if retry_after is None:
-                retry_after = self._to_retry_after_seconds(
-                    current.get("retryAfter")
-                ) or self._to_retry_after_seconds(current.get("retry_after"))
-
-            enqueue(current.get("error"))
-
-        # Check details for retry_after
-        if retry_after is None and isinstance(details, dict):
-            retry_after = self._to_retry_after_seconds(details.get("retryAfter")) or self._to_retry_after_seconds(
-                details.get("retry_after")
-            )
-
-        return {
-            "message": message or f"Request failed with status {status}",
-            "code": code,
-            "details": details,
-            "request_id": request_id,
-            "retry_after": retry_after,
-        }
-
-    def _parse_retry_after_header(self, retry_after_header: Optional[str]) -> Optional[float]:
-        """Parse Retry-After header value."""
-        if not retry_after_header:
-            return None
-
-        # Try as number
-        as_number = self._to_retry_after_seconds(retry_after_header)
-        if as_number is not None:
-            return as_number
-
-        # Try as HTTP date (always UTC)
-        try:
-            date_value = datetime.strptime(retry_after_header, "%a, %d %b %Y %H:%M:%S GMT")
-            seconds = (date_value.timestamp() - time.time())
-            return seconds if seconds > 0 else None
-        except Exception:
-            return None
-
-    def _to_retry_after_seconds(self, value: Any) -> Optional[float]:
-        """Convert value to retry-after seconds."""
-        if isinstance(value, (int, float)) and value > 0:
-            return float(value)
-        if isinstance(value, str):
-            try:
-                parsed = float(value)
-                return parsed if parsed > 0 else None
-            except ValueError:
-                return None
-        return None
-
-    def _map_http_error(self, status: int, metadata: Dict[str, Any]) -> ScreenForgeError:
-        """Map HTTP status to appropriate exception."""
-        kwargs = {
-            "status": status,
-            "code": metadata.get("code"),
-            "details": metadata.get("details"),
-            "request_id": metadata.get("request_id"),
-            "retry_after": metadata.get("retry_after"),
-        }
-
-        message = metadata.get("message", f"Request failed with status {status}")
-
-        if status == 429:
-            return RateLimitError(message, **kwargs)
-        if status == 400:
-            return ValidationError(message, **kwargs)
-        if status in (401, 403):
-            return AuthenticationError(message, **kwargs)
-
-        return ScreenForgeError(message, **kwargs)
-
-
-class AsyncScreenForgeClient:
+class AsyncScreenForgeClient(_ClientMixin):
     """Asynchronous ScreenForge API client."""
 
     def __init__(
@@ -722,37 +768,7 @@ class AsyncScreenForgeClient:
             BatchRenderResponse with batchId and jobs
         """
         result = await self._request("POST", "/v1/batch", {"items": items})
-        batch_id = self._normalize_non_empty_string(result.get("batchId"))
-        jobs = result.get("jobs", [])
-
-        if not batch_id or not isinstance(jobs, list):
-            raise ScreenForgeError(
-                "Malformed API response: expected batchId and jobs array",
-                code="MALFORMED_RESPONSE",
-                details=result,
-            )
-
-        normalized_jobs = []
-        for job in jobs:
-            if not isinstance(job, dict):
-                raise ScreenForgeError(
-                    "Malformed API response: expected job object in batch jobs array",
-                    code="MALFORMED_RESPONSE",
-                    details=job,
-                )
-            job_id = self._normalize_non_empty_string(job.get("jobId")) or self._normalize_non_empty_string(
-                job.get("id")
-            )
-            poll_url = self._normalize_non_empty_string(job.get("pollUrl"))
-            if not job_id or not poll_url:
-                raise ScreenForgeError(
-                    "Malformed API response: expected jobId/id and pollUrl for each batch job",
-                    code="MALFORMED_RESPONSE",
-                    details=job,
-                )
-            normalized_jobs.append({"jobId": job_id, "pollUrl": poll_url})
-
-        return BatchRenderResponse(batchId=batch_id, jobs=normalized_jobs)
+        return self._normalize_batch_response(result)
 
     async def get_usage(self) -> UsageStats:
         """Get API usage statistics (async).
@@ -773,111 +789,29 @@ class AsyncScreenForgeClient:
             ExtractResult with extracted data and metadata
         """
         result = await self._request("POST", "/v1/extract", options)
+        return self._normalize_extract_response(result)
 
-        extraction_id = self._normalize_non_empty_string(result.get("extractionId"))
-        model_used = self._normalize_non_empty_string(result.get("modelUsed"))
-        tokens_used = result.get("tokensUsed")
-        duration_ms = result.get("durationMs")
-
-        if (
-            not extraction_id
-            or not model_used
-            or not isinstance(tokens_used, int)
-            or not isinstance(duration_ms, int)
-        ):
-            raise ScreenForgeError(
-                "Malformed API response: expected extractionId, modelUsed, tokensUsed, and durationMs",
-                code="MALFORMED_RESPONSE",
-                details=result,
-            )
-
-        return ExtractResult(
-            extractionId=extraction_id,
-            data=result.get("data"),
-            modelUsed=model_used,
-            tokensUsed=tokens_used,
-            screenshotPath=result.get("screenshotPath"),
-            durationMs=duration_ms,
-        )
-
-    async def accessibility(self, url: str, **options) -> AccessibilityReport:
+    async def accessibility(
+        self,
+        url: str,
+        standard: Optional[Literal["WCAG2A", "WCAG2AA", "WCAG2AAA"]] = None,
+        screenshot_options: Optional[AccessibilityScreenshotOptions] = None,
+        include_screenshot: Optional[bool] = None,
+    ) -> AccessibilityReport:
         """Run WCAG accessibility audit on a webpage (async).
 
         Args:
             url: URL to audit
-            **options: Additional options (standard, screenshot_options, include_screenshot)
+            standard: WCAG standard level (default: WCAG2AA)
+            screenshot_options: Screenshot configuration for the audit
+            include_screenshot: Whether to include screenshot in the report
 
         Returns:
             AccessibilityReport with violations and metadata
         """
-        body: AccessibilityOptions = {"url": url, **options}  # type: ignore
+        body = self._build_accessibility_body(url, standard, screenshot_options, include_screenshot)
         result = await self._request("POST", "/v1/accessibility", body)
-
-        audit_id = self._normalize_non_empty_string(result.get("auditId"))
-        violations_data = result.get("violations")
-        passes_count = result.get("passesCount")
-
-        if not audit_id or not isinstance(violations_data, list) or not isinstance(passes_count, int):
-            raise ScreenForgeError(
-                "Malformed API response: expected auditId, violations array, and passesCount",
-                code="MALFORMED_RESPONSE",
-                details=result,
-            )
-
-        violations = [
-            AccessibilityViolation(
-                id=v["id"],
-                impact=v["impact"],
-                description=v["description"],
-                helpUrl=v["helpUrl"],
-                nodes=[
-                    AccessibilityViolationNode(
-                        html=n["html"],
-                        target=n["target"],
-                        failureSummary=n.get("failureSummary"),
-                    )
-                    for n in v.get("nodes", [])
-                ],
-            )
-            for v in violations_data
-        ]
-
-        return AccessibilityReport(
-            auditId=audit_id,
-            url=result["url"],
-            standard=result["standard"],
-            violations=violations,
-            passesCount=passes_count,
-            violationsCount=result["violationsCount"],
-            incompleteCount=result["incompleteCount"],
-            durationMs=result["durationMs"],
-            timestamp=result["timestamp"],
-            screenshotPath=result.get("screenshotPath"),
-            annotatedScreenshotPath=result.get("annotatedScreenshotPath"),
-        )
-
-    def _normalize_async_response(self, result: Dict[str, Any]) -> AsyncRenderResponse:
-        """Normalize async render response."""
-        job_id = self._normalize_non_empty_string(result.get("jobId")) or self._normalize_non_empty_string(
-            result.get("id")
-        )
-        poll_url = self._normalize_non_empty_string(result.get("pollUrl"))
-
-        if not job_id or not poll_url:
-            raise ScreenForgeError(
-                "Malformed API response: expected jobId/id and pollUrl",
-                code="MALFORMED_RESPONSE",
-                details=result,
-            )
-
-        return AsyncRenderResponse(jobId=job_id, pollUrl=poll_url)
-
-    def _normalize_non_empty_string(self, value: Any) -> Optional[str]:
-        """Normalize a value to a non-empty string or None."""
-        if not isinstance(value, str):
-            return None
-        trimmed = value.strip()
-        return trimmed if trimmed else None
+        return self._normalize_accessibility_response(result)
 
     async def _request(
         self,
@@ -910,23 +844,14 @@ class AsyncScreenForgeClient:
                         return response.content
                     return response.json()
 
-                # Parse error response
-                parsed_error = self._parse_error_response(response)
-                metadata = self._extract_error_metadata(parsed_error, response.status_code)
+                metadata = self._handle_error_response(response)
+                retry_after_seconds = metadata.get("retry_after")
 
-                # Check for Retry-After header
-                retry_after_header = self._parse_retry_after_header(response.headers.get("retry-after"))
-                retry_after_seconds = metadata.get("retry_after") or retry_after_header
-                if retry_after_seconds is not None:
-                    metadata["retry_after"] = retry_after_seconds
-
-                # Retry on specific status codes
                 if self._should_retry_status(response.status_code) and attempt < self.max_retries:
                     delay = self._retry_delay(attempt, retry_after_seconds)
                     await asyncio.sleep(delay / 1000.0)
                     continue
 
-                # Raise appropriate error
                 raise self._map_http_error(response.status_code, metadata)
 
             except ScreenForgeError:
@@ -945,138 +870,3 @@ class AsyncScreenForgeClient:
                     await asyncio.sleep(self._retry_delay(attempt) / 1000.0)
                     continue
                 raise ScreenForgeError("Network request failed", code="NETWORK_ERROR", cause=e)
-
-    def _should_retry_status(self, status: int) -> bool:
-        """Check if a status code should trigger a retry."""
-        return status in (429, 500, 502, 503, 504)
-
-    def _retry_delay(self, attempt: int, retry_after_seconds: Optional[float] = None) -> int:
-        """Calculate retry delay in milliseconds."""
-        if retry_after_seconds is not None and retry_after_seconds > 0:
-            return int(retry_after_seconds * 1000)
-        return self.retry_base_delay_ms * (2**attempt)
-
-    def _parse_error_response(self, response: httpx.Response) -> Dict[str, Any]:
-        """Parse error response body."""
-        content_type = response.headers.get("content-type", "")
-        if "application/json" not in content_type:
-            return {"error": response.text or "Request failed"}
-
-        try:
-            return response.json()
-        except Exception:
-            return {"error": response.text or "Request failed"}
-
-    def _extract_error_metadata(self, parsed: Dict[str, Any], status: int) -> Dict[str, Any]:
-        """Extract error metadata from nested response (same as sync client)."""
-        queue = []
-        seen = set()
-
-        def enqueue(value: Any):
-            if not isinstance(value, dict):
-                return
-            value_id = id(value)
-            if value_id in seen:
-                return
-            seen.add(value_id)
-            queue.append(value)
-
-        enqueue(parsed)
-        enqueue(parsed.get("error"))
-
-        message = None
-        code = None
-        details = None
-        request_id = None
-        retry_after = None
-
-        top_level_error = self._normalize_non_empty_string(parsed.get("error"))
-        if top_level_error:
-            message = top_level_error
-
-        while queue:
-            current = queue.pop(0)
-
-            if message is None and isinstance(current.get("message"), str):
-                message = current["message"] or None
-
-            if code is None and isinstance(current.get("code"), str):
-                code = current["code"] or None
-
-            if details is None and "details" in current:
-                details = current["details"]
-
-            if request_id is None and isinstance(current.get("request_id"), str):
-                request_id = current["request_id"] or None
-
-            if request_id is None and isinstance(current.get("requestId"), str):
-                request_id = current["requestId"] or None
-
-            if retry_after is None:
-                retry_after = self._to_retry_after_seconds(
-                    current.get("retryAfter")
-                ) or self._to_retry_after_seconds(current.get("retry_after"))
-
-            enqueue(current.get("error"))
-
-        if retry_after is None and isinstance(details, dict):
-            retry_after = self._to_retry_after_seconds(details.get("retryAfter")) or self._to_retry_after_seconds(
-                details.get("retry_after")
-            )
-
-        return {
-            "message": message or f"Request failed with status {status}",
-            "code": code,
-            "details": details,
-            "request_id": request_id,
-            "retry_after": retry_after,
-        }
-
-    def _parse_retry_after_header(self, retry_after_header: Optional[str]) -> Optional[float]:
-        """Parse Retry-After header value."""
-        if not retry_after_header:
-            return None
-
-        as_number = self._to_retry_after_seconds(retry_after_header)
-        if as_number is not None:
-            return as_number
-
-        try:
-            date_value = datetime.strptime(retry_after_header, "%a, %d %b %Y %H:%M:%S %Z")
-            seconds = (date_value.timestamp() - time.time())
-            return seconds if seconds > 0 else None
-        except Exception:
-            return None
-
-    def _to_retry_after_seconds(self, value: Any) -> Optional[float]:
-        """Convert value to retry-after seconds."""
-        if isinstance(value, (int, float)) and value > 0:
-            return float(value)
-        if isinstance(value, str):
-            try:
-                parsed = float(value)
-                return parsed if parsed > 0 else None
-            except ValueError:
-                return None
-        return None
-
-    def _map_http_error(self, status: int, metadata: Dict[str, Any]) -> ScreenForgeError:
-        """Map HTTP status to appropriate exception."""
-        kwargs = {
-            "status": status,
-            "code": metadata.get("code"),
-            "details": metadata.get("details"),
-            "request_id": metadata.get("request_id"),
-            "retry_after": metadata.get("retry_after"),
-        }
-
-        message = metadata.get("message", f"Request failed with status {status}")
-
-        if status == 429:
-            return RateLimitError(message, **kwargs)
-        if status == 400:
-            return ValidationError(message, **kwargs)
-        if status in (401, 403):
-            return AuthenticationError(message, **kwargs)
-
-        return ScreenForgeError(message, **kwargs)
