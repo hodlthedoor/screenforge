@@ -236,7 +236,7 @@ describe('renderer', { timeout: 60_000 }, () => {
         margins: { top: '0', right: '0', bottom: '0', left: '0' },
         printBackground: true,
         scale: 1,
-        proxy: { server: 'socks5://proxy.example.com:1080', username: 'user', password: 'pass' },
+        proxy: { server: 'http://proxy.example.com:8080', username: 'user', password: 'pass' },
       });
 
       expect(result.buffer).toBeInstanceOf(Buffer);
