@@ -105,7 +105,7 @@ beforeAll(async () => {
   baseUrl = `http://${addr.address}:${addr.port}`;
 
   // Update config with actual BASE_URL
-  (config as any).BASE_URL = baseUrl;
+  (config as Record<string, unknown>).BASE_URL = baseUrl;
 
   // Create a test API key directly in DB
   const result = await createApiKey('e2e-test-key', 'pro');

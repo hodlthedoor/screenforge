@@ -72,7 +72,7 @@ describe('webhook delivery', () => {
     await closePool();
   });
 
-  /** Helper to create a render job and enqueue a webhook delivery */
+  /** Helper to create a render job and enqueue a webhook delivery via BullMQ */
   async function createJobAndEnqueue() {
     const jobResult = await getPool().query(
       `INSERT INTO render_jobs (api_key_id, type, url, options)
@@ -89,6 +89,27 @@ describe('webhook delivery', () => {
       { jobId, status: 'completed' },
       'whsec_test_key',
     );
+
+    return { jobId, deliveryId };
+  }
+
+  /** Helper to create a render job and delivery record WITHOUT enqueuing to BullMQ */
+  async function createJobWithDelivery() {
+    const jobResult = await getPool().query(
+      `INSERT INTO render_jobs (api_key_id, type, url, options)
+       VALUES ($1, 'screenshot', 'https://example.com', '{}')
+       RETURNING id`,
+      [apiKeyId],
+    );
+    const jobId = jobResult.rows[0].id;
+
+    const deliveryResult = await getPool().query(
+      `INSERT INTO webhook_deliveries (api_key_id, job_id, url, payload, status, attempts)
+       VALUES ($1, $2, $3, $4, 'pending', 0)
+       RETURNING id`,
+      [apiKeyId, jobId, webhookUrl, JSON.stringify({ jobId, status: 'completed' })],
+    );
+    const deliveryId = deliveryResult.rows[0].id;
 
     return { jobId, deliveryId };
   }
@@ -136,7 +157,7 @@ describe('webhook delivery', () => {
 
   describe('webhook processing', () => {
     it('includes X-ScreenForge-Signature header on delivery', async () => {
-      const { jobId, deliveryId } = await createJobAndEnqueue();
+      const { jobId, deliveryId } = await createJobWithDelivery();
 
       // Directly invoke the processor instead of waiting for BullMQ worker
       await processDirectly(deliveryId, jobId);
@@ -149,7 +170,7 @@ describe('webhook delivery', () => {
     });
 
     it('marks delivery as delivered on 2xx response', async () => {
-      const { jobId, deliveryId } = await createJobAndEnqueue();
+      const { jobId, deliveryId } = await createJobWithDelivery();
 
       await processDirectly(deliveryId, jobId);
 
@@ -163,7 +184,7 @@ describe('webhook delivery', () => {
     it('retries on non-2xx response', async () => {
       responseStatus = 500;
 
-      const { jobId, deliveryId } = await createJobAndEnqueue();
+      const { jobId, deliveryId } = await createJobWithDelivery();
 
       await processDirectly(deliveryId, jobId);
 
@@ -180,7 +201,7 @@ describe('webhook delivery', () => {
     it('marks as failed after max retries', async () => {
       responseStatus = 500;
 
-      const { deliveryId } = await createJobAndEnqueue();
+      const { deliveryId } = await createJobWithDelivery();
 
       // Manually simulate 5 failed attempts
       for (let i = 0; i < 5; i++) {
