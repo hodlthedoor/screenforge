@@ -396,7 +396,7 @@ The repository includes `nginx-screenforge.conf` configured with self-signed cer
 sudo bash deploy-nginx.sh
 
 # 2. Add domain to /etc/hosts (use your server's IP)
-echo "192.168.0.18 screenforge.local" | sudo tee -a /etc/hosts
+echo "YOUR_SERVER_IP screenforge.local" | sudo tee -a /etc/hosts
 
 # 3. Reload nginx
 sudo nginx -t && sudo systemctl reload nginx
