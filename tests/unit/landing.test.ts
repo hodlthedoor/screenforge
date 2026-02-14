@@ -107,4 +107,94 @@ describe('landing page', () => {
     expect(res.body).toContain('Pricing');
     expect(res.body).toContain('ScreenForge');
   });
+
+  describe('SEO meta tags', () => {
+    it('contains essential meta tags', async () => {
+      const res = await app.inject({ method: 'GET', url: '/' });
+      const body = res.body;
+      expect(body).toContain('<meta name="description"');
+      expect(body).toContain('og:title');
+      expect(body).toContain('og:description');
+      expect(body).toContain('og:image');
+      expect(body).toContain('og:url');
+      expect(body).toContain('twitter:card');
+      expect(body).toContain('twitter:title');
+      expect(body).toContain('twitter:description');
+    });
+
+    it('contains JSON-LD structured data', async () => {
+      const res = await app.inject({ method: 'GET', url: '/' });
+      const body = res.body;
+      expect(body).toContain('application/ld+json');
+      expect(body).toContain('SoftwareApplication');
+      expect(body).toContain('schema.org');
+    });
+
+    it('contains canonical link', async () => {
+      const res = await app.inject({ method: 'GET', url: '/' });
+      expect(res.body).toContain('<link rel="canonical"');
+    });
+  });
+
+  describe('cache headers', () => {
+    it('sets Cache-Control on landing page', async () => {
+      const res = await app.inject({ method: 'GET', url: '/' });
+      expect(res.headers['cache-control']).toBe('public, max-age=3600');
+    });
+  });
+
+  describe('CTA and social proof', () => {
+    it('has Get Started Free CTA above the fold', async () => {
+      const res = await app.inject({ method: 'GET', url: '/' });
+      expect(res.body).toContain('Get Started Free');
+    });
+
+    it('has social proof section', async () => {
+      const res = await app.inject({ method: 'GET', url: '/' });
+      expect(res.body).toContain('developers');
+    });
+  });
+
+  describe('robots.txt', () => {
+    it('returns valid robots.txt', async () => {
+      const res = await app.inject({ method: 'GET', url: '/robots.txt' });
+      expect(res.statusCode).toBe(200);
+      expect(res.headers['content-type']).toContain('text/plain');
+      const body = res.body;
+      expect(body).toContain('User-agent: *');
+      expect(body).toContain('Allow: /');
+      expect(body).toContain('Allow: /docs');
+      expect(body).toContain('Allow: /terms');
+      expect(body).toContain('Allow: /privacy');
+      expect(body).toContain('Disallow: /dashboard');
+      expect(body).toContain('Disallow: /v1/');
+      expect(body).toContain('Disallow: /admin');
+      expect(body).toContain('Sitemap:');
+    });
+  });
+
+  describe('sitemap.xml', () => {
+    it('returns valid sitemap XML', async () => {
+      const res = await app.inject({ method: 'GET', url: '/sitemap.xml' });
+      expect(res.statusCode).toBe(200);
+      expect(res.headers['content-type']).toContain('application/xml');
+      const body = res.body;
+      expect(body).toContain('<?xml');
+      expect(body).toContain('<urlset');
+      expect(body).toContain('sitemaps.org');
+      expect(body).toContain('<loc>');
+      // Should contain public pages
+      expect(body).toContain('/docs');
+      expect(body).toContain('/terms');
+      expect(body).toContain('/privacy');
+    });
+
+    it('does not include private paths in sitemap', async () => {
+      const res = await app.inject({ method: 'GET', url: '/sitemap.xml' });
+      const body = res.body;
+      expect(body).not.toContain('/dashboard');
+      expect(body).not.toContain('/v1/');
+      expect(body).not.toContain('/admin');
+    });
+  });
 });
