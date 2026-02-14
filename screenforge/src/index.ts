@@ -164,6 +164,12 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
     });
   }
 
+  // Favicon (SVG)
+  const faviconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="6" fill="#4f46e5"/><text x="16" y="22" font-family="Inter,system-ui,sans-serif" font-size="16" font-weight="700" fill="#fff" text-anchor="middle">SF</text></svg>`;
+  app.get('/favicon.ico', async (_req, reply) => {
+    reply.type('image/svg+xml').header('Cache-Control', 'public, max-age=86400').send(faviconSvg);
+  });
+
   // Landing page & auth
   await landingRoutes(app);
   await authRoutes(app);
