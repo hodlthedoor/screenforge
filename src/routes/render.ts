@@ -347,14 +347,24 @@ export async function renderRoutes(
       throw e;
     }
 
-    // Only validate URL and check SSRF if rendering from URL (not HTML)
+    // Sanitize fields common to both URL and HTML renders
+    try {
+      sanitizeSelector(options.selector);
+      sanitizeWaitFor(options.waitFor);
+      sanitizeSelectorList(options.hide_selectors, 'hide_selectors');
+      sanitizeSelectorList(options.remove_selectors, 'remove_selectors');
+    } catch (e) {
+      if (e instanceof SanitizeError) {
+        sendError(reply, req, 'VALIDATION_ERROR', { message: e.message });
+        return;
+      }
+      throw e;
+    }
+
+    // Validate URL and check SSRF if rendering from URL (not HTML)
     if ('url' in options && options.url) {
       try {
         sanitizeUrl(options.url);
-        sanitizeSelector(options.selector);
-        sanitizeWaitFor(options.waitFor);
-        sanitizeSelectorList(options.hide_selectors as string[] | undefined, 'hide_selectors');
-        sanitizeSelectorList(options.remove_selectors as string[] | undefined, 'remove_selectors');
       } catch (e) {
         if (e instanceof SanitizeError) {
           sendError(reply, req, 'VALIDATION_ERROR', { message: e.message });
@@ -366,20 +376,6 @@ export async function renderRoutes(
       if (!config.ALLOW_PRIVATE_URLS && isPrivateUrl(options.url)) {
         sendError(reply, req, 'SSRF_BLOCKED');
         return;
-      }
-    } else {
-      // Still sanitize selector and waitFor for HTML renders
-      try {
-        sanitizeSelector(options.selector);
-        sanitizeWaitFor(options.waitFor);
-        sanitizeSelectorList(options.hide_selectors as string[] | undefined, 'hide_selectors');
-        sanitizeSelectorList(options.remove_selectors as string[] | undefined, 'remove_selectors');
-      } catch (e) {
-        if (e instanceof SanitizeError) {
-          sendError(reply, req, 'VALIDATION_ERROR', { message: e.message });
-          return;
-        }
-        throw e;
       }
     }
 
@@ -655,14 +651,24 @@ export async function renderRoutes(
       throw e;
     }
 
-    // Only validate URL and check SSRF if rendering from URL (not HTML)
+    // Sanitize fields common to both URL and HTML renders
+    try {
+      sanitizeTemplate(options.headerTemplate);
+      sanitizeTemplate(options.footerTemplate);
+      sanitizeSelectorList(options.hide_selectors, 'hide_selectors');
+      sanitizeSelectorList(options.remove_selectors, 'remove_selectors');
+    } catch (e) {
+      if (e instanceof SanitizeError) {
+        sendError(reply, req, 'VALIDATION_ERROR', { message: e.message });
+        return;
+      }
+      throw e;
+    }
+
+    // Validate URL and check SSRF if rendering from URL (not HTML)
     if ('url' in options && options.url) {
       try {
         sanitizeUrl(options.url);
-        sanitizeTemplate(options.headerTemplate);
-        sanitizeTemplate(options.footerTemplate);
-        sanitizeSelectorList(options.hide_selectors as string[] | undefined, 'hide_selectors');
-        sanitizeSelectorList(options.remove_selectors as string[] | undefined, 'remove_selectors');
       } catch (e) {
         if (e instanceof SanitizeError) {
           sendError(reply, req, 'VALIDATION_ERROR', { message: e.message });
@@ -674,20 +680,6 @@ export async function renderRoutes(
       if (!config.ALLOW_PRIVATE_URLS && isPrivateUrl(options.url)) {
         sendError(reply, req, 'SSRF_BLOCKED');
         return;
-      }
-    } else {
-      // Still sanitize templates for HTML renders
-      try {
-        sanitizeTemplate(options.headerTemplate);
-        sanitizeTemplate(options.footerTemplate);
-        sanitizeSelectorList(options.hide_selectors as string[] | undefined, 'hide_selectors');
-        sanitizeSelectorList(options.remove_selectors as string[] | undefined, 'remove_selectors');
-      } catch (e) {
-        if (e instanceof SanitizeError) {
-          sendError(reply, req, 'VALIDATION_ERROR', { message: e.message });
-          return;
-        }
-        throw e;
       }
     }
 

@@ -59,16 +59,11 @@ export async function applyPostNavigationFilters(page: Page, options: ContentFil
   }
 
   if (options.remove_selectors && options.remove_selectors.length > 0) {
-    await page.evaluate((selectors: string[]) => {
-      selectors.forEach((selector: string) => {
-        try {
-          // @ts-expect-error - document is available in browser evaluate context but not in Node types
-          document.querySelectorAll(selector).forEach((el: Element) => el.remove()); // eslint-disable-line no-undef
-        } catch {
-          // Invalid selector — skip silently
-        }
+    for (const selector of options.remove_selectors) {
+      await page.$$eval(selector, (els) => els.forEach((el) => el.remove())).catch(() => {
+        // Invalid selector — skip silently
       });
-    }, options.remove_selectors);
+    }
   }
 
   if (options.custom_css) {

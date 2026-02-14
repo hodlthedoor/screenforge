@@ -125,10 +125,10 @@ export async function signedRoutes(
           sanitizeWaitFor(validatedOptions.waitFor);
         }
         if ('hide_selectors' in validatedOptions) {
-          sanitizeSelectorList(validatedOptions.hide_selectors as string[] | undefined, 'hide_selectors');
+          sanitizeSelectorList(validatedOptions.hide_selectors, 'hide_selectors');
         }
         if ('remove_selectors' in validatedOptions) {
-          sanitizeSelectorList(validatedOptions.remove_selectors as string[] | undefined, 'remove_selectors');
+          sanitizeSelectorList(validatedOptions.remove_selectors, 'remove_selectors');
         }
       } catch (e) {
         if (e instanceof SanitizeError) {
