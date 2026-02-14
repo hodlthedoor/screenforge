@@ -1,8 +1,20 @@
-import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vitest';
 import { buildServer } from '../../src/index.js';
 import { getPool } from '../../src/db/index.js';
 import { createUser } from '../../src/db/users.js';
 import type { FastifyInstance } from 'fastify';
+
+// Mock the email module — vi.hoisted ensures the variable exists before vi.mock runs
+const { mockSendEmail } = vi.hoisted(() => ({
+  mockSendEmail: vi.fn().mockResolvedValue({ sent: true }),
+}));
+vi.mock('../../src/email/index.js', async (importOriginal) => {
+  const actual = await importOriginal() as Record<string, unknown>;
+  return {
+    ...actual,
+    sendEmail: mockSendEmail,
+  };
+});
 
 // Mock the stripe module at the billing layer
 const mockCheckoutSessionsCreate = vi.fn();
@@ -97,6 +109,33 @@ describe('billing routes', () => {
     await app.close();
   });
 
+  beforeEach(() => {
+    mockSendEmail.mockClear();
+  });
+
+  describe('requireAuth edge cases', () => {
+    it('redirects to /login when user is deleted after session created', async () => {
+      // Create a temporary user, log in, then delete the user
+      const tempEmail = 'billing-test-deleted@example.com';
+      const tempPassword = 'password123456';
+      await createUser(tempEmail, tempPassword);
+      const cookie = await loginUser(app, tempEmail, tempPassword);
+
+      // Delete the user from DB while session still exists
+      const pool = getPool();
+      await pool.query("DELETE FROM users WHERE email = $1", [tempEmail]);
+
+      // Now try to access a protected route — requireAuth should fail (user not found)
+      const res = await app.inject({
+        method: 'GET',
+        url: '/dashboard/billing',
+        headers: { cookie },
+      });
+      expect(res.statusCode).toBe(302);
+      expect(res.headers.location).toBe('/login');
+    });
+  });
+
   describe('GET /dashboard/billing', () => {
     it('redirects to /login without session', async () => {
       const res = await app.inject({ method: 'GET', url: '/dashboard/billing' });
@@ -180,6 +219,71 @@ describe('billing routes', () => {
       expect(res.statusCode).toBe(400);
     });
 
+    it('returns 403 when CSRF token is missing', async () => {
+      const cookie = await loginUser(app, testEmail, testPassword);
+      // Visit billing page to establish session with CSRF
+      await app.inject({
+        method: 'GET',
+        url: '/dashboard/billing',
+        headers: { cookie },
+      });
+
+      // POST without _csrf field
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/billing/checkout',
+        headers: { cookie },
+        payload: { plan: 'pro' },
+      });
+      expect(res.statusCode).toBe(403);
+      const body = JSON.parse(res.body);
+      expect(body.error).toBe('Invalid form submission');
+    });
+
+    it('returns 403 when CSRF token is wrong', async () => {
+      const cookie = await loginUser(app, testEmail, testPassword);
+      const billingRes = await app.inject({
+        method: 'GET',
+        url: '/dashboard/billing',
+        headers: { cookie },
+      });
+      const billingCookie = extractCookie(billingRes);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/billing/checkout',
+        headers: { cookie: billingCookie },
+        payload: { plan: 'pro', _csrf: 'wrong-token-value' },
+      });
+      expect(res.statusCode).toBe(403);
+      const body = JSON.parse(res.body);
+      expect(body.error).toBe('Invalid form submission');
+    });
+
+    it('returns 500 when checkout session creation fails', async () => {
+      mockCustomersCreate.mockResolvedValueOnce({ id: 'cus_test_fail' });
+      mockCheckoutSessionsCreate.mockRejectedValueOnce(new Error('Stripe API error'));
+
+      const cookie = await loginUser(app, testEmail, testPassword);
+      const billingRes = await app.inject({
+        method: 'GET',
+        url: '/dashboard/billing',
+        headers: { cookie },
+      });
+      const csrf = extractCsrfToken(billingRes.body);
+      const billingCookie = extractCookie(billingRes);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/billing/checkout',
+        headers: { cookie: billingCookie },
+        payload: { plan: 'pro', _csrf: csrf },
+      });
+      expect(res.statusCode).toBe(500);
+      const body = JSON.parse(res.body);
+      expect(body.error).toBe('Failed to create checkout session');
+    });
+
     it('creates checkout session and redirects for valid plan', async () => {
       mockCustomersCreate.mockResolvedValueOnce({ id: 'cus_test_123' });
       mockCheckoutSessionsCreate.mockResolvedValueOnce({
@@ -222,6 +326,50 @@ describe('billing routes', () => {
       });
       expect(res.statusCode).toBe(302);
       expect(res.headers.location).toBe('/dashboard/billing');
+    });
+
+    it('redirects to portal URL when stripe customer exists', async () => {
+      const pool = getPool();
+      const userResult = await pool.query("SELECT id FROM users WHERE email = $1", [testEmail]);
+      const userId = userResult.rows[0].id;
+      await pool.query("UPDATE users SET stripe_customer_id = 'cus_portal_test' WHERE id = $1", [userId]);
+
+      mockBillingPortalSessionsCreate.mockResolvedValueOnce({
+        url: 'https://billing.stripe.com/session/test_portal',
+      });
+
+      const cookie = await loginUser(app, testEmail, testPassword);
+      const res = await app.inject({
+        method: 'GET',
+        url: '/v1/billing/portal',
+        headers: { cookie },
+      });
+      expect(res.statusCode).toBe(302);
+      expect(res.headers.location).toBe('https://billing.stripe.com/session/test_portal');
+
+      // Cleanup
+      await pool.query("UPDATE users SET stripe_customer_id = NULL WHERE id = $1", [userId]);
+    });
+
+    it('redirects to billing page when portal session creation fails', async () => {
+      const pool = getPool();
+      const userResult = await pool.query("SELECT id FROM users WHERE email = $1", [testEmail]);
+      const userId = userResult.rows[0].id;
+      await pool.query("UPDATE users SET stripe_customer_id = 'cus_portal_fail' WHERE id = $1", [userId]);
+
+      mockBillingPortalSessionsCreate.mockRejectedValueOnce(new Error('Portal API error'));
+
+      const cookie = await loginUser(app, testEmail, testPassword);
+      const res = await app.inject({
+        method: 'GET',
+        url: '/v1/billing/portal',
+        headers: { cookie },
+      });
+      expect(res.statusCode).toBe(302);
+      expect(res.headers.location).toBe('/dashboard/billing');
+
+      // Cleanup
+      await pool.query("UPDATE users SET stripe_customer_id = NULL WHERE id = $1", [userId]);
     });
   });
 
@@ -510,6 +658,164 @@ describe('billing routes', () => {
       expect(res.statusCode).toBe(400);
       const body = JSON.parse(res.body);
       expect(body.error).toContain('signature');
+    });
+
+    it('returns 500 when webhook secret is not configured', async () => {
+      const originalSecret = process.env.STRIPE_WEBHOOK_SECRET;
+      delete process.env.STRIPE_WEBHOOK_SECRET;
+
+      // Rebuild server without webhook secret
+      const tempApp = await buildServer({ skipBrowserInit: true });
+
+      const res = await tempApp.inject({
+        method: 'POST',
+        url: '/v1/billing/webhook',
+        headers: { 'stripe-signature': 'some_sig', 'content-type': 'application/json' },
+        payload: '{}',
+      });
+      expect(res.statusCode).toBe(500);
+      const body = JSON.parse(res.body);
+      expect(body.error).toContain('Webhook secret not configured');
+
+      await tempApp.close();
+      process.env.STRIPE_WEBHOOK_SECRET = originalSecret;
+    });
+
+    it('handles subscription.updated with plan change and sends email', async () => {
+      const pool = getPool();
+      const userResult = await pool.query("SELECT id FROM users WHERE email = $1", [testEmail]);
+      const userId = userResult.rows[0].id;
+      await pool.query(
+        "UPDATE users SET stripe_customer_id = 'cus_email_test', stripe_subscription_id = 'sub_email_123' WHERE id = $1",
+        [userId],
+      );
+      // Create subscription with 'starter' plan — webhook will update to 'pro'
+      await pool.query(
+        `INSERT INTO subscriptions (user_id, stripe_sub_id, plan, status, current_period_end)
+         VALUES ($1, 'sub_email_123', 'starter', 'active', now() + interval '30 days')
+         ON CONFLICT (stripe_sub_id) DO UPDATE SET plan = 'starter', status = 'active'`,
+        [userId],
+      );
+
+      mockWebhooksConstructEvent.mockReturnValueOnce({
+        type: 'customer.subscription.updated',
+        data: {
+          object: {
+            id: 'sub_email_123',
+            customer: 'cus_email_test',
+            status: 'active',
+            current_period_end: Math.floor(Date.now() / 1000) + 86400 * 30,
+            items: {
+              data: [{ price: { id: 'price_pro' } }],
+            },
+          },
+        },
+      });
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/billing/webhook',
+        headers: { 'stripe-signature': 'valid_sig', 'content-type': 'application/json' },
+        payload: '{}',
+      });
+      expect(res.statusCode).toBe(200);
+
+      // Verify the subscription was updated to pro
+      const subResult = await pool.query(
+        "SELECT plan, status FROM subscriptions WHERE stripe_sub_id = 'sub_email_123'",
+      );
+      expect(subResult.rows[0].plan).toBe('pro');
+      expect(subResult.rows[0].status).toBe('active');
+
+      // Cleanup
+      await pool.query("DELETE FROM subscriptions WHERE stripe_sub_id = 'sub_email_123'");
+      await pool.query("UPDATE users SET stripe_customer_id = NULL, stripe_subscription_id = NULL WHERE id = $1", [userId]);
+    });
+
+    it('handles invoice.payment_failed with email sending path', async () => {
+      const pool = getPool();
+      const userResult = await pool.query("SELECT id FROM users WHERE email = $1", [testEmail]);
+      const userId = userResult.rows[0].id;
+
+      // Set up stripe_customer_id so the email path is triggered (lines 400-411)
+      await pool.query(
+        "UPDATE users SET stripe_customer_id = 'cus_payment_fail_email' WHERE id = $1",
+        [userId],
+      );
+      await pool.query(
+        `INSERT INTO subscriptions (user_id, stripe_sub_id, plan, status, current_period_end)
+         VALUES ($1, 'sub_pay_fail_email', 'pro', 'active', now() + interval '30 days')
+         ON CONFLICT (stripe_sub_id) DO NOTHING`,
+        [userId],
+      );
+
+      mockWebhooksConstructEvent.mockReturnValueOnce({
+        type: 'invoice.payment_failed',
+        data: {
+          object: {
+            customer: 'cus_payment_fail_email',
+            subscription: 'sub_pay_fail_email',
+          },
+        },
+      });
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/billing/webhook',
+        headers: { 'stripe-signature': 'valid_sig', 'content-type': 'application/json' },
+        payload: '{}',
+      });
+      expect(res.statusCode).toBe(200);
+
+      // Verify subscription marked past_due
+      const subResult = await pool.query(
+        "SELECT status FROM subscriptions WHERE stripe_sub_id = 'sub_pay_fail_email'",
+      );
+      expect(subResult.rows[0].status).toBe('past_due');
+
+      // Cleanup
+      await pool.query("DELETE FROM subscriptions WHERE stripe_sub_id = 'sub_pay_fail_email'");
+      await pool.query("UPDATE users SET stripe_customer_id = NULL WHERE id = $1", [userId]);
+    });
+
+    it('returns 500 when webhook event processing throws', async () => {
+      // Mock constructEvent to succeed, then the DB query inside processing to fail
+      mockWebhooksConstructEvent.mockReturnValueOnce({
+        type: 'checkout.session.completed',
+        data: {
+          object: {
+            customer: 'cus_error_test',
+            subscription: 'sub_error_test',
+            metadata: { plan: 'pro' },
+          },
+        },
+      });
+
+      // Temporarily break pool.query for the event processing
+      const pool = getPool();
+      const originalQuery = pool.query.bind(pool);
+      let callCount = 0;
+      const querySpy = vi.spyOn(pool, 'query').mockImplementation((...args: unknown[]) => {
+        callCount++;
+        // Let the webhook secret check pass, then fail on event processing queries
+        if (callCount <= 1) {
+          // First query in event processing (finding user by stripe_customer_id) — throw
+          throw new Error('Database connection lost');
+        }
+        return (originalQuery as (...a: unknown[]) => unknown)(...args);
+      });
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/billing/webhook',
+        headers: { 'stripe-signature': 'valid_sig', 'content-type': 'application/json' },
+        payload: '{}',
+      });
+      expect(res.statusCode).toBe(500);
+      const body = JSON.parse(res.body);
+      expect(body.error).toBe('Webhook processing failed');
+
+      querySpy.mockRestore();
     });
   });
 });

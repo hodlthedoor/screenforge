@@ -438,16 +438,15 @@ describe('signed URLs', () => {
     });
 
     it('rejects signed URL without api_key_id parameter', async () => {
-      // Create URL without api_key_id at all
+      // Send empty api_key_id (passes Fastify schema validation but triggers handler check)
       const res = await app.inject({
         method: 'GET',
-        url: '/v1/signed/screenshot?url=https://example.com&signature=test&expires=999999999999',
+        url: '/v1/signed/screenshot?url=https://example.com&api_key_id=&signature=test&expires=999999999999',
       });
 
-      expect(res.statusCode).toBe(400);
+      expect(res.statusCode).toBe(401);
       const body = JSON.parse(res.body);
-      // The validation error happens because missing api_key_id causes validation issues
-      expect(body.error).toHaveProperty('code');
+      expect(body.error).toHaveProperty('code', 'AUTH_REQUIRED');
     });
 
     it('rejects signed URL with unknown api_key_id', async () => {
@@ -518,17 +517,25 @@ describe('signed URLs', () => {
       expect(url.searchParams.get('viewport.width')).toBe('1280');
     });
 
-    it('converts cache_ttl from string to number', async () => {
+    it('converts cache_ttl from string to number in route handler', async () => {
       const options: SignedUrlOptions = {
         type: 'screenshot',
         url: 'https://example.com',
-        cache_ttl: 3600,
+        cache_ttl: 7200,
       };
 
       const signedUrl = generateSignedUrl(testApiKeyId, testSigningSecret, options);
 
-      // cache_ttl is included as a query param
-      expect(signedUrl).toContain('cache_ttl=3600');
+      // Hit the route so the handler parses cache_ttl from query string to number
+      const res = await app.inject({
+        method: 'GET',
+        url: signedUrl,
+      });
+
+      expect(res.statusCode).toBe(202);
+      const body = JSON.parse(res.body);
+      expect(body).toHaveProperty('id');
+      expect(body).toHaveProperty('status', 'pending');
     });
 
     it('rejects signed URL with invalid hide_selectors', async () => {
@@ -586,6 +593,52 @@ describe('signed URLs', () => {
       expect(res.statusCode).toBe(400);
       const body = JSON.parse(res.body);
       expect(body.error).toHaveProperty('code', 'VALIDATION_ERROR');
+    });
+
+    it('rate limits signed URL requests when REQUIRE_AUTH is true', async () => {
+      // Build a separate server with REQUIRE_AUTH=true so the rate limiter branch is exercised
+      const originalRequireAuth = process.env.REQUIRE_AUTH;
+      process.env.REQUIRE_AUTH = 'true';
+      loadConfig();
+
+      const authApp = await buildServer();
+
+      // Set rate limit to 1 so the second request is blocked
+      const originalRateLimit = await getPool().query(
+        'SELECT rate_limit FROM api_keys WHERE id = $1',
+        [testApiKeyId],
+      );
+      await getPool().query('UPDATE api_keys SET rate_limit = 1 WHERE id = $1', [testApiKeyId]);
+
+      const options: SignedUrlOptions = {
+        type: 'screenshot',
+        url: 'https://example.com',
+      };
+
+      // First request should succeed
+      const signedUrl1 = generateSignedUrl(testApiKeyId, testSigningSecret, options);
+      const res1 = await authApp.inject({ method: 'GET', url: signedUrl1 });
+      expect(res1.statusCode).toBe(202);
+
+      // Second request should be rate limited
+      const signedUrl2 = generateSignedUrl(testApiKeyId, testSigningSecret, options);
+      const res2 = await authApp.inject({ method: 'GET', url: signedUrl2 });
+      expect(res2.statusCode).toBe(429);
+      const body = JSON.parse(res2.body);
+      expect(body.error).toHaveProperty('code', 'RATE_LIMITED');
+
+      // Restore rate limit and REQUIRE_AUTH, close the temp server
+      await getPool().query('UPDATE api_keys SET rate_limit = $1 WHERE id = $2', [
+        originalRateLimit.rows[0].rate_limit,
+        testApiKeyId,
+      ]);
+      await authApp.close();
+      if (originalRequireAuth !== undefined) {
+        process.env.REQUIRE_AUTH = originalRequireAuth;
+      } else {
+        delete process.env.REQUIRE_AUTH;
+      }
+      loadConfig();
     });
 
     it('rejects signed URL with private/SSRF URL when ALLOW_PRIVATE_URLS is false', async () => {
