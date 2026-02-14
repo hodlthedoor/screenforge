@@ -16,6 +16,9 @@ All notable changes to ScreenForge are documented here.
 - **Structured logging** — pino-based logging with request IDs, module-level loggers
 - **Content filters** — ad blocking, cookie banner hiding, custom CSS/JS injection
 - **HTML rendering** — render from raw HTML in addition to URLs
+- **Deep analytics** — render history, type breakdown, top URLs, daily/monthly charts at /v1/analytics
+- **API playground** — interactive browser-based API playground at /playground
+- **Python SDK** — typed Python client in sdk/python/ with sync/async support
 - **Comprehensive API docs** — Swagger UI at /docs with full OpenAPI schemas
 - **JavaScript SDK** — @screenforge/sdk with typed client, retries, error handling
 - **Landing page** — developer-focused dark theme with hero, feature grid, pricing, code examples, and self-host callout

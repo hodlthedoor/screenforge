@@ -71,6 +71,8 @@ The API is available at `http://localhost:3100`, Swagger docs at `http://localho
 | `GET` | `/v1/billing/portal` | Session | Stripe portal redirect |
 | `POST` | `/v1/billing/webhook` | Stripe sig | Stripe webhook |
 | `GET` | `/v1/health` | None | Detailed health check |
+| `GET` | `/v1/analytics` | API key | Render analytics & history |
+| `GET` | `/v1/errors` | None | Error code reference |
 | `GET` | `/health` | None | Simple health check |
 | `GET` | `/docs` | None | Swagger UI |
 
@@ -317,9 +319,8 @@ npx playwright install chromium
 # 3. Create the database
 createdb screenforge
 
-# 4. Run migrations
-psql screenforge < sql/002_auth_queue.sql
-psql screenforge < sql/003_users.sql
+# 4. Run migrations (in order)
+for f in sql/*.sql; do psql screenforge < "$f"; done
 
 # 5. Configure environment
 cp .env.example .env
@@ -437,7 +438,7 @@ Database migrations are in `sql/` and run automatically on first boot in Docker.
 
 ## Contributing
 
-Contributions are welcome. To get started:
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full guide. Quick summary:
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feat/my-feature`)
