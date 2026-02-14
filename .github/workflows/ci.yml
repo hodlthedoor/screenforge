@@ -18,7 +18,6 @@ jobs:
       - run: npm ci
       - name: Audit dependencies
         run: npm audit --audit-level=high
-        continue-on-error: false
       - run: npm run lint
       - run: npm run typecheck
 
@@ -51,9 +50,6 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Audit dependencies
-        run: npm audit --audit-level=high
-        continue-on-error: false
       - name: Run database migrations
         run: |
           for f in sql/*.sql; do
