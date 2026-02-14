@@ -17,6 +17,8 @@ describe('OG card generation', { timeout: 120_000 }, () => {
   let ogServerUrl: string;
 
   beforeAll(async () => {
+    await rm(TEST_STORAGE, { recursive: true, force: true });
+
     // HTTP server that serves a page with OG meta tags
     ogServer = createServer((_req, res) => {
       res.writeHead(200, { 'Content-Type': 'text/html' });

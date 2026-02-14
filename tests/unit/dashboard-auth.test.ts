@@ -19,6 +19,7 @@ describe('dashboard auth', () => {
   beforeAll(async () => {
     process.env.API_KEY_SALT = 'test-salt-must-be-16-chars-long';
     process.env.NODE_ENV = 'test';
+    process.env.DATABASE_URL ??= 'postgresql:///screenforge_test?host=/var/run/postgresql';
     process.env.SESSION_SECRET = 'test-session-secret-must-be-32-chars!!';
     app = await buildServer({ skipBrowserInit: true });
 
@@ -32,6 +33,7 @@ describe('dashboard auth', () => {
         created_at timestamptz NOT NULL DEFAULT now()
       )
     `);
+    await pool.query("DELETE FROM users WHERE email LIKE '%auth-test%'");
   });
 
   afterAll(async () => {
