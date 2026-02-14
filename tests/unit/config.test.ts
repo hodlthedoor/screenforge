@@ -71,4 +71,20 @@ describe('config', () => {
       loadConfig({ ...validEnv, STORAGE_RETENTION_DAYS: '0' }),
     ).toThrow('Invalid environment configuration');
   });
+
+  it('defaults GRACEFUL_SHUTDOWN_TIMEOUT_MS to 30000', () => {
+    const config = loadConfig(validEnv);
+    expect(config.GRACEFUL_SHUTDOWN_TIMEOUT_MS).toBe(30_000);
+  });
+
+  it('accepts custom GRACEFUL_SHUTDOWN_TIMEOUT_MS', () => {
+    const config = loadConfig({ ...validEnv, GRACEFUL_SHUTDOWN_TIMEOUT_MS: '60000' });
+    expect(config.GRACEFUL_SHUTDOWN_TIMEOUT_MS).toBe(60_000);
+  });
+
+  it('rejects GRACEFUL_SHUTDOWN_TIMEOUT_MS less than 1000', () => {
+    expect(() =>
+      loadConfig({ ...validEnv, GRACEFUL_SHUTDOWN_TIMEOUT_MS: '500' }),
+    ).toThrow('Invalid environment configuration');
+  });
 });
