@@ -20,6 +20,13 @@ export interface RenderJobResult {
   resultPath: string;
   contentType: string;
   durationMs: number;
+  metadata?: {
+    title: string;
+    finalUrl: string;
+    statusCode: number;
+    width?: number;
+    height?: number;
+  };
 }
 
 let queue: Queue<RenderJobData, RenderJobResult> | undefined;
@@ -53,8 +60,19 @@ export function createWorker(
 
     await pool.query(
       `UPDATE render_jobs SET status = 'completed', result_path = $1, content_type = $2,
-       duration_ms = $3, completed_at = NOW() WHERE id = $4`,
-      [result.resultPath, result.contentType, result.durationMs, job.data.jobId],
+       duration_ms = $3, metadata_title = $4, metadata_final_url = $5, metadata_status_code = $6,
+       metadata_width = $7, metadata_height = $8, completed_at = NOW() WHERE id = $9`,
+      [
+        result.resultPath,
+        result.contentType,
+        result.durationMs,
+        result.metadata?.title ?? null,
+        result.metadata?.finalUrl ?? null,
+        result.metadata?.statusCode ?? null,
+        result.metadata?.width ?? null,
+        result.metadata?.height ?? null,
+        job.data.jobId,
+      ],
     );
 
     // Record metrics (always record, even if cache hit, since this was a job completion)

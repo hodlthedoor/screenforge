@@ -107,8 +107,18 @@ export const pdfOptionsSchema = z.object({
 
 export type PdfOptions = z.infer<typeof pdfOptionsSchema>;
 
+export interface RenderMetadata {
+  title: string;
+  finalUrl: string;
+  statusCode: number;
+  durationMs: number;
+  width?: number;
+  height?: number;
+}
+
 export interface RenderResult {
   buffer: Buffer;
   contentType: string;
   durationMs: number;
+  metadata?: RenderMetadata;
 }

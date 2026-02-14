@@ -17,10 +17,11 @@ export async function renderPdf(pool: BrowserPool, options: PdfOptions, timeoutM
 
     await applyPreNavigationFilters(page, options);
 
+    let response;
     if ('html' in options && options.html) {
       await page.setContent(options.html, { waitUntil: 'networkidle', timeout: timeoutMs });
     } else if ('url' in options && options.url) {
-      await page.goto(options.url, { waitUntil: 'networkidle', timeout: timeoutMs });
+      response = await page.goto(options.url, { waitUntil: 'networkidle', timeout: timeoutMs });
     }
 
     await applyPostNavigationFilters(page, options);
@@ -46,10 +47,23 @@ export async function renderPdf(pool: BrowserPool, options: PdfOptions, timeoutM
       }),
     );
 
+    const durationMs = Math.round(performance.now() - start);
+
+    // Collect metadata
+    const title = await page.title();
+    const finalUrl = options.url ? (response?.url() ?? options.url) : '';
+    const statusCode = response?.status() ?? 0;
+
     return {
       buffer,
       contentType: 'application/pdf',
-      durationMs: Math.round(performance.now() - start),
+      durationMs,
+      metadata: {
+        title,
+        finalUrl,
+        statusCode,
+        durationMs,
+      },
     };
   } finally {
     await context.close();

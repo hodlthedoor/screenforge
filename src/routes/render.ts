@@ -106,6 +106,7 @@ export async function renderRoutes(
         type: 'object',
         properties: {
           async: { type: 'string', enum: ['true', 'false'], description: 'Queue as async job' },
+          metadata: { type: 'string', enum: ['true', 'false'], description: 'Return JSON envelope with metadata' },
         },
       },
       body: {
@@ -191,12 +192,13 @@ export async function renderRoutes(
     const blocked = await checkRateAndQuota(req, reply);
     if (blocked) return;
 
-    const query = req.query as { async?: string };
+    const query = req.query as { async?: string; metadata?: string };
     if (query.async === 'true') {
       const urlOrHtml = options.url ?? options.html ?? '';
       return enqueueRender(req, reply, 'screenshot', urlOrHtml, options as unknown as Record<string, unknown>);
     }
 
+    const wantsMetadata = query.metadata === 'true';
     const optionsHash = RenderCache.hashOptions(options as unknown as Record<string, unknown>);
 
     const cached = await cache.get(optionsHash);
@@ -204,6 +206,26 @@ export async function renderRoutes(
       const format = cached.contentType.includes('jpeg') ? 'jpeg' : 'png';
       incrementRenderCounter('screenshot', format, 'completed', true);
       const buffer = await cache.readFile(cached.filePath);
+
+      if (wantsMetadata) {
+        // For cached results, we don't have metadata, so return minimal envelope
+        return reply
+          .header('Content-Type', 'application/json')
+          .header('X-Cache', 'HIT')
+          .send({
+            data: buffer.toString('base64'),
+            contentType: cached.contentType,
+            metadata: {
+              title: '',
+              finalUrl: options.url ?? '',
+              statusCode: 0,
+              durationMs: 0,
+              width: 0,
+              height: 0,
+            },
+          });
+      }
+
       return reply
         .header('Content-Type', cached.contentType)
         .header('X-Cache', 'HIT')
@@ -220,6 +242,17 @@ export async function renderRoutes(
       const format = result.contentType.includes('jpeg') ? 'jpeg' : 'png';
       incrementRenderCounter('screenshot', format, 'completed', false);
       observeRenderDuration('screenshot', format, result.durationMs / 1000);
+
+      if (wantsMetadata && result.metadata) {
+        return reply
+          .header('Content-Type', 'application/json')
+          .header('X-Cache', 'MISS')
+          .send({
+            data: result.buffer.toString('base64'),
+            contentType: result.contentType,
+            metadata: result.metadata,
+          });
+      }
 
       return reply
         .header('Content-Type', result.contentType)
@@ -241,6 +274,7 @@ export async function renderRoutes(
         type: 'object',
         properties: {
           async: { type: 'string', enum: ['true', 'false'], description: 'Queue as async job' },
+          metadata: { type: 'string', enum: ['true', 'false'], description: 'Return JSON envelope with metadata' },
         },
       },
       body: {
@@ -316,18 +350,37 @@ export async function renderRoutes(
     const blocked = await checkRateAndQuota(req, reply);
     if (blocked) return;
 
-    const query = req.query as { async?: string };
+    const query = req.query as { async?: string; metadata?: string };
     if (query.async === 'true') {
       const urlOrHtml = options.url ?? options.html ?? '';
       return enqueueRender(req, reply, 'pdf', urlOrHtml, options as unknown as Record<string, unknown>);
     }
 
+    const wantsMetadata = query.metadata === 'true';
     const optionsHash = RenderCache.hashOptions(options as unknown as Record<string, unknown>);
 
     const cached = await cache.get(optionsHash);
     if (cached) {
       incrementRenderCounter('pdf', 'pdf', 'completed', true);
       const buffer = await cache.readFile(cached.filePath);
+
+      if (wantsMetadata) {
+        // For cached results, we don't have metadata
+        return reply
+          .header('Content-Type', 'application/json')
+          .header('X-Cache', 'HIT')
+          .send({
+            data: buffer.toString('base64'),
+            contentType: cached.contentType,
+            metadata: {
+              title: '',
+              finalUrl: options.url ?? '',
+              statusCode: 0,
+              durationMs: 0,
+            },
+          });
+      }
+
       return reply
         .header('Content-Type', cached.contentType)
         .header('X-Cache', 'HIT')
@@ -342,6 +395,17 @@ export async function renderRoutes(
 
       incrementRenderCounter('pdf', 'pdf', 'completed', false);
       observeRenderDuration('pdf', 'pdf', result.durationMs / 1000);
+
+      if (wantsMetadata && result.metadata) {
+        return reply
+          .header('Content-Type', 'application/json')
+          .header('X-Cache', 'MISS')
+          .send({
+            data: result.buffer.toString('base64'),
+            contentType: result.contentType,
+            metadata: result.metadata,
+          });
+      }
 
       return reply
         .header('Content-Type', result.contentType)

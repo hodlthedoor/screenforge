@@ -1,6 +1,7 @@
 import type { BrowserPool } from './browser-pool.js';
 import type { ScreenshotOptions, RenderResult } from './schemas.js';
 import { applyPreNavigationFilters, applyPostNavigationFilters } from './filters.js';
+import { imageSize } from 'image-size';
 
 const FORMAT_CONTENT_TYPE: Record<string, string> = {
   png: 'image/png',
@@ -20,10 +21,11 @@ export async function takeScreenshot(pool: BrowserPool, options: ScreenshotOptio
 
     await applyPreNavigationFilters(page, options);
 
+    let response;
     if ('html' in options && options.html) {
       await page.setContent(options.html, { waitUntil: 'networkidle', timeout: timeoutMs });
     } else if ('url' in options && options.url) {
-      await page.goto(options.url, { waitUntil: 'networkidle', timeout: timeoutMs });
+      response = await page.goto(options.url, { waitUntil: 'networkidle', timeout: timeoutMs });
     }
 
     await applyPostNavigationFilters(page, options);
@@ -43,10 +45,28 @@ export async function takeScreenshot(pool: BrowserPool, options: ScreenshotOptio
       }),
     );
 
+    // Extract image dimensions
+    const dimensions = imageSize(buffer);
+
+    const durationMs = Math.round(performance.now() - start);
+
+    // Collect metadata
+    const title = await page.title();
+    const finalUrl = options.url ? (response?.url() ?? options.url) : '';
+    const statusCode = response?.status() ?? 0;
+
     return {
       buffer,
       contentType: FORMAT_CONTENT_TYPE[options.format],
-      durationMs: Math.round(performance.now() - start),
+      durationMs,
+      metadata: {
+        title,
+        finalUrl,
+        statusCode,
+        durationMs,
+        width: dimensions.width ?? 0,
+        height: dimensions.height ?? 0,
+      },
     };
   } finally {
     await context.close();

@@ -395,7 +395,12 @@ export async function start() {
       const result = await renderPdf(browserPool, parsed, config.NAVIGATION_TIMEOUT_MS);
       const filePath = join(config.STORAGE_PATH, `${job.data.jobId}.pdf`);
       await writeFile(filePath, result.buffer);
-      return { resultPath: filePath, contentType: result.contentType, durationMs: result.durationMs };
+      return {
+        resultPath: filePath,
+        contentType: result.contentType,
+        durationMs: result.durationMs,
+        metadata: result.metadata,
+      };
     }
 
     // Default: screenshot (including og type)
@@ -404,7 +409,12 @@ export async function start() {
     const ext = parsed.format === 'jpeg' ? 'jpg' : 'png';
     const filePath = join(config.STORAGE_PATH, `${job.data.jobId}.${ext}`);
     await writeFile(filePath, result.buffer);
-    return { resultPath: filePath, contentType: result.contentType, durationMs: Math.round(performance.now() - start) };
+    return {
+      resultPath: filePath,
+      contentType: result.contentType,
+      durationMs: Math.round(performance.now() - start),
+      metadata: result.metadata,
+    };
   });
 
   // Log render job completions

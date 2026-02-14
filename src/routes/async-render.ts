@@ -24,7 +24,9 @@ export async function asyncRenderRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
 
     const result = await getPool().query(
-      `SELECT id, type, url, status, content_type, result_path, error, duration_ms, created_at, completed_at
+      `SELECT id, type, url, status, content_type, result_path, error, duration_ms,
+              metadata_title, metadata_final_url, metadata_status_code, metadata_width, metadata_height,
+              created_at, completed_at
        FROM render_jobs WHERE id = $1`,
       [id],
     );
@@ -48,6 +50,18 @@ export async function asyncRenderRoutes(app: FastifyInstance) {
       }
     }
 
+    // Build metadata if available
+    const metadata = job.status === 'completed' && (job.metadata_title !== null || job.metadata_final_url !== null || job.metadata_status_code !== null)
+      ? {
+          title: job.metadata_title ?? '',
+          finalUrl: job.metadata_final_url ?? '',
+          statusCode: job.metadata_status_code ?? 0,
+          durationMs: job.duration_ms ?? 0,
+          ...(job.metadata_width !== null ? { width: job.metadata_width } : {}),
+          ...(job.metadata_height !== null ? { height: job.metadata_height } : {}),
+        }
+      : undefined;
+
     return reply.send({
       id: job.id,
       type: job.type,
@@ -56,6 +70,7 @@ export async function asyncRenderRoutes(app: FastifyInstance) {
       error: job.error ?? undefined,
       contentType: job.content_type ?? undefined,
       durationMs: job.duration_ms ?? undefined,
+      metadata,
       createdAt: job.created_at,
       completedAt: job.completed_at ?? undefined,
       pollUrl: `${config.BASE_URL}/v1/render/${job.id}`,
