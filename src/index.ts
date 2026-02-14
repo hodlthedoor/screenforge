@@ -30,6 +30,7 @@ import { webhooksRoutes } from './routes/webhooks.js';
 import { adminPanelRoutes } from './routes/admin-panel.js';
 import { legalRoutes } from './routes/legal.js';
 import { playgroundRoutes } from './routes/playground.js';
+import { analyticsRoutes } from './routes/analytics.js';
 import { registerLoggers, getLogger } from './logging/index.js';
 import { buildErrorResponse } from './security/errors.js';
 import { takeScreenshot } from './renderer/screenshot.js';
@@ -189,6 +190,7 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
   await batchRoutes(app);
   await ogRoutes(app, pool, cache);
   await webhooksRoutes(app);
+  await analyticsRoutes(app);
 
   app.setNotFoundHandler((req, reply) => {
     const response = buildErrorResponse('NOT_FOUND', req);

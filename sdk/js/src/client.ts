@@ -1,4 +1,5 @@
 import type {
+  AnalyticsData,
   AsyncRenderResponse,
   BatchItem,
   BatchJob,
@@ -203,6 +204,10 @@ export class ScreenForge {
 
   async getUsage(): Promise<UsageStats> {
     return this.request<UsageStats>('GET', '/v1/usage');
+  }
+
+  async analytics(): Promise<AnalyticsData> {
+    return this.request<AnalyticsData>('GET', '/v1/analytics');
   }
 
   async listWebhookDeliveries(options: ListWebhookDeliveriesOptions = {}): Promise<WebhookDelivery[]> {

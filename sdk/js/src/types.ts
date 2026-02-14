@@ -121,6 +121,36 @@ export interface ListWebhookDeliveriesOptions {
   limit?: number;
 }
 
+export interface AnalyticsDailyEntry {
+  date: string;
+  count: number;
+  avgDurationMs: number;
+}
+
+export interface AnalyticsTypeBreakdown {
+  type: string;
+  count: number;
+}
+
+export interface AnalyticsTopUrl {
+  url: string;
+  count: number;
+  avgDurationMs: number;
+}
+
+export interface AnalyticsSummary {
+  totalRendersThisMonth: number;
+  avgDurationMs: number;
+  quotaUsagePercent: number;
+}
+
+export interface AnalyticsData {
+  daily: AnalyticsDailyEntry[];
+  typeBreakdown: AnalyticsTypeBreakdown[];
+  topUrls: AnalyticsTopUrl[];
+  summary: AnalyticsSummary;
+}
+
 export interface AsyncRenderResponse {
   jobId: string;
   pollUrl: string;

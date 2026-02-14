@@ -88,6 +88,7 @@ function dashboardLayout(title: string, nav: string, content: string, csrfToken:
     <a href="/dashboard" class="${nav === 'overview' ? 'active' : ''}">Overview</a>
     <a href="/dashboard/keys" class="${nav === 'keys' ? 'active' : ''}">API Keys</a>
     <a href="/dashboard/usage" class="${nav === 'usage' ? 'active' : ''}">Usage</a>
+    <a href="/dashboard/analytics" class="${nav === 'analytics' ? 'active' : ''}">Analytics</a>
     <a href="/dashboard/signed-urls" class="${nav === 'signed-urls' ? 'active' : ''}">Signed URLs</a>
     <a href="/dashboard/billing" class="${nav === 'billing' ? 'active' : ''}">Billing</a>
     <a href="/dashboard/settings" class="${nav === 'settings' ? 'active' : ''}">Settings</a>
@@ -611,5 +612,232 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
     const expiresAt = Date.now() + body.expiry * 1000;
 
     return reply.send({ signedUrl, expiresAt });
+  });
+
+  // Analytics
+  app.get('/dashboard/analytics', { preHandler: requireAuth }, async (req, reply) => {
+    const user = req.dashboardUser!;
+    const keys = await getUserApiKeys(user.id);
+    const csrfToken = ensureCsrfToken(req);
+    const pool = getPool();
+
+    // Aggregate across all user's API keys
+    const keyIds = keys.map((k) => k.id);
+
+    if (keyIds.length === 0) {
+      const html = `
+        <h1>Analytics</h1>
+        <p style="color:var(--muted)">No API keys found. Create an API key to start seeing analytics.</p>`;
+      await req.session.save();
+      return reply.type('text/html').send(dashboardLayout('Analytics', 'analytics', html, csrfToken));
+    }
+
+    // Daily renders (last 30 days)
+    const dailyResult = await pool.query(
+      `SELECT date_trunc('day', rj.created_at)::date AS date,
+              COUNT(*)::int AS count,
+              COALESCE(AVG(rj.duration_ms)::int, 0) AS avg_duration_ms
+       FROM render_jobs rj
+       JOIN user_api_keys uak ON uak.api_key_id = rj.api_key_id
+       WHERE uak.user_id = $1
+         AND rj.created_at >= CURRENT_DATE - INTERVAL '30 days'
+       GROUP BY 1
+       ORDER BY 1`,
+      [user.id],
+    );
+
+    // Type breakdown (this month)
+    const typeResult = await pool.query(
+      `SELECT rj.type, COUNT(*)::int AS count
+       FROM render_jobs rj
+       JOIN user_api_keys uak ON uak.api_key_id = rj.api_key_id
+       WHERE uak.user_id = $1
+         AND rj.created_at >= date_trunc('month', CURRENT_DATE)
+       GROUP BY rj.type
+       ORDER BY count DESC`,
+      [user.id],
+    );
+
+    // Top 10 URLs
+    const topUrlsResult = await pool.query(
+      `SELECT rj.url, COUNT(*)::int AS count,
+              COALESCE(AVG(rj.duration_ms)::int, 0) AS avg_duration_ms
+       FROM render_jobs rj
+       JOIN user_api_keys uak ON uak.api_key_id = rj.api_key_id
+       WHERE uak.user_id = $1
+         AND rj.created_at >= date_trunc('month', CURRENT_DATE)
+       GROUP BY rj.url
+       ORDER BY count DESC
+       LIMIT 10`,
+      [user.id],
+    );
+
+    // Summary
+    const summaryResult = await pool.query(
+      `SELECT COUNT(*)::int AS total,
+              COALESCE(AVG(rj.duration_ms)::int, 0) AS avg_duration_ms
+       FROM render_jobs rj
+       JOIN user_api_keys uak ON uak.api_key_id = rj.api_key_id
+       WHERE uak.user_id = $1
+         AND rj.created_at >= date_trunc('month', CURRENT_DATE)`,
+      [user.id],
+    );
+
+    const totalMonth = summaryResult.rows[0]?.total ?? 0;
+    const avgDuration = summaryResult.rows[0]?.avg_duration_ms ?? 0;
+    const totalQuota = keys.reduce((sum, k) => sum + k.monthlyQuota, 0);
+    const quotaPct = totalQuota > 0 ? Math.round((totalMonth / totalQuota) * 10000) / 100 : 0;
+
+    const dailyData = JSON.stringify(dailyResult.rows.map((r: { date: string; count: number; avg_duration_ms: number }) => ({
+      date: r.date,
+      count: r.count,
+      avgDurationMs: r.avg_duration_ms,
+    })));
+
+    const typeData = JSON.stringify(typeResult.rows.map((r: { type: string; count: number }) => ({
+      type: r.type,
+      count: r.count,
+    })));
+
+    const topUrlRows = topUrlsResult.rows.map((r: { url: string; count: number; avg_duration_ms: number }) =>
+      `<tr>
+        <td style="max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(r.url)}</td>
+        <td>${r.count}</td>
+        <td>${r.avg_duration_ms}ms</td>
+      </tr>`
+    ).join('');
+
+    const typeColors: Record<string, string> = {
+      screenshot: '#6c63ff',
+      pdf: '#00d4aa',
+      og: '#ffaa33',
+    };
+
+    const html = `
+      <h1>Analytics</h1>
+      <div class="stats">
+        <div class="stat"><div class="label">Renders This Month</div><div class="value">${totalMonth.toLocaleString()}</div></div>
+        <div class="stat"><div class="label">Avg Duration</div><div class="value">${avgDuration}ms</div></div>
+        <div class="stat"><div class="label">Quota Usage</div><div class="value">${quotaPct}%</div></div>
+      </div>
+      <div class="card">
+        <h2 style="margin-bottom:16px">Daily Renders (Last 30 Days)</h2>
+        <canvas id="dailyChart" height="220"></canvas>
+      </div>
+      <div class="card">
+        <h2 style="margin-bottom:16px">Render Type Breakdown</h2>
+        <canvas id="typeChart" height="180"></canvas>
+      </div>
+      <div class="card">
+        <h2 style="margin-bottom:16px">Top Rendered URLs</h2>
+        ${topUrlsResult.rows.length > 0
+          ? `<table><thead><tr><th>URL</th><th>Count</th><th>Avg Duration</th></tr></thead><tbody>${topUrlRows}</tbody></table>`
+          : '<p style="color:var(--muted)">No renders yet this month.</p>'}
+      </div>
+      <script>
+        const dailyData = ${dailyData};
+        const typeData = ${typeData};
+        const typeColors = ${JSON.stringify(typeColors)};
+
+        function drawLineChart(canvasId, data) {
+          const canvas = document.getElementById(canvasId);
+          if (!canvas || !data.length) return;
+          const ctx = canvas.getContext('2d');
+          const W = canvas.width = canvas.offsetWidth;
+          const H = canvas.height;
+          const pad = { top: 20, right: 20, bottom: 40, left: 50 };
+          const cW = W - pad.left - pad.right;
+          const cH = H - pad.top - pad.bottom;
+          const max = Math.max(...data.map(d => d.count), 1);
+
+          ctx.fillStyle = '#12121a';
+          ctx.fillRect(0, 0, W, H);
+
+          // Grid lines
+          ctx.strokeStyle = '#1e1e2e';
+          ctx.lineWidth = 1;
+          for (let i = 0; i <= 4; i++) {
+            const y = pad.top + (cH / 4) * i;
+            ctx.beginPath();
+            ctx.moveTo(pad.left, y);
+            ctx.lineTo(W - pad.right, y);
+            ctx.stroke();
+            ctx.fillStyle = '#8888a0';
+            ctx.font = '11px sans-serif';
+            ctx.textAlign = 'right';
+            ctx.fillText(String(Math.round(max * (4 - i) / 4)), pad.left - 8, y + 4);
+          }
+
+          // Line
+          ctx.strokeStyle = '#6c63ff';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          data.forEach((d, i) => {
+            const x = pad.left + (i / Math.max(data.length - 1, 1)) * cW;
+            const y = pad.top + cH - (d.count / max) * cH;
+            i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+          });
+          ctx.stroke();
+
+          // Fill area under line
+          const lastX = pad.left + ((data.length - 1) / Math.max(data.length - 1, 1)) * cW;
+          ctx.lineTo(lastX, pad.top + cH);
+          ctx.lineTo(pad.left, pad.top + cH);
+          ctx.closePath();
+          ctx.fillStyle = 'rgba(108, 99, 255, 0.1)';
+          ctx.fill();
+
+          // X-axis labels (show every 5th)
+          ctx.fillStyle = '#8888a0';
+          ctx.font = '10px sans-serif';
+          ctx.textAlign = 'center';
+          data.forEach((d, i) => {
+            if (i % 5 === 0 || i === data.length - 1) {
+              const x = pad.left + (i / Math.max(data.length - 1, 1)) * cW;
+              const label = new Date(d.date).toLocaleDateString('en', { month: 'short', day: 'numeric' });
+              ctx.fillText(label, x, H - 10);
+            }
+          });
+        }
+
+        function drawStackedBar(canvasId, data) {
+          const canvas = document.getElementById(canvasId);
+          if (!canvas || !data.length) return;
+          const ctx = canvas.getContext('2d');
+          const W = canvas.width = canvas.offsetWidth;
+          const H = canvas.height;
+          const pad = { top: 20, right: 20, bottom: 40, left: 50 };
+          const cW = W - pad.left - pad.right;
+          const cH = H - pad.top - pad.bottom;
+          const total = data.reduce((s, d) => s + d.count, 0);
+          const max = Math.max(...data.map(d => d.count), 1);
+
+          ctx.fillStyle = '#12121a';
+          ctx.fillRect(0, 0, W, H);
+
+          const barW = Math.min(80, cW / data.length - 20);
+          const gap = (cW - barW * data.length) / (data.length + 1);
+
+          data.forEach((d, i) => {
+            const x = pad.left + gap + i * (barW + gap);
+            const h = (d.count / max) * cH;
+            ctx.fillStyle = typeColors[d.type] || '#6c63ff';
+            ctx.fillRect(x, pad.top + cH - h, barW, h);
+
+            // Label
+            ctx.fillStyle = '#e0e0e8';
+            ctx.font = '12px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(d.type, x + barW / 2, H - 18);
+            ctx.fillText(String(d.count), x + barW / 2, pad.top + cH - h - 6);
+          });
+        }
+
+        drawLineChart('dailyChart', dailyData);
+        drawStackedBar('typeChart', typeData);
+      </script>`;
+
+    await req.session.save();
+    return reply.type('text/html').send(dashboardLayout('Analytics', 'analytics', html, csrfToken));
   });
 }
