@@ -160,9 +160,9 @@ describe('extract routes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
       expect(body.data).toEqual({ title: 'Example', prices: [9.99, 19.99] });
-      expect(body.model_used).toBe('claude-sonnet-4-5-20250929');
-      expect(body.tokens_used).toBe(1500);
-      expect(body.extraction_id).toBeTruthy();
+      expect(body.modelUsed).toBe('claude-sonnet-4-5-20250929');
+      expect(body.tokensUsed).toBe(1500);
+      expect(body.extractionId).toBeTruthy();
 
       expect(mockExtract).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -190,7 +190,7 @@ describe('extract routes', () => {
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
-      expect(body.model_used).toBe('claude-haiku-4-5-20251001');
+      expect(body.modelUsed).toBe('claude-haiku-4-5-20251001');
       expect(mockExtract).toHaveBeenCalledWith(expect.objectContaining({ model: 'haiku' }));
     });
 
@@ -455,7 +455,7 @@ describe('extract routes', () => {
         headers: { 'x-api-key': rawApiKey },
         payload: { url: 'https://example.com', prompt: 'Extract title' },
       });
-      const extractionId = JSON.parse(createRes.body).extraction_id;
+      const extractionId = JSON.parse(createRes.body).extractionId;
 
       const response = await app.inject({
         method: 'GET',
@@ -493,7 +493,7 @@ describe('extract routes', () => {
         headers: { 'x-api-key': rawApiKey },
         payload: { url: 'https://example.com', prompt: 'Extract secrets' },
       });
-      const extractionId = JSON.parse(createRes.body).extraction_id;
+      const extractionId = JSON.parse(createRes.body).extractionId;
 
       const response = await app.inject({
         method: 'GET',

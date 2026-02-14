@@ -67,6 +67,19 @@ export async function extractRoutes(app: FastifyInstance) {
             },
           },
         },
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              extractionId: { type: 'string', format: 'uuid' },
+              data: { type: 'object', additionalProperties: true, description: 'Extracted structured data' },
+              modelUsed: { type: 'string', description: 'Full model ID used for extraction' },
+              tokensUsed: { type: 'integer', description: 'Total tokens consumed' },
+              screenshotPath: { type: 'string', description: 'Storage path of the screenshot used' },
+              durationMs: { type: 'integer', description: 'Total processing time in milliseconds' },
+            },
+          },
+        },
       },
       preHandler: [authMiddleware],
     },
@@ -229,12 +242,12 @@ export async function extractRoutes(app: FastifyInstance) {
         await incrementUsage(apiKeyId);
 
         return reply.send({
-          extraction_id: extractionId,
+          extractionId,
           data: extractionResult.data,
-          model_used: extractionResult.modelUsed,
-          tokens_used: extractionResult.tokensUsed,
-          screenshot_path: screenshotPath,
-          duration_ms: durationMs,
+          modelUsed: extractionResult.modelUsed,
+          tokensUsed: extractionResult.tokensUsed,
+          screenshotPath,
+          durationMs,
         });
       } catch (err) {
         const durationMs = Math.round(performance.now() - start);
@@ -271,6 +284,34 @@ export async function extractRoutes(app: FastifyInstance) {
           type: 'object',
           properties: { id: { type: 'string', format: 'uuid' } },
           required: ['id'],
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              extraction: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string', format: 'uuid' },
+                  sourceType: { type: 'string', enum: ['url', 'job_id'] },
+                  sourceUrl: { type: 'string', nullable: true },
+                  sourceJobId: { type: 'string', format: 'uuid', nullable: true },
+                  prompt: { type: 'string' },
+                  responseSchema: { type: 'object', nullable: true },
+                  model: { type: 'string' },
+                  data: { type: 'object', additionalProperties: true, nullable: true },
+                  tokensUsed: { type: 'integer', nullable: true },
+                  screenshotPath: { type: 'string', nullable: true },
+                  status: { type: 'string', enum: ['processing', 'completed', 'failed'] },
+                  error: { type: 'string', nullable: true },
+                  durationMs: { type: 'integer', nullable: true },
+                  byok: { type: 'boolean' },
+                  createdAt: { type: 'string', format: 'date-time' },
+                  completedAt: { type: 'string', format: 'date-time', nullable: true },
+                },
+              },
+            },
+          },
         },
       },
       preHandler: [authMiddleware],
@@ -314,6 +355,35 @@ export async function extractRoutes(app: FastifyInstance) {
             offset: { type: 'integer', minimum: 0, default: 0 },
           },
         },
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              extractions: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'string', format: 'uuid' },
+                    sourceType: { type: 'string' },
+                    sourceUrl: { type: 'string', nullable: true },
+                    sourceJobId: { type: 'string', nullable: true },
+                    prompt: { type: 'string' },
+                    model: { type: 'string' },
+                    data: { type: 'object', additionalProperties: true, nullable: true },
+                    tokensUsed: { type: 'integer', nullable: true },
+                    status: { type: 'string' },
+                    durationMs: { type: 'integer', nullable: true },
+                    byok: { type: 'boolean' },
+                    createdAt: { type: 'string', format: 'date-time' },
+                    completedAt: { type: 'string', format: 'date-time', nullable: true },
+                  },
+                },
+              },
+              total: { type: 'integer' },
+            },
+          },
+        },
       },
       preHandler: [authMiddleware],
     },
@@ -345,21 +415,21 @@ export async function extractRoutes(app: FastifyInstance) {
 function formatExtraction(row: Record<string, unknown>) {
   return {
     id: row.id,
-    source_type: row.source_type,
-    source_url: row.source_url,
-    source_job_id: row.source_job_id,
+    sourceType: row.source_type,
+    sourceUrl: row.source_url,
+    sourceJobId: row.source_job_id,
     prompt: row.prompt,
-    response_schema: row.response_schema,
+    responseSchema: row.response_schema,
     model: row.model,
     data: row.extracted_data,
-    tokens_used: row.tokens_used,
-    screenshot_path: row.screenshot_path,
+    tokensUsed: row.tokens_used,
+    screenshotPath: row.screenshot_path,
     status: row.status,
     error: row.error,
-    duration_ms: row.duration_ms,
+    durationMs: row.duration_ms,
     byok: row.byok,
-    created_at: row.created_at,
-    completed_at: row.completed_at,
+    createdAt: row.created_at,
+    completedAt: row.completed_at,
   };
 }
 
