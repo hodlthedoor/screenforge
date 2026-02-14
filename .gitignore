@@ -11,4 +11,5 @@ playwright-report/
 /storage/
 /storage-test/
 .DS_Store
+.venv/
 tests/load/results.json
