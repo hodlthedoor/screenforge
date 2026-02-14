@@ -219,13 +219,14 @@ export async function extractRoutes(app: FastifyInstance) {
         await pool.query(
           `UPDATE extraction_jobs
            SET status = 'completed', extracted_data = $1, tokens_used = $2,
-               screenshot_path = $3, duration_ms = $4, completed_at = NOW()
-           WHERE id = $5`,
+               screenshot_path = $3, duration_ms = $4, model_used = $5, completed_at = NOW()
+           WHERE id = $6`,
           [
             JSON.stringify(extractionResult.data),
             extractionResult.tokensUsed,
             screenshotPath,
             durationMs,
+            extractionResult.modelUsed,
             extractionId,
           ],
         );
@@ -298,7 +299,8 @@ export async function extractRoutes(app: FastifyInstance) {
                   sourceJobId: { type: 'string', format: 'uuid', nullable: true },
                   prompt: { type: 'string' },
                   responseSchema: { type: 'object', nullable: true },
-                  model: { type: 'string' },
+                  model: { type: 'string', description: 'Model alias (sonnet or haiku)' },
+                  modelUsed: { type: 'string', nullable: true, description: 'Full model ID used for extraction' },
                   data: { type: 'object', additionalProperties: true, nullable: true },
                   tokensUsed: { type: 'integer', nullable: true },
                   screenshotPath: { type: 'string', nullable: true },
@@ -370,6 +372,7 @@ export async function extractRoutes(app: FastifyInstance) {
                     sourceJobId: { type: 'string', nullable: true },
                     prompt: { type: 'string' },
                     model: { type: 'string' },
+                    modelUsed: { type: 'string', nullable: true },
                     data: { type: 'object', additionalProperties: true, nullable: true },
                     tokensUsed: { type: 'integer', nullable: true },
                     status: { type: 'string' },
@@ -421,6 +424,7 @@ function formatExtraction(row: Record<string, unknown>) {
     prompt: row.prompt,
     responseSchema: row.response_schema,
     model: row.model,
+    modelUsed: row.model_used,
     data: row.extracted_data,
     tokensUsed: row.tokens_used,
     screenshotPath: row.screenshot_path,

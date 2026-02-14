@@ -301,6 +301,7 @@ describe('extract routes', () => {
       expect(jobs.rows[0].status).toBe('completed');
       expect(jobs.rows[0].prompt).toBe('Extract data');
       expect(jobs.rows[0].model).toBe('sonnet');
+      expect(jobs.rows[0].model_used).toBe('claude-sonnet-4-5-20250929');
       expect(jobs.rows[0].tokens_used).toBe(100);
 
       const usage = await getPool().query(
@@ -467,6 +468,7 @@ describe('extract routes', () => {
       const body = JSON.parse(response.body);
       expect(body.extraction.id).toBe(extractionId);
       expect(body.extraction.data).toEqual({ title: 'Test' });
+      expect(body.extraction.modelUsed).toBe('claude-sonnet-4-5-20250929');
       expect(body.extraction.status).toBe('completed');
     });
 
