@@ -26,7 +26,7 @@ export async function asyncRenderRoutes(app: FastifyInstance) {
     const result = await getPool().query(
       `SELECT id, type, url, status, content_type, result_path, error, duration_ms,
               metadata_title, metadata_final_url, metadata_status_code, metadata_width, metadata_height,
-              created_at, completed_at
+              metadata_enhanced, created_at, completed_at
        FROM render_jobs WHERE id = $1`,
       [id],
     );
@@ -51,15 +51,20 @@ export async function asyncRenderRoutes(app: FastifyInstance) {
     }
 
     // Build metadata if available
-    const metadata = job.status === 'completed' && (job.metadata_title !== null || job.metadata_final_url !== null || job.metadata_status_code !== null)
-      ? {
-          title: job.metadata_title ?? '',
-          finalUrl: job.metadata_final_url ?? '',
-          statusCode: job.metadata_status_code ?? 0,
-          ...(job.metadata_width !== null ? { width: job.metadata_width } : {}),
-          ...(job.metadata_height !== null ? { height: job.metadata_height } : {}),
-        }
-      : undefined;
+    // If enhanced metadata is present, use that (includes all fields)
+    // Otherwise, fall back to basic metadata from individual columns
+    let metadata;
+    if (job.status === 'completed' && job.metadata_enhanced) {
+      metadata = job.metadata_enhanced;
+    } else if (job.status === 'completed' && (job.metadata_title !== null || job.metadata_final_url !== null || job.metadata_status_code !== null)) {
+      metadata = {
+        title: job.metadata_title ?? '',
+        finalUrl: job.metadata_final_url ?? '',
+        statusCode: job.metadata_status_code ?? 0,
+        ...(job.metadata_width !== null ? { width: job.metadata_width } : {}),
+        ...(job.metadata_height !== null ? { height: job.metadata_height } : {}),
+      };
+    }
 
     return reply.send({
       id: job.id,

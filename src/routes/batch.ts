@@ -187,7 +187,10 @@ export async function batchRoutes(app: FastifyInstance) {
     const batch = batchResult.rows[0];
 
     const jobsResult = await getPool().query(
-      `SELECT id, type, url, status, error, duration_ms FROM render_jobs WHERE batch_id = $1 ORDER BY created_at`,
+      `SELECT id, type, url, status, error, duration_ms, content_type, result_path,
+              metadata_title, metadata_final_url, metadata_status_code, metadata_width, metadata_height,
+              metadata_enhanced
+       FROM render_jobs WHERE batch_id = $1 ORDER BY created_at`,
       [id],
     );
 
@@ -206,15 +209,41 @@ export async function batchRoutes(app: FastifyInstance) {
         status: string;
         error: string | null;
         duration_ms: number | null;
-      }) => ({
-        id: j.id,
-        type: j.type,
-        url: j.url,
-        status: j.status,
-        error: j.error ?? undefined,
-        durationMs: j.duration_ms ?? undefined,
-        pollUrl: `${config.BASE_URL}/v1/render/${j.id}`,
-      })),
+        content_type: string | null;
+        result_path: string | null;
+        metadata_title: string | null;
+        metadata_final_url: string | null;
+        metadata_status_code: number | null;
+        metadata_width: number | null;
+        metadata_height: number | null;
+        metadata_enhanced: unknown;
+      }) => {
+        // Build metadata if available (prefer enhanced, fall back to basic)
+        let metadata;
+        if (j.status === 'completed' && j.metadata_enhanced) {
+          metadata = j.metadata_enhanced;
+        } else if (j.status === 'completed' && (j.metadata_title !== null || j.metadata_final_url !== null || j.metadata_status_code !== null)) {
+          metadata = {
+            title: j.metadata_title ?? '',
+            finalUrl: j.metadata_final_url ?? '',
+            statusCode: j.metadata_status_code ?? 0,
+            ...(j.metadata_width !== null ? { width: j.metadata_width } : {}),
+            ...(j.metadata_height !== null ? { height: j.metadata_height } : {}),
+          };
+        }
+
+        return {
+          id: j.id,
+          type: j.type,
+          url: j.url,
+          status: j.status,
+          error: j.error ?? undefined,
+          contentType: j.content_type ?? undefined,
+          durationMs: j.duration_ms ?? undefined,
+          metadata,
+          pollUrl: `${config.BASE_URL}/v1/render/${j.id}`,
+        };
+      }),
     });
   });
 }

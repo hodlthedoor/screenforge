@@ -328,6 +328,11 @@ export async function renderRoutes(
             maxLength: 500,
             description: 'Text that MUST be present on the page. If missing, render fails with 422 status. Case-sensitive plain text search (not regex). Useful for ensuring page loaded successfully.',
           },
+          extract_metadata: {
+            type: 'boolean',
+            default: false,
+            description: 'Extract enhanced metadata (Open Graph tags, Twitter Cards, favicon, canonical URL, language/locale) from the page. Only populated when metadata=true query parameter is also used.',
+          },
         },
       },
     },
@@ -642,6 +647,11 @@ export async function renderRoutes(
             type: 'string',
             maxLength: 500,
             description: 'Text that MUST be present on the page. If missing, render fails with 422 status. Case-sensitive plain text search (not regex). Useful for ensuring page loaded successfully.',
+          },
+          extract_metadata: {
+            type: 'boolean',
+            default: false,
+            description: 'Extract enhanced metadata (Open Graph tags, Twitter Cards, favicon, canonical URL, language/locale) from the page. Only populated when metadata=true query parameter is also used.',
           },
         },
       },

@@ -151,6 +151,7 @@ const screenshotBaseOptionsSchema = z.object({
   actions: z.array(actionSchema).max(10).optional(),
   fail_if_contains: z.string().max(500).optional(),
   fail_if_missing: z.string().max(500).optional(),
+  extract_metadata: z.boolean().default(false),
 });
 
 export const screenshotOptionsSchema = z.object({
@@ -223,6 +224,7 @@ const pdfBaseOptionsSchema = z.object({
   actions: z.array(actionSchema).max(10).optional(),
   fail_if_contains: z.string().max(500).optional(),
   fail_if_missing: z.string().max(500).optional(),
+  extract_metadata: z.boolean().default(false),
 });
 
 export const pdfOptionsSchema = z.object({
@@ -271,6 +273,26 @@ export interface RenderMetadata {
   statusCode: number;
   width?: number;
   height?: number;
+  // Enhanced metadata fields (only populated when extract_metadata: true)
+  description?: string;
+  canonical?: string | null;
+  language?: string | null;
+  locale?: string | null;
+  favicon?: string | null;
+  og?: {
+    title?: string;
+    description?: string;
+    image?: string;
+    type?: string;
+    url?: string;
+  };
+  twitter?: {
+    card?: string;
+    title?: string;
+    description?: string;
+    image?: string;
+    site?: string;
+  };
 }
 
 export interface RenderResult {

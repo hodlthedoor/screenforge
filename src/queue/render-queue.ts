@@ -27,6 +27,26 @@ export interface RenderJobResult {
     statusCode: number;
     width?: number;
     height?: number;
+    // Enhanced metadata fields (only populated when extract_metadata: true)
+    description?: string;
+    canonical?: string | null;
+    language?: string | null;
+    locale?: string | null;
+    favicon?: string | null;
+    og?: {
+      title?: string;
+      description?: string;
+      image?: string;
+      type?: string;
+      url?: string;
+    };
+    twitter?: {
+      card?: string;
+      title?: string;
+      description?: string;
+      image?: string;
+      site?: string;
+    };
   };
 }
 
@@ -59,10 +79,16 @@ export function createWorker(
     const result = job.returnvalue;
     const pool = getPool();
 
+    // Store enhanced metadata as JSON if present
+    const hasEnhancedMetadata = result.metadata && (
+      result.metadata.description || result.metadata.og || result.metadata.twitter ||
+      result.metadata.canonical || result.metadata.language || result.metadata.locale || result.metadata.favicon
+    );
+
     await pool.query(
       `UPDATE render_jobs SET status = 'completed', result_path = $1, content_type = $2,
        duration_ms = $3, metadata_title = $4, metadata_final_url = $5, metadata_status_code = $6,
-       metadata_width = $7, metadata_height = $8, completed_at = NOW() WHERE id = $9`,
+       metadata_width = $7, metadata_height = $8, metadata_enhanced = $9, completed_at = NOW() WHERE id = $10`,
       [
         result.resultPath,
         result.contentType,
@@ -72,6 +98,7 @@ export function createWorker(
         result.metadata?.statusCode ?? null,
         result.metadata?.width ?? null,
         result.metadata?.height ?? null,
+        hasEnhancedMetadata ? JSON.stringify(result.metadata) : null,
         job.data.jobId,
       ],
     );

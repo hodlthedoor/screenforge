@@ -6,6 +6,7 @@ import { executeActions } from './actions.js';
 import { validateContent } from './content-validation.js';
 import { toPlaywrightCookies } from '../security/sanitize.js';
 import { getConfig } from '../config/index.js';
+import { extractMetadataFromPage } from './metadata.js';
 
 const FORMAT_SIZE: Record<string, { width: string; height: string }> = {
   a4: { width: '210mm', height: '297mm' },
@@ -100,15 +101,32 @@ export async function renderPdf(pool: BrowserPool, options: PdfOptions, timeoutM
     const finalUrl = options.url ? (response?.url() ?? options.url) : '';
     const statusCode = response?.status() ?? 0;
 
+    let metadata: RenderResult['metadata'] = {
+      title,
+      finalUrl,
+      statusCode,
+    };
+
+    // Extract enhanced metadata if requested
+    if (options.extract_metadata) {
+      const enhanced = await extractMetadataFromPage(page);
+      metadata = {
+        ...metadata,
+        description: enhanced.description,
+        canonical: enhanced.canonical,
+        language: enhanced.language,
+        locale: enhanced.locale,
+        favicon: enhanced.favicon,
+        og: enhanced.og,
+        twitter: enhanced.twitter,
+      };
+    }
+
     return {
       buffer,
       contentType: 'application/pdf',
       durationMs,
-      metadata: {
-        title,
-        finalUrl,
-        statusCode,
-      },
+      metadata,
     };
   } finally {
     await context.close();

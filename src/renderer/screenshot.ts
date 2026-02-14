@@ -8,6 +8,7 @@ import { toPlaywrightCookies } from '../security/sanitize.js';
 import { imageSize } from 'image-size';
 import { getConfig } from '../config/index.js';
 import sharp from 'sharp';
+import { extractMetadataFromPage } from './metadata.js';
 
 const FORMAT_CONTENT_TYPE: Record<string, string> = {
   png: 'image/png',
@@ -112,17 +113,34 @@ export async function takeScreenshot(pool: BrowserPool, options: ScreenshotOptio
     const finalUrl = options.url ? (response?.url() ?? options.url) : '';
     const statusCode = response?.status() ?? 0;
 
+    let metadata: RenderResult['metadata'] = {
+      title,
+      finalUrl,
+      statusCode,
+      width: dimensions.width ?? 0,
+      height: dimensions.height ?? 0,
+    };
+
+    // Extract enhanced metadata if requested
+    if (options.extract_metadata) {
+      const enhanced = await extractMetadataFromPage(page);
+      metadata = {
+        ...metadata,
+        description: enhanced.description,
+        canonical: enhanced.canonical,
+        language: enhanced.language,
+        locale: enhanced.locale,
+        favicon: enhanced.favicon,
+        og: enhanced.og,
+        twitter: enhanced.twitter,
+      };
+    }
+
     return {
       buffer,
       contentType: FORMAT_CONTENT_TYPE[options.format],
       durationMs,
-      metadata: {
-        title,
-        finalUrl,
-        statusCode,
-        width: dimensions.width ?? 0,
-        height: dimensions.height ?? 0,
-      },
+      metadata,
     };
   } finally {
     await context.close();
