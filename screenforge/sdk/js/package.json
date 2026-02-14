@@ -15,7 +15,28 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hodlthedoor/atlas-project.git",
+    "directory": "sdk/js"
+  },
+  "homepage": "https://github.com/hodlthedoor/atlas-project/tree/main/sdk/js#readme",
+  "bugs": {
+    "url": "https://github.com/hodlthedoor/atlas-project/issues"
+  },
+  "keywords": [
+    "screenshot",
+    "api",
+    "pdf",
+    "og-image",
+    "puppeteer",
+    "playwright",
+    "render",
+    "screenforge"
   ],
   "engines": {
     "node": ">=18"
@@ -26,6 +47,10 @@
     "test:watch": "vitest --config vitest.config.ts",
     "typecheck": "tsc --noEmit"
   },
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": false,
   "devDependencies": {
     "@types/node": "^24.3.0",
     "tsup": "^8.5.0",
