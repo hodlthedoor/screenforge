@@ -958,10 +958,10 @@ schedule = resp.json()["schedule"]</code></pre></div>
 <table class="param-table">
   <thead><tr><th>Plan</th><th>Min Interval</th><th>Max Schedules</th></tr></thead>
   <tbody>
-    <tr><td>Free</td><td>24 hours</td><td>2</td></tr>
+    <tr><td>Free</td><td>24 hours</td><td>3</td></tr>
     <tr><td>Starter</td><td>1 hour</td><td>10</td></tr>
     <tr><td>Pro</td><td>15 minutes</td><td>50</td></tr>
-    <tr><td>Business</td><td>5 minutes</td><td>200</td></tr>
+    <tr><td>Business</td><td>5 minutes</td><td>999</td></tr>
   </tbody>
 </table>
 </div>

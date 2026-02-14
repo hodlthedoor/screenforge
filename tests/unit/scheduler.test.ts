@@ -7,10 +7,10 @@ import { loadConfig } from '../../src/config/index.js';
 
 describe('cron validation', () => {
   it('accepts valid cron expressions', () => {
-    expect(validateCronExpression('0 * * * *').valid).toBe(true);
-    expect(validateCronExpression('*/15 * * * *').valid).toBe(true);
+    expect(validateCronExpression('0 0 * * *').valid).toBe(true);
     expect(validateCronExpression('0 0 * * 1').valid).toBe(true);
     expect(validateCronExpression('0 12 * * *').valid).toBe(true);
+    expect(validateCronExpression('0 */6 * * *', 'pro').valid).toBe(true);
   });
 
   it('rejects invalid cron expressions', () => {
@@ -19,19 +19,52 @@ describe('cron validation', () => {
     expect(validateCronExpression('60 * * * *').valid).toBe(false);
   });
 
-  it('rejects intervals < 5 minutes on free tier', () => {
-    const result = validateCronExpression('* * * * *', 'free');
+  it('rejects intervals < 24 hours on free tier', () => {
+    const result = validateCronExpression('0 * * * *', 'free');
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain('24 hours');
+  });
+
+  it('allows daily schedules on free tier', () => {
+    const result = validateCronExpression('0 0 * * *', 'free');
+    expect(result.valid).toBe(true);
+  });
+
+  it('rejects intervals < 1 hour on starter tier', () => {
+    const result = validateCronExpression('*/30 * * * *', 'starter');
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain('1 hour');
+  });
+
+  it('allows hourly schedules on starter tier', () => {
+    const result = validateCronExpression('0 * * * *', 'starter');
+    expect(result.valid).toBe(true);
+  });
+
+  it('rejects intervals < 15 minutes on pro tier', () => {
+    const result = validateCronExpression('*/10 * * * *', 'pro');
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain('15 minutes');
+  });
+
+  it('allows 15-minute schedules on pro tier', () => {
+    const result = validateCronExpression('*/15 * * * *', 'pro');
+    expect(result.valid).toBe(true);
+  });
+
+  it('rejects intervals < 5 minutes on business tier', () => {
+    const result = validateCronExpression('*/2 * * * *', 'business');
     expect(result.valid).toBe(false);
     expect(result.error).toContain('5 minutes');
   });
 
-  it('allows intervals < 5 minutes on pro tier', () => {
-    const result = validateCronExpression('*/2 * * * *', 'pro');
+  it('allows 5-minute schedules on business tier', () => {
+    const result = validateCronExpression('*/5 * * * *', 'business');
     expect(result.valid).toBe(true);
   });
 
   it('returns nextRun for valid expressions', () => {
-    const result = validateCronExpression('0 * * * *');
+    const result = validateCronExpression('0 0 * * *');
     expect(result.valid).toBe(true);
     expect(result.nextRun).toBeInstanceOf(Date);
     expect(result.nextRun!.getTime()).toBeGreaterThan(Date.now());

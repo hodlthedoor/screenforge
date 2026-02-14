@@ -1,6 +1,12 @@
 import { CronExpressionParser } from 'cron-parser';
 
-const MIN_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+/** Minimum interval between runs per tier (in milliseconds) */
+const TIER_MIN_INTERVALS: Record<string, { ms: number; label: string }> = {
+  free: { ms: 24 * 60 * 60 * 1000, label: '24 hours' },
+  starter: { ms: 60 * 60 * 1000, label: '1 hour' },
+  pro: { ms: 15 * 60 * 1000, label: '15 minutes' },
+  business: { ms: 5 * 60 * 1000, label: '5 minutes' },
+};
 
 export interface CronValidation {
   valid: boolean;
@@ -13,14 +19,15 @@ export function validateCronExpression(expression: string, tier: string = 'free'
     const interval = CronExpressionParser.parse(expression);
     const next = interval.next().toDate();
 
-    // Check minimum interval for free tier
-    if (tier === 'free') {
+    // Check minimum interval for the tier
+    const tierLimit = TIER_MIN_INTERVALS[tier];
+    if (tierLimit) {
       const afterNext = interval.next().toDate();
       const gapMs = afterNext.getTime() - next.getTime();
-      if (gapMs < MIN_INTERVAL_MS) {
+      if (gapMs < tierLimit.ms) {
         return {
           valid: false,
-          error: 'Free tier schedules must have at least 5 minutes between runs',
+          error: `${tier.charAt(0).toUpperCase() + tier.slice(1)} tier schedules must have at least ${tierLimit.label} between runs`,
         };
       }
     }

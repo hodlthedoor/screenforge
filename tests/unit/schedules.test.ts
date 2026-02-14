@@ -50,8 +50,8 @@ describe('schedule routes', () => {
         url: '/v1/schedules',
         headers: { 'x-api-key': rawApiKey },
         payload: {
-          name: 'Hourly homepage',
-          cron_expression: '0 * * * *',
+          name: 'Daily homepage',
+          cron_expression: '0 0 * * *',
           render_type: 'screenshot',
           render_config: { url: 'https://example.com', format: 'png' },
         },
@@ -60,8 +60,8 @@ describe('schedule routes', () => {
       expect(response.statusCode).toBe(201);
       const body = JSON.parse(response.body);
       expect(body.schedule).toBeDefined();
-      expect(body.schedule.name).toBe('Hourly homepage');
-      expect(body.schedule.cronExpression).toBe('0 * * * *');
+      expect(body.schedule.name).toBe('Daily homepage');
+      expect(body.schedule.cronExpression).toBe('0 0 * * *');
       expect(body.schedule.renderType).toBe('screenshot');
       expect(body.schedule.enabled).toBe(true);
       expect(body.schedule.nextRunAt).toBeTruthy();
@@ -86,14 +86,14 @@ describe('schedule routes', () => {
       expect(body.error).toContain('Invalid cron expression');
     });
 
-    it('rejects intervals < 5 minutes on free tier', async () => {
+    it('rejects intervals < 24 hours on free tier', async () => {
       const response = await app.inject({
         method: 'POST',
         url: '/v1/schedules',
         headers: { 'x-api-key': rawApiKey },
         payload: {
-          name: 'Every minute',
-          cron_expression: '* * * * *',
+          name: 'Every hour',
+          cron_expression: '0 * * * *',
           render_type: 'screenshot',
           render_config: { url: 'https://example.com' },
         },
@@ -101,7 +101,7 @@ describe('schedule routes', () => {
 
       expect(response.statusCode).toBe(400);
       const body = JSON.parse(response.body);
-      expect(body.error).toContain('5 minutes');
+      expect(body.error).toContain('24 hours');
     });
 
     it('enforces tier schedule limit', async () => {
@@ -113,7 +113,7 @@ describe('schedule routes', () => {
           headers: { 'x-api-key': rawApiKey },
           payload: {
             name: `Schedule ${i}`,
-            cron_expression: '0 * * * *',
+            cron_expression: '0 0 * * *',
             render_type: 'screenshot',
             render_config: { url: 'https://example.com' },
           },
@@ -127,7 +127,7 @@ describe('schedule routes', () => {
         headers: { 'x-api-key': rawApiKey },
         payload: {
           name: 'Schedule 4',
-          cron_expression: '0 * * * *',
+          cron_expression: '0 0 * * *',
           render_type: 'screenshot',
           render_config: { url: 'https://example.com' },
         },
@@ -145,7 +145,7 @@ describe('schedule routes', () => {
         headers: { 'x-api-key': rawApiKey },
         payload: {
           name: 'Bad type',
-          cron_expression: '0 * * * *',
+          cron_expression: '0 0 * * *',
           render_type: 'video',
           render_config: { url: 'https://example.com' },
         },
@@ -160,7 +160,7 @@ describe('schedule routes', () => {
         url: '/v1/schedules',
         payload: {
           name: 'No auth',
-          cron_expression: '0 * * * *',
+          cron_expression: '0 0 * * *',
           render_type: 'screenshot',
           render_config: { url: 'https://example.com' },
         },
@@ -176,7 +176,7 @@ describe('schedule routes', () => {
         headers: { 'x-api-key': rawApiKey },
         payload: {
           name: 'Disabled schedule',
-          cron_expression: '0 * * * *',
+          cron_expression: '0 0 * * *',
           render_type: 'pdf',
           render_config: { url: 'https://example.com' },
           enabled: false,
@@ -199,7 +199,7 @@ describe('schedule routes', () => {
         headers: { 'x-api-key': rawApiKey },
         payload: {
           name: 'First',
-          cron_expression: '0 * * * *',
+          cron_expression: '0 0 * * *',
           render_type: 'screenshot',
           render_config: { url: 'https://example.com' },
         },
@@ -250,7 +250,7 @@ describe('schedule routes', () => {
         headers: { 'x-api-key': rawApiKey },
         payload: {
           name: 'Detail test',
-          cron_expression: '0 * * * *',
+          cron_expression: '0 0 * * *',
           render_type: 'screenshot',
           render_config: { url: 'https://example.com' },
         },
@@ -296,7 +296,7 @@ describe('schedule routes', () => {
         headers: { 'x-api-key': rawApiKey },
         payload: {
           name: 'Original',
-          cron_expression: '0 * * * *',
+          cron_expression: '0 0 * * *',
           render_type: 'screenshot',
           render_config: { url: 'https://example.com' },
         },
@@ -326,7 +326,7 @@ describe('schedule routes', () => {
         headers: { 'x-api-key': rawApiKey },
         payload: {
           name: 'To disable',
-          cron_expression: '0 * * * *',
+          cron_expression: '0 0 * * *',
           render_type: 'screenshot',
           render_config: { url: 'https://example.com' },
         },
@@ -353,7 +353,7 @@ describe('schedule routes', () => {
         headers: { 'x-api-key': rawApiKey },
         payload: {
           name: 'To update bad',
-          cron_expression: '0 * * * *',
+          cron_expression: '0 0 * * *',
           render_type: 'screenshot',
           render_config: { url: 'https://example.com' },
         },
@@ -379,7 +379,7 @@ describe('schedule routes', () => {
         headers: { 'x-api-key': rawApiKey },
         payload: {
           name: 'To delete',
-          cron_expression: '0 * * * *',
+          cron_expression: '0 0 * * *',
           render_type: 'screenshot',
           render_config: { url: 'https://example.com' },
         },
