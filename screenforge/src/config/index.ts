@@ -32,6 +32,7 @@ const envSchema = z.object({
   SMTP_USER: z.string().optional(),
   SMTP_PASS: z.string().optional(),
   SMTP_FROM: z.string().optional(),
+  GRACEFUL_SHUTDOWN_TIMEOUT_MS: z.coerce.number().int().min(1000).default(30_000),
 });
 
 export type Config = z.infer<typeof envSchema>;

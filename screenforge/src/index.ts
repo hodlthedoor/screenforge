@@ -46,6 +46,11 @@ import { initMetrics, getMetrics, incrementApiRequestCounter, observeApiRequestD
 export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
   const config = loadConfig();
 
+  // Shutdown state (scoped per server instance)
+  let shuttingDown = false;
+  let shutdownPromise: Promise<void> | null = null;
+  let inflightRenders = 0;
+
   const app = Fastify({
     trustProxy: config.NODE_ENV === 'production',
     logger: config.NODE_ENV === 'test'
@@ -158,7 +163,15 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
       summary: 'Detailed health check',
       description: 'Returns detailed health status including browser pool and queue metrics.',
     },
-  }, async () => {
+  }, async (req, reply) => {
+    if (shuttingDown) {
+      reply.status(503);
+      return {
+        status: 'shutting_down',
+        timestamp: new Date().toISOString(),
+      };
+    }
+
     let queueMetrics = { waiting: 0, active: 0, completed: 0, failed: 0 };
     try {
       queueMetrics = await getQueueMetrics(config.REDIS_URL);
@@ -182,7 +195,13 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
       summary: 'Basic health check',
       description: 'Returns basic health status.',
     },
-  }, async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
+  }, async (req, reply) => {
+    if (shuttingDown) {
+      reply.status(503);
+      return { status: 'shutting_down', timestamp: new Date().toISOString() };
+    }
+    return { status: 'ok', timestamp: new Date().toISOString() };
+  });
 
   // Prometheus metrics endpoint
   if (config.METRICS_ENABLED) {
@@ -261,9 +280,97 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
     await closePool();
   });
 
+  // Graceful shutdown function
+  const gracefulShutdown = async (): Promise<void> => {
+    // Idempotency: if shutdown already in progress, return the existing promise
+    if (shutdownPromise) {
+      return shutdownPromise;
+    }
+
+    shutdownPromise = (async () => {
+      shuttingDown = true;
+      const logger = app.log.child({ module: 'shutdown' });
+      logger.info('Graceful shutdown initiated');
+
+      // Stop accepting new connections (only if server is listening)
+      if (app.server && app.server.listening) {
+        try {
+          await new Promise<void>((resolve, reject) => {
+            app.server.close((err) => {
+              if (err) reject(err);
+              else resolve();
+            });
+          });
+          logger.info('Server stopped accepting new connections');
+        } catch (err) {
+          logger.error({ err }, 'Error closing server');
+        }
+      }
+
+      // Wait for in-flight renders with timeout
+      const shutdownTimeout = config.GRACEFUL_SHUTDOWN_TIMEOUT_MS;
+      const startWait = Date.now();
+      while (inflightRenders > 0 && Date.now() - startWait < shutdownTimeout) {
+        logger.info({ inflightRenders }, 'Waiting for in-flight renders to complete');
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+
+      if (inflightRenders > 0) {
+        logger.warn({ inflightRenders }, 'Shutdown timeout reached with renders still in flight');
+      } else {
+        logger.info('All in-flight renders completed');
+      }
+
+      // Close resources (wrap each in try-catch so one failure doesn't block others)
+      const closeResources = [
+        { name: 'storage lifecycle', fn: () => storageLifecycle.stop() },
+        { name: 'browser pool', fn: () => pool.close() },
+        { name: 'render cache', fn: () => cache.close() },
+        { name: 'rate limiter', fn: () => rateLimiter.close() },
+        { name: 'render queue', fn: () => closeQueue() },
+        { name: 'webhook queue', fn: () => closeWebhookQueue() },
+        { name: 'usage monitor', fn: () => closeUsageMonitor() },
+        { name: 'database pool', fn: () => closePool() },
+      ];
+
+      for (const resource of closeResources) {
+        try {
+          await resource.fn();
+          logger.info(`Closed ${resource.name}`);
+        } catch (err) {
+          logger.error({ err, resource: resource.name }, `Error closing ${resource.name}`);
+        }
+      }
+
+      logger.info('Graceful shutdown complete');
+    })();
+
+    return shutdownPromise;
+  };
+
+  // Helper functions for tracking in-flight renders
+  const incrementInflightRenders = () => {
+    inflightRenders++;
+  };
+
+  const decrementInflightRenders = () => {
+    inflightRenders--;
+  };
+
+  // Reset shutdown state (for testing)
+  const resetShutdownState = () => {
+    shuttingDown = false;
+    shutdownPromise = null;
+    inflightRenders = 0;
+  };
+
   app.decorate('browserPool', pool);
   app.decorate('renderCache', cache);
   app.decorate('storageLifecycle', storageLifecycle);
+  app.decorate('gracefulShutdown', gracefulShutdown);
+  app.decorate('incrementInflightRenders', incrementInflightRenders);
+  app.decorate('decrementInflightRenders', decrementInflightRenders);
+  app.decorate('resetShutdownState', resetShutdownState);
 
   return app;
 }
@@ -349,6 +456,20 @@ export async function start() {
     app.log.error(err);
     process.exit(1);
   }
+
+  // Register graceful shutdown handlers
+  const gracefulShutdown = (app as any).gracefulShutdown;
+  process.once('SIGTERM', async () => {
+    app.log.info('SIGTERM received, initiating graceful shutdown');
+    await gracefulShutdown();
+    process.exit(0);
+  });
+
+  process.once('SIGINT', async () => {
+    app.log.info('SIGINT received, initiating graceful shutdown');
+    await gracefulShutdown();
+    process.exit(0);
+  });
 }
 
 const isMainModule = process.argv[1]?.endsWith('index.js') || process.argv[1]?.endsWith('index.ts');
