@@ -378,8 +378,9 @@ sudo bash deploy-nginx.sh
 sudo apt install certbot python3-certbot-nginx
 sudo certbot --nginx -d yourdomain.com
 
-# 4. Update .env BASE_URL
+# 4. Update BASE_URL in both .env and ecosystem.config.cjs
 sed -i 's|https://screenforge.local|https://yourdomain.com|' .env
+sed -i 's|https://screenforge.local|https://yourdomain.com|' ecosystem.config.cjs
 
 # 5. Reload nginx and restart pm2
 sudo systemctl reload nginx
