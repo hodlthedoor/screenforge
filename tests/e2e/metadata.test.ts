@@ -50,9 +50,9 @@ describe('E2E: Response metadata', () => {
       // Validate content type
       expect(data.contentType).toBe('image/png');
 
-      // Validate top-level durationMs (deduplicated from metadata)
+      // Validate top-level durationMs (0 on cache hit, >0 on fresh render)
       expect(typeof data.durationMs).toBe('number');
-      expect(data.durationMs).toBeGreaterThan(0);
+      expect(data.durationMs).toBeGreaterThanOrEqual(0);
 
       // Validate metadata fields
       expect(data.metadata).toHaveProperty('title');
@@ -181,9 +181,9 @@ describe('E2E: Response metadata', () => {
       const buffer = Buffer.from(data.data, 'base64');
       expect(buffer.toString('utf-8', 0, 4)).toBe('%PDF');
 
-      // Validate top-level durationMs
+      // Validate top-level durationMs (0 on cache hit, >0 on fresh render)
       expect(typeof data.durationMs).toBe('number');
-      expect(data.durationMs).toBeGreaterThan(0);
+      expect(data.durationMs).toBeGreaterThanOrEqual(0);
 
       // Validate metadata
       expect(typeof data.metadata.title).toBe('string');

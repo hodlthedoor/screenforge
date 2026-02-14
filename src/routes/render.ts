@@ -13,12 +13,46 @@ import { getQueue, type RenderJobData } from '../queue/render-queue.js';
 import { getPool } from '../db/index.js';
 import { sanitizeUrl, sanitizeSelector, sanitizeWaitFor, sanitizeTemplate, sanitizeCallbackUrl, SanitizeError } from '../security/sanitize.js';
 import { sendError } from '../security/errors.js';
+import type { RenderMetadata } from '../renderer/schemas.js';
 
 const FORMAT_EXT: Record<string, string> = {
   'image/png': 'png',
   'image/jpeg': 'jpg',
   'application/pdf': 'pdf',
 };
+
+function sendMetadataEnvelope(
+  reply: import('fastify').FastifyReply,
+  buffer: Buffer,
+  contentType: string,
+  durationMs: number,
+  cacheStatus: 'HIT' | 'MISS',
+  metadata: RenderMetadata | null,
+) {
+  return reply
+    .header('Content-Type', 'application/json')
+    .header('X-Cache', cacheStatus)
+    .send({
+      data: buffer.toString('base64'),
+      contentType,
+      durationMs,
+      metadata,
+    });
+}
+
+function sendBinaryResponse(
+  reply: import('fastify').FastifyReply,
+  buffer: Buffer,
+  contentType: string,
+  durationMs: number,
+  cacheStatus: 'HIT' | 'MISS',
+) {
+  return reply
+    .header('Content-Type', contentType)
+    .header('X-Cache', cacheStatus)
+    .header('X-Render-Duration-Ms', String(durationMs))
+    .send(buffer);
+}
 
 export async function renderRoutes(
   app: FastifyInstance,
@@ -207,23 +241,10 @@ export async function renderRoutes(
       incrementRenderCounter('screenshot', format, 'completed', true);
       const buffer = await cache.readFile(cached.filePath);
 
-      if (wantsMetadata && cached.metadata) {
-        return reply
-          .header('Content-Type', 'application/json')
-          .header('X-Cache', 'HIT')
-          .send({
-            data: buffer.toString('base64'),
-            contentType: cached.contentType,
-            durationMs: 0,
-            metadata: cached.metadata,
-          });
+      if (wantsMetadata) {
+        return sendMetadataEnvelope(reply, buffer, cached.contentType, 0, 'HIT', cached.metadata ?? null);
       }
-
-      return reply
-        .header('Content-Type', cached.contentType)
-        .header('X-Cache', 'HIT')
-        .header('X-Render-Duration-Ms', '0')
-        .send(buffer);
+      return sendBinaryResponse(reply, buffer, cached.contentType, 0, 'HIT');
     }
 
     app.incrementInflightRenders();
@@ -236,23 +257,10 @@ export async function renderRoutes(
       incrementRenderCounter('screenshot', format, 'completed', false);
       observeRenderDuration('screenshot', format, result.durationMs / 1000);
 
-      if (wantsMetadata && result.metadata) {
-        return reply
-          .header('Content-Type', 'application/json')
-          .header('X-Cache', 'MISS')
-          .send({
-            data: result.buffer.toString('base64'),
-            contentType: result.contentType,
-            durationMs: result.durationMs,
-            metadata: result.metadata,
-          });
+      if (wantsMetadata) {
+        return sendMetadataEnvelope(reply, result.buffer, result.contentType, result.durationMs, 'MISS', result.metadata ?? null);
       }
-
-      return reply
-        .header('Content-Type', result.contentType)
-        .header('X-Cache', 'MISS')
-        .header('X-Render-Duration-Ms', String(result.durationMs))
-        .send(result.buffer);
+      return sendBinaryResponse(reply, result.buffer, result.contentType, result.durationMs, 'MISS');
     } finally {
       app.decrementInflightRenders();
     }
@@ -358,23 +366,10 @@ export async function renderRoutes(
       incrementRenderCounter('pdf', 'pdf', 'completed', true);
       const buffer = await cache.readFile(cached.filePath);
 
-      if (wantsMetadata && cached.metadata) {
-        return reply
-          .header('Content-Type', 'application/json')
-          .header('X-Cache', 'HIT')
-          .send({
-            data: buffer.toString('base64'),
-            contentType: cached.contentType,
-            durationMs: 0,
-            metadata: cached.metadata,
-          });
+      if (wantsMetadata) {
+        return sendMetadataEnvelope(reply, buffer, cached.contentType, 0, 'HIT', cached.metadata ?? null);
       }
-
-      return reply
-        .header('Content-Type', cached.contentType)
-        .header('X-Cache', 'HIT')
-        .header('X-Render-Duration-Ms', '0')
-        .send(buffer);
+      return sendBinaryResponse(reply, buffer, cached.contentType, 0, 'HIT');
     }
 
     app.incrementInflightRenders();
@@ -385,23 +380,10 @@ export async function renderRoutes(
       incrementRenderCounter('pdf', 'pdf', 'completed', false);
       observeRenderDuration('pdf', 'pdf', result.durationMs / 1000);
 
-      if (wantsMetadata && result.metadata) {
-        return reply
-          .header('Content-Type', 'application/json')
-          .header('X-Cache', 'MISS')
-          .send({
-            data: result.buffer.toString('base64'),
-            contentType: result.contentType,
-            durationMs: result.durationMs,
-            metadata: result.metadata,
-          });
+      if (wantsMetadata) {
+        return sendMetadataEnvelope(reply, result.buffer, result.contentType, result.durationMs, 'MISS', result.metadata ?? null);
       }
-
-      return reply
-        .header('Content-Type', result.contentType)
-        .header('X-Cache', 'MISS')
-        .header('X-Render-Duration-Ms', String(result.durationMs))
-        .send(result.buffer);
+      return sendBinaryResponse(reply, result.buffer, result.contentType, result.durationMs, 'MISS');
     } finally {
       app.decrementInflightRenders();
     }
