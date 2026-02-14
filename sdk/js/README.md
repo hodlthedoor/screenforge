@@ -695,6 +695,14 @@ import type {
   ListWebhookDeliveriesOptions,
   AsyncRenderResponse,
   BatchRenderResponse,
+  ExtractOptions,
+  ExtractResult,
+  ExtractScreenshotOptions,
+  AccessibilityOptions,
+  AccessibilityReport,
+  AccessibilityScreenshotOptions,
+  AccessibilityViolation,
+  AccessibilityViolationNode,
 } from '@screenforge/sdk';
 ```
 
@@ -712,3 +720,11 @@ import type {
 | `ListWebhookDeliveriesOptions` | Pagination options for `listWebhookDeliveries()` |
 | `AsyncRenderResponse` | Return type of `screenshotAsync()` and `pdfAsync()` |
 | `BatchRenderResponse` | Return type of `batchRender()` |
+| `ExtractOptions` | Options for `extract()` — CSS selectors, metadata, and screenshot |
+| `ExtractResult` | Return type of `extract()` — extracted text, metadata, links |
+| `ExtractScreenshotOptions` | Screenshot options specific to `extract()` |
+| `AccessibilityOptions` | Options for `accessibility()` — standard, screenshot |
+| `AccessibilityReport` | Return type of `accessibility()` — violations, score, passes |
+| `AccessibilityScreenshotOptions` | Screenshot options specific to `accessibility()` |
+| `AccessibilityViolation` | A single accessibility violation with impact and nodes |
+| `AccessibilityViolationNode` | A DOM node affected by an accessibility violation |
