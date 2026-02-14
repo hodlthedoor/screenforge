@@ -136,6 +136,112 @@ describe('API endpoints', { timeout: 120_000 }, () => {
       const body = JSON.parse(res.body);
       expect(body.error.code).toBe('VALIDATION_ERROR');
     });
+
+    it('cache_ttl=0 bypasses cache (always returns MISS)', async () => {
+      const payload = { url: fixtureUrl, cache_ttl: 0, format: 'png' };
+
+      // First request with cache_ttl=0
+      const res1 = await app.inject({
+        method: 'POST',
+        url: '/v1/screenshot',
+        payload,
+      });
+      expect(res1.statusCode).toBe(200);
+      expect(res1.headers['x-cache']).toBe('MISS');
+
+      // Second request with cache_ttl=0 should also be MISS (bypass cache)
+      const res2 = await app.inject({
+        method: 'POST',
+        url: '/v1/screenshot',
+        payload,
+      });
+      expect(res2.statusCode).toBe(200);
+      expect(res2.headers['x-cache']).toBe('MISS');
+    });
+
+    it('custom cache_key produces different cache entries for same URL', async () => {
+      const basePayload = { url: fixtureUrl, format: 'png' };
+
+      // Request with cache_key='key1'
+      const res1 = await app.inject({
+        method: 'POST',
+        url: '/v1/screenshot',
+        payload: { ...basePayload, cache_key: 'key1' },
+      });
+      expect(res1.statusCode).toBe(200);
+      expect(res1.headers['x-cache']).toBe('MISS');
+
+      // Request with cache_key='key2' should be MISS (different cache entry)
+      const res2 = await app.inject({
+        method: 'POST',
+        url: '/v1/screenshot',
+        payload: { ...basePayload, cache_key: 'key2' },
+      });
+      expect(res2.statusCode).toBe(200);
+      expect(res2.headers['x-cache']).toBe('MISS');
+
+      // Request with cache_key='key1' again should be HIT
+      const res3 = await app.inject({
+        method: 'POST',
+        url: '/v1/screenshot',
+        payload: { ...basePayload, cache_key: 'key1' },
+      });
+      expect(res3.statusCode).toBe(200);
+      expect(res3.headers['x-cache']).toBe('HIT');
+    });
+
+    it('cache_ttl changes do not affect cache key (same cache entry)', async () => {
+      const basePayload = { url: fixtureUrl, format: 'png', viewport: { width: 800, height: 600 } };
+
+      // First request with cache_ttl=3600
+      const res1 = await app.inject({
+        method: 'POST',
+        url: '/v1/screenshot',
+        payload: { ...basePayload, cache_ttl: 3600 },
+      });
+      expect(res1.statusCode).toBe(200);
+      expect(res1.headers['x-cache']).toBe('MISS');
+
+      // Second request with cache_ttl=7200 (different TTL, same content) should be HIT
+      const res2 = await app.inject({
+        method: 'POST',
+        url: '/v1/screenshot',
+        payload: { ...basePayload, cache_ttl: 7200 },
+      });
+      expect(res2.statusCode).toBe(200);
+      expect(res2.headers['x-cache']).toBe('HIT');
+
+      // Third request without cache_ttl should also be HIT
+      const res3 = await app.inject({
+        method: 'POST',
+        url: '/v1/screenshot',
+        payload: basePayload,
+      });
+      expect(res3.statusCode).toBe(200);
+      expect(res3.headers['x-cache']).toBe('HIT');
+    });
+
+    it('default behavior unchanged when cache_ttl not specified', async () => {
+      const payload = { url: fixtureUrl, format: 'png', quality: 85 };
+
+      // First request
+      const res1 = await app.inject({
+        method: 'POST',
+        url: '/v1/screenshot',
+        payload,
+      });
+      expect(res1.statusCode).toBe(200);
+      expect(res1.headers['x-cache']).toBe('MISS');
+
+      // Second request should hit cache
+      const res2 = await app.inject({
+        method: 'POST',
+        url: '/v1/screenshot',
+        payload,
+      });
+      expect(res2.statusCode).toBe(200);
+      expect(res2.headers['x-cache']).toBe('HIT');
+    });
   });
 
   describe('POST /v1/pdf', () => {

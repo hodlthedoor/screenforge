@@ -434,6 +434,117 @@ describe('screenshotOptionsSchema', () => {
       expect(result.success).toBe(false);
     });
   });
+
+  describe('cache control options', () => {
+    it('accepts cache_ttl=0 (bypass cache)', () => {
+      const result = screenshotOptionsSchema.safeParse({
+        url: 'https://example.com',
+        cache_ttl: 0,
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.cache_ttl).toBe(0);
+      }
+    });
+
+    it('accepts cache_ttl=3600 (1 hour)', () => {
+      const result = screenshotOptionsSchema.safeParse({
+        url: 'https://example.com',
+        cache_ttl: 3600,
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.cache_ttl).toBe(3600);
+      }
+    });
+
+    it('accepts cache_ttl=2592000 (30 days max)', () => {
+      const result = screenshotOptionsSchema.safeParse({
+        url: 'https://example.com',
+        cache_ttl: 2592000,
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.cache_ttl).toBe(2592000);
+      }
+    });
+
+    it('rejects cache_ttl above max (2592001)', () => {
+      const result = screenshotOptionsSchema.safeParse({
+        url: 'https://example.com',
+        cache_ttl: 2592001,
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects negative cache_ttl', () => {
+      const result = screenshotOptionsSchema.safeParse({
+        url: 'https://example.com',
+        cache_ttl: -1,
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects non-integer cache_ttl', () => {
+      const result = screenshotOptionsSchema.safeParse({
+        url: 'https://example.com',
+        cache_ttl: 3600.5,
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('accepts cache_key with short string', () => {
+      const result = screenshotOptionsSchema.safeParse({
+        url: 'https://example.com',
+        cache_key: 'user-session-abc123',
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.cache_key).toBe('user-session-abc123');
+      }
+    });
+
+    it('accepts cache_key at max length (128 chars)', () => {
+      const longKey = 'a'.repeat(128);
+      const result = screenshotOptionsSchema.safeParse({
+        url: 'https://example.com',
+        cache_key: longKey,
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.cache_key).toBe(longKey);
+      }
+    });
+
+    it('rejects cache_key over max length (129 chars)', () => {
+      const tooLongKey = 'a'.repeat(129);
+      const result = screenshotOptionsSchema.safeParse({
+        url: 'https://example.com',
+        cache_key: tooLongKey,
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('cache_ttl is optional', () => {
+      const result = screenshotOptionsSchema.safeParse({
+        url: 'https://example.com',
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.cache_ttl).toBeUndefined();
+      }
+    });
+
+    it('cache_key is optional', () => {
+      const result = screenshotOptionsSchema.safeParse({
+        url: 'https://example.com',
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.cache_key).toBeUndefined();
+      }
+    });
+  });
 });
 
 describe('pdfOptionsSchema', () => {
@@ -602,6 +713,66 @@ describe('pdfOptionsSchema', () => {
       const result = pdfOptionsSchema.safeParse({
         url: 'https://example.com',
         proxy: { server: 'invalid://proxy.example.com' },
+      });
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('cache control options', () => {
+    it('accepts cache_ttl=0 (bypass cache)', () => {
+      const result = pdfOptionsSchema.safeParse({
+        url: 'https://example.com',
+        cache_ttl: 0,
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.cache_ttl).toBe(0);
+      }
+    });
+
+    it('accepts cache_ttl=2592000 (30 days max)', () => {
+      const result = pdfOptionsSchema.safeParse({
+        url: 'https://example.com',
+        cache_ttl: 2592000,
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.cache_ttl).toBe(2592000);
+      }
+    });
+
+    it('rejects cache_ttl above max', () => {
+      const result = pdfOptionsSchema.safeParse({
+        url: 'https://example.com',
+        cache_ttl: 2592001,
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects negative cache_ttl', () => {
+      const result = pdfOptionsSchema.safeParse({
+        url: 'https://example.com',
+        cache_ttl: -1,
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('accepts cache_key', () => {
+      const result = pdfOptionsSchema.safeParse({
+        url: 'https://example.com',
+        cache_key: 'report-state-v2',
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.cache_key).toBe('report-state-v2');
+      }
+    });
+
+    it('rejects cache_key over 128 chars', () => {
+      const tooLongKey = 'a'.repeat(129);
+      const result = pdfOptionsSchema.safeParse({
+        url: 'https://example.com',
+        cache_key: tooLongKey,
       });
       expect(result.success).toBe(false);
     });

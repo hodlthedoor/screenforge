@@ -98,6 +98,12 @@ export async function signedRoutes(
       }
     }
 
+    // Convert cache_ttl from query string (string) to number for validation
+    if (options.cache_ttl !== undefined) {
+      const cacheTtl = Number(options.cache_ttl);
+      options.cache_ttl = Number.isNaN(cacheTtl) ? options.cache_ttl : cacheTtl;
+    }
+
     // Validate options based on type
     const schema = type === 'screenshot' ? screenshotOptionsSchema : pdfOptionsSchema;
     const parsed = schema.safeParse(options);

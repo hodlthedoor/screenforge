@@ -61,14 +61,21 @@ export class RenderCache {
     return null;
   }
 
-  async set(optionsHash: string, buffer: Buffer, contentType: string, ext: string, metadata?: RenderMetadata): Promise<CacheEntry> {
+  async set(optionsHash: string, buffer: Buffer, contentType: string, ext: string, metadata?: RenderMetadata, ttlSecondsOverride?: number): Promise<CacheEntry> {
     const date = new Date().toISOString().slice(0, 10);
     const key = `${date}/${optionsHash}.${ext}`;
     const storage = getStorageBackend();
     const filePath = await storage.upload(key, buffer, contentType);
 
     const entry: CacheEntry = { filePath, contentType, sizeBytes: buffer.length, metadata };
-    await this.redis.set(`screenforge:cache:${optionsHash}`, JSON.stringify(entry), 'EX', this.ttlSeconds);
+    const ttl = ttlSecondsOverride ?? this.ttlSeconds;
+
+    if (ttl > 0) {
+      await this.redis.set(`screenforge:cache:${optionsHash}`, JSON.stringify(entry), 'EX', ttl);
+    } else {
+      // TTL=0 means no expiration
+      await this.redis.set(`screenforge:cache:${optionsHash}`, JSON.stringify(entry));
+    }
 
     // Increment atomic counters
     await this.redis.incr(CACHE_COUNT_KEY);

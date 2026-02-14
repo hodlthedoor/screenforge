@@ -283,6 +283,17 @@ export async function renderRoutes(
             },
             required: ['server'],
           },
+          cache_ttl: {
+            type: 'integer',
+            minimum: 0,
+            maximum: 2592000,
+            description: 'Cache duration in seconds (0-2592000). 0 = bypass cache entirely, default = server config (3600s). Max 30 days.',
+          },
+          cache_key: {
+            type: 'string',
+            maxLength: 128,
+            description: 'Custom cache key suffix for different cache entries with same URL. Useful for caching different JS states.',
+          },
         },
       },
     },
@@ -350,8 +361,33 @@ export async function renderRoutes(
     }
 
     const wantsMetadata = query.metadata === 'true';
-    const optionsHash = RenderCache.hashOptions(options as unknown as Record<string, unknown>);
+    const cacheTtl = options.cache_ttl;
+    const cacheKey = options.cache_key;
 
+    // Build cache hash excluding cache_ttl (it's a control param, not content) but including cache_key
+    const { cache_ttl: _cacheTtl, ...hashableOptions } = options as unknown as Record<string, unknown>;
+    const optionsHash = RenderCache.hashOptions(hashableOptions);
+
+    // If cache_ttl=0, bypass cache entirely (skip read and write)
+    if (cacheTtl === 0) {
+      app.incrementInflightRenders();
+      try {
+        const result = await takeScreenshot(pool, options, config.NAVIGATION_TIMEOUT_MS);
+
+        const format = result.contentType.includes('jpeg') ? 'jpeg' : 'png';
+        incrementRenderCounter('screenshot', format, 'completed', false);
+        observeRenderDuration('screenshot', format, result.durationMs / 1000);
+
+        if (wantsMetadata) {
+          return sendMetadataEnvelope(reply, result.buffer, result.contentType, result.durationMs, 'MISS', result.metadata ?? null);
+        }
+        return sendBinaryResponse(reply, result.buffer, result.contentType, result.durationMs, 'MISS');
+      } finally {
+        app.decrementInflightRenders();
+      }
+    }
+
+    // Normal cache flow (cache_ttl is undefined or > 0)
     const cached = await cache.get(optionsHash);
     if (cached) {
       const format = cached.contentType.includes('jpeg') ? 'jpeg' : 'png';
@@ -368,7 +404,7 @@ export async function renderRoutes(
     try {
       const result = await takeScreenshot(pool, options, config.NAVIGATION_TIMEOUT_MS);
       const ext = FORMAT_EXT[result.contentType] ?? 'bin';
-      await cache.set(optionsHash, result.buffer, result.contentType, ext, result.metadata);
+      await cache.set(optionsHash, result.buffer, result.contentType, ext, result.metadata, cacheTtl);
 
       const format = result.contentType.includes('jpeg') ? 'jpeg' : 'png';
       incrementRenderCounter('screenshot', format, 'completed', false);
@@ -527,6 +563,17 @@ export async function renderRoutes(
             },
             required: ['server'],
           },
+          cache_ttl: {
+            type: 'integer',
+            minimum: 0,
+            maximum: 2592000,
+            description: 'Cache duration in seconds (0-2592000). 0 = bypass cache entirely, default = server config (3600s). Max 30 days.',
+          },
+          cache_key: {
+            type: 'string',
+            maxLength: 128,
+            description: 'Custom cache key suffix for different cache entries with same URL. Useful for caching different JS states.',
+          },
         },
       },
     },
@@ -594,8 +641,32 @@ export async function renderRoutes(
     }
 
     const wantsMetadata = query.metadata === 'true';
-    const optionsHash = RenderCache.hashOptions(options as unknown as Record<string, unknown>);
+    const cacheTtl = options.cache_ttl;
+    const cacheKey = options.cache_key;
 
+    // Build cache hash excluding cache_ttl (it's a control param, not content) but including cache_key
+    const { cache_ttl: _cacheTtl, ...hashableOptions } = options as unknown as Record<string, unknown>;
+    const optionsHash = RenderCache.hashOptions(hashableOptions);
+
+    // If cache_ttl=0, bypass cache entirely (skip read and write)
+    if (cacheTtl === 0) {
+      app.incrementInflightRenders();
+      try {
+        const result = await renderPdf(pool, options, config.NAVIGATION_TIMEOUT_MS);
+
+        incrementRenderCounter('pdf', 'pdf', 'completed', false);
+        observeRenderDuration('pdf', 'pdf', result.durationMs / 1000);
+
+        if (wantsMetadata) {
+          return sendMetadataEnvelope(reply, result.buffer, result.contentType, result.durationMs, 'MISS', result.metadata ?? null);
+        }
+        return sendBinaryResponse(reply, result.buffer, result.contentType, result.durationMs, 'MISS');
+      } finally {
+        app.decrementInflightRenders();
+      }
+    }
+
+    // Normal cache flow (cache_ttl is undefined or > 0)
     const cached = await cache.get(optionsHash);
     if (cached) {
       incrementRenderCounter('pdf', 'pdf', 'completed', true);
@@ -610,7 +681,7 @@ export async function renderRoutes(
     app.incrementInflightRenders();
     try {
       const result = await renderPdf(pool, options, config.NAVIGATION_TIMEOUT_MS);
-      await cache.set(optionsHash, result.buffer, result.contentType, 'pdf', result.metadata);
+      await cache.set(optionsHash, result.buffer, result.contentType, 'pdf', result.metadata, cacheTtl);
 
       incrementRenderCounter('pdf', 'pdf', 'completed', false);
       observeRenderDuration('pdf', 'pdf', result.durationMs / 1000);

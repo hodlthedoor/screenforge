@@ -110,6 +110,44 @@ describe('signed URLs', () => {
       expect(expires).toBeGreaterThan(Date.now() + 29 * 24 * 3600 * 1000);
       expect(expires).toBeLessThanOrEqual(expectedExpiry);
     });
+
+    it('includes cache_ttl in signed URL', () => {
+      const options: SignedUrlOptions = {
+        type: 'screenshot',
+        url: 'https://example.com',
+        cache_ttl: 7200,
+      };
+
+      const signedUrl = generateSignedUrl(testApiKeyId, testSigningSecret, options);
+
+      expect(signedUrl).toContain('cache_ttl=7200');
+    });
+
+    it('includes cache_key in signed URL', () => {
+      const options: SignedUrlOptions = {
+        type: 'screenshot',
+        url: 'https://example.com',
+        cache_key: 'user-abc-session-123',
+      };
+
+      const signedUrl = generateSignedUrl(testApiKeyId, testSigningSecret, options);
+
+      expect(signedUrl).toContain('cache_key=user-abc-session-123');
+    });
+
+    it('includes both cache_ttl and cache_key in signed URL', () => {
+      const options: SignedUrlOptions = {
+        type: 'screenshot',
+        url: 'https://example.com',
+        cache_ttl: 3600,
+        cache_key: 'state-v2',
+      };
+
+      const signedUrl = generateSignedUrl(testApiKeyId, testSigningSecret, options);
+
+      expect(signedUrl).toContain('cache_ttl=3600');
+      expect(signedUrl).toContain('cache_key=state-v2');
+    });
   });
 
   describe('validateSignedUrl', () => {
@@ -206,6 +244,44 @@ describe('signed URLs', () => {
       const queryParams = Object.fromEntries(url.searchParams.entries());
 
       const result = await validateSignedUrl(queryParams, 'wrong-secret');
+
+      expect(result.valid).toBe(false);
+      expect(result.error).toBe('INVALID_SIGNATURE');
+    });
+
+    it('validates signed URL with cache_ttl and cache_key', async () => {
+      const options: SignedUrlOptions = {
+        type: 'screenshot',
+        url: 'https://example.com',
+        cache_ttl: 7200,
+        cache_key: 'test-key',
+      };
+
+      const signedUrl = generateSignedUrl(testApiKeyId, testSigningSecret, options);
+      const url = new URL(signedUrl, 'http://localhost');
+      const queryParams = Object.fromEntries(url.searchParams.entries());
+
+      const result = await validateSignedUrl(queryParams, testSigningSecret);
+
+      expect(result.valid).toBe(true);
+      expect(result.apiKeyId).toBe(testApiKeyId);
+    });
+
+    it('rejects tampered cache_ttl in signed URL', async () => {
+      const options: SignedUrlOptions = {
+        type: 'screenshot',
+        url: 'https://example.com',
+        cache_ttl: 3600,
+      };
+
+      const signedUrl = generateSignedUrl(testApiKeyId, testSigningSecret, options);
+      const url = new URL(signedUrl, 'http://localhost');
+
+      // Tamper with cache_ttl
+      url.searchParams.set('cache_ttl', '999999');
+
+      const queryParams = Object.fromEntries(url.searchParams.entries());
+      const result = await validateSignedUrl(queryParams, testSigningSecret);
 
       expect(result.valid).toBe(false);
       expect(result.error).toBe('INVALID_SIGNATURE');

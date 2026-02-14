@@ -83,4 +83,39 @@ describe('RenderCache', () => {
     const result = await cache.get(hash);
     expect(result).toBeNull();
   });
+
+  it('uses default TTL when ttlSecondsOverride is not provided', async () => {
+    const buffer = Buffer.from('default TTL test');
+    const hash = 'test-default-ttl';
+
+    await cache.set(hash, buffer, 'image/png', 'png');
+    // Since default constructor TTL is 60s, this test just verifies set() succeeds
+    const entry = await cache.get(hash);
+    expect(entry).not.toBeNull();
+  });
+
+  it('uses custom TTL when ttlSecondsOverride is provided', async () => {
+    const buffer = Buffer.from('custom TTL test');
+    const hash = 'test-custom-ttl';
+
+    // Set with 5 second TTL
+    await cache.set(hash, buffer, 'image/png', 'png', undefined, 5);
+    const entry = await cache.get(hash);
+    expect(entry).not.toBeNull();
+
+    // Wait 6 seconds and verify expired
+    await new Promise(resolve => setTimeout(resolve, 6000));
+    const expired = await cache.get(hash);
+    expect(expired).toBeNull();
+  });
+
+  it('accepts ttlSecondsOverride=0 for no expiration', async () => {
+    const buffer = Buffer.from('no TTL test');
+    const hash = 'test-no-ttl';
+
+    // ttlSecondsOverride=0 should not set expiration
+    await cache.set(hash, buffer, 'image/png', 'png', undefined, 0);
+    const entry = await cache.get(hash);
+    expect(entry).not.toBeNull();
+  });
 });

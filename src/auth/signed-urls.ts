@@ -27,6 +27,9 @@ export interface SignedUrlOptions {
   hideCookieConsents?: boolean;
   customCss?: string;
   customJs?: string;
+  // Cache control
+  cache_ttl?: number;
+  cache_key?: string;
 }
 
 export interface ValidationResult {

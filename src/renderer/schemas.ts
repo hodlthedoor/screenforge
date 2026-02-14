@@ -131,6 +131,8 @@ const screenshotBaseOptionsSchema = z.object({
   userAgent: z.string().optional(),
   isMobile: z.boolean().optional(),
   hasTouch: z.boolean().optional(),
+  cache_ttl: z.number().int().min(0).max(2592000).optional(),
+  cache_key: z.string().max(128).optional(),
 });
 
 export const screenshotOptionsSchema = z.object({
@@ -198,6 +200,8 @@ const pdfBaseOptionsSchema = z.object({
   userAgent: z.string().optional(),
   isMobile: z.boolean().optional(),
   hasTouch: z.boolean().optional(),
+  cache_ttl: z.number().int().min(0).max(2592000).optional(),
+  cache_key: z.string().max(128).optional(),
 });
 
 export const pdfOptionsSchema = z.object({
