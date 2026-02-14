@@ -362,10 +362,10 @@ export async function renderRoutes(
 
     const wantsMetadata = query.metadata === 'true';
     const cacheTtl = options.cache_ttl;
-    const cacheKey = options.cache_key;
 
     // Build cache hash excluding cache_ttl (it's a control param, not content) but including cache_key
-    const { cache_ttl: _cacheTtl, ...hashableOptions } = options as unknown as Record<string, unknown>;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { cache_ttl: _excludedTtl, ...hashableOptions } = options as unknown as Record<string, unknown>;
     const optionsHash = RenderCache.hashOptions(hashableOptions);
 
     // If cache_ttl=0, bypass cache entirely (skip read and write)
@@ -642,10 +642,10 @@ export async function renderRoutes(
 
     const wantsMetadata = query.metadata === 'true';
     const cacheTtl = options.cache_ttl;
-    const cacheKey = options.cache_key;
 
     // Build cache hash excluding cache_ttl (it's a control param, not content) but including cache_key
-    const { cache_ttl: _cacheTtl, ...hashableOptions } = options as unknown as Record<string, unknown>;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { cache_ttl: _excludedTtl, ...hashableOptions } = options as unknown as Record<string, unknown>;
     const optionsHash = RenderCache.hashOptions(hashableOptions);
 
     // If cache_ttl=0, bypass cache entirely (skip read and write)
