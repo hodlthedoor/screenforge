@@ -125,6 +125,7 @@ ScreenForge includes the following built-in security features:
 
 ## Known Limitations
 
+- **DNS Rebinding**: SSRF protection validates hostnames at request time by resolving them to IP addresses. A malicious DNS server could return a public IP on first lookup (passing validation) and a private IP on subsequent lookups (DNS rebinding). To mitigate this, use firewall rules to block outbound traffic to private IP ranges at the network level, or deploy ScreenForge with `ALLOW_PRIVATE_URLS=false` (default) behind a DNS resolver that pins responses.
 - **Browser Sandbox**: Playwright runs Chromium in a sandbox, but rendering untrusted content always carries some risk
 - **Resource Limits**: Configure appropriate timeouts and resource limits to prevent DoS via expensive render jobs
 - **File Storage**: Cached files are stored on disk - ensure proper file permissions and disk quotas

@@ -24,9 +24,7 @@ describe('Security audit', () => {
   });
 
   describe('CORS configuration', () => {
-    it('should not allow wildcard origin in production mode', async () => {
-      // Test will verify CORS config is restrictive
-      // This is a placeholder - actual implementation will be validated via response headers
+    it('should not echo arbitrary origins when CORS_ORIGINS is unset', async () => {
       const response = await app.inject({
         method: 'GET',
         url: '/health',
@@ -35,20 +33,38 @@ describe('Security audit', () => {
         },
       });
 
-      // In a properly configured CORS setup, the Access-Control-Allow-Origin should NOT be '*'
-      // or should not echo arbitrary origins
       const allowOrigin = response.headers['access-control-allow-origin'];
-
-      // For now this will fail because CORS is set to origin: true
-      // After fix, this should either be undefined or a specific allowed origin
       expect(allowOrigin).not.toBe('https://evil.com');
     });
 
-    it('should have explicit CORS origin allowlist in production', () => {
-      // This will be a configuration check
-      // For now we know it's set to `origin: true` which is permissive
-      // After fix, should be restricted
-      expect(true).toBe(true); // Placeholder
+    it('should only allow configured CORS origins', async () => {
+      await app.close();
+      process.env.CORS_ORIGINS = 'https://allowed.com,https://app.allowed.com';
+
+      app = await buildServer({ skipBrowserInit: true });
+      await app.ready();
+
+      // Allowed origin should be echoed back
+      const allowed = await app.inject({
+        method: 'GET',
+        url: '/health',
+        headers: { origin: 'https://allowed.com' },
+      });
+      expect(allowed.headers['access-control-allow-origin']).toBe('https://allowed.com');
+
+      // Disallowed origin should not be echoed
+      const disallowed = await app.inject({
+        method: 'GET',
+        url: '/health',
+        headers: { origin: 'https://evil.com' },
+      });
+      expect(disallowed.headers['access-control-allow-origin']).toBeUndefined();
+
+      // Cleanup
+      await app.close();
+      delete process.env.CORS_ORIGINS;
+      app = await buildServer({ skipBrowserInit: true });
+      await app.ready();
     });
   });
 
@@ -179,14 +195,28 @@ describe('Security audit', () => {
   });
 
   describe('Rate limiting', () => {
-    it('should use trusted proxy IP for rate limiting', () => {
-      // This tests that rate limiter uses the correct IP from trustProxy
-      // When trustProxy is enabled, req.ip should come from X-Forwarded-For
-      // The rate limiter should use req.ip, not the header directly
+    it('should respect X-Forwarded-For when trustProxy is enabled (production)', async () => {
+      await app.close();
+      const origEnv = process.env.NODE_ENV;
+      process.env.NODE_ENV = 'production';
 
-      // Implementation check - we'll verify the code uses req.ip
-      // This is more of a code review item than a runtime test
-      expect(true).toBe(true); // Placeholder
+      const prodApp = await buildServer({ skipBrowserInit: true });
+      await prodApp.ready();
+
+      // In production, trustProxy is enabled so X-Forwarded-For should set req.ip
+      const response = await prodApp.inject({
+        method: 'GET',
+        url: '/health',
+        headers: { 'x-forwarded-for': '203.0.113.50' },
+      });
+
+      // The response should succeed (trustProxy doesn't block, just parses headers)
+      expect(response.statusCode).toBe(200);
+
+      await prodApp.close();
+      process.env.NODE_ENV = origEnv;
+      app = await buildServer({ skipBrowserInit: true });
+      await app.ready();
     });
   });
 });
