@@ -1,0 +1,40 @@
+name: Publish JS SDK
+
+on:
+  push:
+    tags:
+      - 'sdk-js-v*'
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: sdk/js/package-lock.json
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        working-directory: sdk/js
+        run: npm ci
+
+      - name: Build package
+        working-directory: sdk/js
+        run: npm run build
+
+      - name: Run tests
+        working-directory: sdk/js
+        run: npm test
+
+      - name: Publish to npm
+        working-directory: sdk/js
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
