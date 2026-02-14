@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Emulation Test Page</title>
+</head>
+<body>
+  <div id="timezone"></div>
+  <div id="locale"></div>
+  <div id="geolocation"></div>
+  <script>
+    // Display timezone
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    document.getElementById('timezone').textContent = `Timezone: ${tz}`;
+
+    // Display locale
+    const locale = navigator.language;
+    document.getElementById('locale').textContent = `Locale: ${locale}`;
+
+    // Display geolocation (if available)
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          document.getElementById('geolocation').textContent =
+            `Geolocation: ${position.coords.latitude}, ${position.coords.longitude}`;
+        },
+        (error) => {
+          document.getElementById('geolocation').textContent = `Geolocation error: ${error.message}`;
+        }
+      );
+    } else {
+      document.getElementById('geolocation').textContent = 'Geolocation not available';
+    }
+  </script>
+</body>
+</html>

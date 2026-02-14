@@ -15,6 +15,10 @@ export async function takeScreenshot(pool: BrowserPool, options: ScreenshotOptio
     viewport: { width: options.viewport.width, height: options.viewport.height },
     deviceScaleFactor: options.deviceScaleFactor,
     colorScheme: options.darkMode ? 'dark' : undefined,
+    locale: options.locale,
+    geolocation: options.geolocation,
+    permissions: options.geolocation ? ['geolocation'] : undefined,
+    timezoneId: options.timezone,
   });
 
   try {

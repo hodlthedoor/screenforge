@@ -197,6 +197,25 @@ export async function renderRoutes(
               required: ['name', 'value'],
             },
           },
+          geolocation: {
+            type: 'object',
+            description: 'Geolocation to emulate',
+            properties: {
+              latitude: { type: 'number', minimum: -90, maximum: 90, description: 'Latitude' },
+              longitude: { type: 'number', minimum: -180, maximum: 180, description: 'Longitude' },
+              accuracy: { type: 'number', minimum: 0, description: 'Accuracy in meters (optional)' },
+            },
+            required: ['latitude', 'longitude'],
+          },
+          timezone: {
+            type: 'string',
+            description: 'IANA timezone identifier (e.g., "America/New_York", "Europe/London")',
+          },
+          locale: {
+            type: 'string',
+            description: 'Locale to emulate (e.g., "en-US", "fr-FR")',
+            pattern: '^[a-z]{2}(-[A-Z]{2})?$',
+          },
         },
       },
     },
@@ -353,6 +372,25 @@ export async function renderRoutes(
               },
               required: ['name', 'value'],
             },
+          },
+          geolocation: {
+            type: 'object',
+            description: 'Geolocation to emulate',
+            properties: {
+              latitude: { type: 'number', minimum: -90, maximum: 90, description: 'Latitude' },
+              longitude: { type: 'number', minimum: -180, maximum: 180, description: 'Longitude' },
+              accuracy: { type: 'number', minimum: 0, description: 'Accuracy in meters (optional)' },
+            },
+            required: ['latitude', 'longitude'],
+          },
+          timezone: {
+            type: 'string',
+            description: 'IANA timezone identifier (e.g., "America/New_York", "Europe/London")',
+          },
+          locale: {
+            type: 'string',
+            description: 'Locale to emulate (e.g., "en-US", "fr-FR")',
+            pattern: '^[a-z]{2}(-[A-Z]{2})?$',
           },
         },
       },

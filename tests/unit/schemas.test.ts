@@ -150,6 +150,111 @@ describe('screenshotOptionsSchema', () => {
     expect(result.success).toBe(false);
   });
 
+  it('accepts valid geolocation', () => {
+    const result = screenshotOptionsSchema.safeParse({
+      url: 'https://example.com',
+      geolocation: { latitude: 51.5074, longitude: -0.1278, accuracy: 100 },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.geolocation).toEqual({ latitude: 51.5074, longitude: -0.1278, accuracy: 100 });
+    }
+  });
+
+  it('accepts geolocation without accuracy', () => {
+    const result = screenshotOptionsSchema.safeParse({
+      url: 'https://example.com',
+      geolocation: { latitude: 37.7749, longitude: -122.4194 },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects geolocation with latitude out of range', () => {
+    const result = screenshotOptionsSchema.safeParse({
+      url: 'https://example.com',
+      geolocation: { latitude: 91, longitude: 0 },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects geolocation with longitude out of range', () => {
+    const result = screenshotOptionsSchema.safeParse({
+      url: 'https://example.com',
+      geolocation: { latitude: 0, longitude: 181 },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects geolocation with negative accuracy', () => {
+    const result = screenshotOptionsSchema.safeParse({
+      url: 'https://example.com',
+      geolocation: { latitude: 0, longitude: 0, accuracy: -10 },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts valid timezone', () => {
+    const result = screenshotOptionsSchema.safeParse({
+      url: 'https://example.com',
+      timezone: 'America/New_York',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.timezone).toBe('America/New_York');
+    }
+  });
+
+  it('accepts various valid timezones', () => {
+    const timezones = ['Europe/London', 'Asia/Tokyo', 'America/Los_Angeles', 'America/Chicago'];
+    for (const tz of timezones) {
+      const result = screenshotOptionsSchema.safeParse({
+        url: 'https://example.com',
+        timezone: tz,
+      });
+      expect(result.success).toBe(true);
+    }
+  });
+
+  it('rejects invalid timezone', () => {
+    const result = screenshotOptionsSchema.safeParse({
+      url: 'https://example.com',
+      timezone: 'Invalid/Timezone',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts valid locale', () => {
+    const result = screenshotOptionsSchema.safeParse({
+      url: 'https://example.com',
+      locale: 'en-US',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.locale).toBe('en-US');
+    }
+  });
+
+  it('accepts various valid locales', () => {
+    const locales = ['en-GB', 'fr-FR', 'de-DE', 'ja-JP', 'zh-CN'];
+    for (const locale of locales) {
+      const result = screenshotOptionsSchema.safeParse({
+        url: 'https://example.com',
+        locale,
+      });
+      expect(result.success).toBe(true);
+    }
+  });
+
+  it('accepts all emulation options together', () => {
+    const result = screenshotOptionsSchema.safeParse({
+      url: 'https://example.com',
+      geolocation: { latitude: 48.8566, longitude: 2.3522 },
+      timezone: 'Europe/Paris',
+      locale: 'fr-FR',
+    });
+    expect(result.success).toBe(true);
+  });
+
   it('accepts custom headers', () => {
     const result = screenshotOptionsSchema.safeParse({
       url: 'https://example.com',
@@ -262,6 +367,40 @@ describe('pdfOptionsSchema', () => {
       expect(result.data.cookies).toHaveLength(2);
       expect(result.data.cookies![0].name).toBe('session');
     }
+  });
+
+  it('accepts valid geolocation', () => {
+    const result = pdfOptionsSchema.safeParse({
+      url: 'https://example.com',
+      geolocation: { latitude: 40.7128, longitude: -74.0060 },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts valid timezone', () => {
+    const result = pdfOptionsSchema.safeParse({
+      url: 'https://example.com',
+      timezone: 'America/New_York',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts valid locale', () => {
+    const result = pdfOptionsSchema.safeParse({
+      url: 'https://example.com',
+      locale: 'en-US',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts all emulation options together', () => {
+    const result = pdfOptionsSchema.safeParse({
+      url: 'https://example.com',
+      geolocation: { latitude: 35.6762, longitude: 139.6503 },
+      timezone: 'Asia/Tokyo',
+      locale: 'ja-JP',
+    });
+    expect(result.success).toBe(true);
   });
 });
 

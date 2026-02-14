@@ -45,9 +45,33 @@ export const cookieSchema = z.object({
   path: z.string().optional(),
 });
 
+export const geolocationSchema = z.object({
+  latitude: z.number().min(-90).max(90),
+  longitude: z.number().min(-180).max(180),
+  accuracy: z.number().min(0).optional(),
+});
+
+// Get valid IANA timezone names
+const VALID_TIMEZONES = new Set(Intl.supportedValuesOf('timeZone'));
+
+export const timezoneSchema = z.string().refine(
+  (tz) => VALID_TIMEZONES.has(tz),
+  { message: 'Invalid IANA timezone identifier' }
+);
+
+export const localeSchema = z.string().regex(/^[a-z]{2}(-[A-Z]{2})?$/, {
+  message: 'Locale must be in format like "en-US" or "fr-FR"',
+});
+
 const requestOverridesSchema = z.object({
   headers: z.record(z.string(), z.string()).optional(),
   cookies: z.array(cookieSchema).optional(),
+});
+
+const emulationSchema = z.object({
+  geolocation: geolocationSchema.optional(),
+  timezone: timezoneSchema.optional(),
+  locale: localeSchema.optional(),
 });
 
 export const viewportSchema = z.object({
@@ -82,6 +106,7 @@ export const screenshotOptionsSchema = z.object({
   ...screenshotBaseOptionsSchema.shape,
   ...contentFilterSchema.shape,
   ...requestOverridesSchema.shape,
+  ...emulationSchema.shape,
 }).refine((data) => (data.url && !data.html) || (!data.url && data.html), {
   message: 'Exactly one of url or html must be provided',
 }).refine((data) => !(data.selector && data.clip), {
@@ -115,6 +140,7 @@ export const pdfOptionsSchema = z.object({
   ...pdfBaseOptionsSchema.shape,
   ...contentFilterSchema.shape,
   ...requestOverridesSchema.shape,
+  ...emulationSchema.shape,
 }).refine((data) => (data.url && !data.html) || (!data.url && data.html), {
   message: 'Exactly one of url or html must be provided',
 });

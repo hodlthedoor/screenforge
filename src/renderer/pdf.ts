@@ -11,7 +11,12 @@ const FORMAT_SIZE: Record<string, { width: string; height: string }> = {
 
 export async function renderPdf(pool: BrowserPool, options: PdfOptions, timeoutMs = 30_000): Promise<RenderResult> {
   const start = performance.now();
-  const context = await pool.acquire();
+  const context = await pool.acquire({
+    locale: options.locale,
+    geolocation: options.geolocation,
+    permissions: options.geolocation ? ['geolocation'] : undefined,
+    timezoneId: options.timezone,
+  });
 
   try {
     const page = await context.newPage();

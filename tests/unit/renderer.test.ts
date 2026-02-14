@@ -101,6 +101,51 @@ describe('renderer', { timeout: 60_000 }, () => {
       expect(result.buffer).toBeInstanceOf(Buffer);
       expect(result.buffer.length).toBeGreaterThan(0);
     });
+
+    it('applies timezone emulation', async () => {
+      const result = await takeScreenshot(pool, {
+        html: '<div id="tz"></div><script>document.getElementById("tz").textContent = Intl.DateTimeFormat().resolvedOptions().timeZone;</script>',
+        viewport: { width: 1280, height: 720 },
+        format: 'png',
+        fullPage: false,
+        darkMode: false,
+        deviceScaleFactor: 1,
+        timezone: 'America/New_York',
+      });
+
+      expect(result.buffer).toBeInstanceOf(Buffer);
+      expect(result.buffer.length).toBeGreaterThan(0);
+    });
+
+    it('applies locale emulation', async () => {
+      const result = await takeScreenshot(pool, {
+        html: '<div id="locale"></div><script>document.getElementById("locale").textContent = navigator.language;</script>',
+        viewport: { width: 1280, height: 720 },
+        format: 'png',
+        fullPage: false,
+        darkMode: false,
+        deviceScaleFactor: 1,
+        locale: 'fr-FR',
+      });
+
+      expect(result.buffer).toBeInstanceOf(Buffer);
+      expect(result.buffer.length).toBeGreaterThan(0);
+    });
+
+    it('applies geolocation emulation', async () => {
+      const result = await takeScreenshot(pool, {
+        html: '<div id="geo">Loading...</div><script>navigator.geolocation.getCurrentPosition(p => document.getElementById("geo").textContent = p.coords.latitude + "," + p.coords.longitude);</script>',
+        viewport: { width: 1280, height: 720 },
+        format: 'png',
+        fullPage: false,
+        darkMode: false,
+        deviceScaleFactor: 1,
+        geolocation: { latitude: 51.5074, longitude: -0.1278 },
+      });
+
+      expect(result.buffer).toBeInstanceOf(Buffer);
+      expect(result.buffer.length).toBeGreaterThan(0);
+    });
   });
 
   describe('renderPdf', () => {
@@ -130,6 +175,36 @@ describe('renderer', { timeout: 60_000 }, () => {
         margins: { top: '1cm', right: '1cm', bottom: '1cm', left: '1cm' },
         printBackground: true,
         scale: 0.75,
+      });
+
+      expect(result.buffer).toBeInstanceOf(Buffer);
+      expect(result.contentType).toBe('application/pdf');
+    });
+
+    it('applies timezone emulation', async () => {
+      const result = await renderPdf(pool, {
+        html: '<div id="tz"></div><script>document.getElementById("tz").textContent = Intl.DateTimeFormat().resolvedOptions().timeZone;</script>',
+        format: 'a4',
+        landscape: false,
+        margins: { top: '0', right: '0', bottom: '0', left: '0' },
+        printBackground: true,
+        scale: 1,
+        timezone: 'Asia/Tokyo',
+      });
+
+      expect(result.buffer).toBeInstanceOf(Buffer);
+      expect(result.contentType).toBe('application/pdf');
+    });
+
+    it('applies locale emulation', async () => {
+      const result = await renderPdf(pool, {
+        html: '<div id="locale"></div><script>document.getElementById("locale").textContent = navigator.language;</script>',
+        format: 'a4',
+        landscape: false,
+        margins: { top: '0', right: '0', bottom: '0', left: '0' },
+        printBackground: true,
+        scale: 1,
+        locale: 'de-DE',
       });
 
       expect(result.buffer).toBeInstanceOf(Buffer);

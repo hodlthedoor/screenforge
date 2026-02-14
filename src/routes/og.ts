@@ -4,7 +4,7 @@ import { authMiddleware } from '../auth/middleware.js';
 import type { BrowserPool } from '../renderer/browser-pool.js';
 import { RenderCache } from '../cache/index.js';
 import { getConfig } from '../config/index.js';
-import { isPrivateUrl, cookieSchema } from '../renderer/schemas.js';
+import { isPrivateUrl, cookieSchema, geolocationSchema, timezoneSchema, localeSchema } from '../renderer/schemas.js';
 import { sendError } from '../security/errors.js';
 import { sanitizeHeaders, sanitizeCookies, toPlaywrightCookies, SanitizeError } from '../security/sanitize.js';
 
@@ -18,6 +18,9 @@ const ogRequestSchema = z.object({
   template: z.enum(['default', 'article', 'product']).default('default'),
   headers: z.record(z.string(), z.string()).optional(),
   cookies: z.array(cookieSchema).optional(),
+  geolocation: geolocationSchema.optional(),
+  timezone: timezoneSchema.optional(),
+  locale: localeSchema.optional(),
 });
 
 export type OgRequest = z.infer<typeof ogRequestSchema>;
@@ -80,8 +83,17 @@ async function fetchOgMeta(
   timeoutMs: number,
   headers?: Record<string, string>,
   cookies?: Array<{ name: string; value: string; domain?: string; path?: string }>,
+  geolocation?: { latitude: number; longitude: number; accuracy?: number },
+  timezone?: string,
+  locale?: string,
 ): Promise<{ title?: string; description?: string; siteName?: string; image?: string }> {
-  const context = await pool.acquire({ viewport: { width: 1200, height: 630 } });
+  const context = await pool.acquire({
+    viewport: { width: 1200, height: 630 },
+    locale,
+    geolocation,
+    permissions: geolocation ? ['geolocation'] : undefined,
+    timezoneId: timezone,
+  });
   try {
     const page = await context.newPage();
 
@@ -153,6 +165,25 @@ export async function ogRoutes(app: FastifyInstance, pool: BrowserPool, cache: R
               required: ['name', 'value'],
             },
           },
+          geolocation: {
+            type: 'object',
+            description: 'Geolocation to emulate',
+            properties: {
+              latitude: { type: 'number', minimum: -90, maximum: 90, description: 'Latitude' },
+              longitude: { type: 'number', minimum: -180, maximum: 180, description: 'Longitude' },
+              accuracy: { type: 'number', minimum: 0, description: 'Accuracy in meters (optional)' },
+            },
+            required: ['latitude', 'longitude'],
+          },
+          timezone: {
+            type: 'string',
+            description: 'IANA timezone identifier (e.g., "America/New_York", "Europe/London")',
+          },
+          locale: {
+            type: 'string',
+            description: 'Locale to emulate (e.g., "en-US", "fr-FR")',
+            pattern: '^[a-z]{2}(-[A-Z]{2})?$',
+          },
         },
       },
     },
@@ -186,7 +217,7 @@ export async function ogRoutes(app: FastifyInstance, pool: BrowserPool, cache: R
         sendError(reply, req, 'SSRF_BLOCKED');
         return;
       }
-      fetchedMeta = await fetchOgMeta(data.url, pool, config.NAVIGATION_TIMEOUT_MS, data.headers, data.cookies);
+      fetchedMeta = await fetchOgMeta(data.url, pool, config.NAVIGATION_TIMEOUT_MS, data.headers, data.cookies, data.geolocation, data.timezone, data.locale);
     }
 
     if (!data.title && !data.url) {
@@ -217,7 +248,13 @@ export async function ogRoutes(app: FastifyInstance, pool: BrowserPool, cache: R
     // Render the OG card
     const start = performance.now();
     app.incrementInflightRenders();
-    const context = await pool.acquire({ viewport: { width: 1200, height: 630 } });
+    const context = await pool.acquire({
+      viewport: { width: 1200, height: 630 },
+      locale: data.locale,
+      geolocation: data.geolocation,
+      permissions: data.geolocation ? ['geolocation'] : undefined,
+      timezoneId: data.timezone,
+    });
     try {
       const page = await context.newPage();
       await page.setContent(html, { waitUntil: 'networkidle' });
