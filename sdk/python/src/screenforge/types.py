@@ -20,6 +20,16 @@ class Cookie(TypedDict, total=False):
     path: str
 
 
+class Action(TypedDict, total=False):
+    """Pre-capture interaction action."""
+
+    type: Literal["click", "scroll", "type", "hover", "wait"]
+    selector: str
+    value: str
+    x: int
+    y: int
+
+
 class ScreenshotOptions(TypedDict, total=False):
     """Options for screenshot rendering."""
 
@@ -36,6 +46,14 @@ class ScreenshotOptions(TypedDict, total=False):
     callback_url: str
     headers: Dict[str, str]
     cookies: List[Cookie]
+    actions: List[Action]
+    hide_selectors: List[str]
+    remove_selectors: List[str]
+    blur_selectors: List[str]
+    blur_radius: int
+    fail_if_contains: str
+    fail_if_missing: str
+    block_ads: bool
 
 
 class PdfMargins(TypedDict, total=False):
@@ -62,6 +80,14 @@ class PdfOptions(TypedDict, total=False):
     callback_url: str
     headers: Dict[str, str]
     cookies: List[Cookie]
+    actions: List[Action]
+    hide_selectors: List[str]
+    remove_selectors: List[str]
+    blur_selectors: List[str]
+    blur_radius: int
+    fail_if_contains: str
+    fail_if_missing: str
+    block_ads: bool
 
 
 class OgOptions(TypedDict, total=False):

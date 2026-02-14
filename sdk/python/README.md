@@ -110,20 +110,52 @@ screenshot = client.screenshot("https://example.com", {
     "fullPage": True,
     "darkMode": True
 })
+
+# Pre-capture actions
+screenshot = client.screenshot("https://example.com", {
+    "actions": [
+        {"type": "click", "selector": "#accept-cookies"},
+        {"type": "scroll", "y": 500},
+        {"type": "type", "selector": "#search", "value": "hello"},
+    ]
+})
+
+# Hide, remove, or blur elements
+screenshot = client.screenshot("https://example.com", {
+    "hide_selectors": [".ad-banner", ".cookie-popup"],
+    "remove_selectors": [".tracking-pixel"],
+    "blur_selectors": [".email", ".phone"],
+    "blur_radius": 15,
+    "block_ads": True,
+})
+
+# Content validation
+screenshot = client.screenshot("https://example.com", {
+    "fail_if_contains": "Error 404",
+    "fail_if_missing": ".main-content",
+})
 ```
 
 **Options:**
 - `url` (str): URL to screenshot
 - `html` (str): Raw HTML to screenshot (alternative to `url`)
 - `viewport` (dict): `{"width": int, "height": int}`
-- `format` (str): `"png"` or `"jpeg"` (default: `"png"`)
-- `quality` (int): JPEG quality 0-100 (default: 80)
+- `format` (str): `"png"`, `"jpeg"`, or `"webp"` (default: `"png"`)
+- `quality` (int): JPEG/WebP quality 0-100 (default: 80)
 - `fullPage` (bool): Capture full scrollable page (default: `False`)
 - `selector` (str): CSS selector to screenshot
 - `waitFor` (str): CSS selector to wait for before screenshot
 - `darkMode` (bool): Enable dark mode (default: `False`)
 - `deviceScaleFactor` (float): Device scale factor (default: 1)
 - `callback_url` (str): Webhook URL for async completion
+- `actions` (list): Pre-capture interactions `[{"type": "click|scroll|type|hover|wait", "selector": "...", "value": "...", "x": 0, "y": 0}]`
+- `hide_selectors` (list[str]): CSS selectors to hide (visibility: hidden)
+- `remove_selectors` (list[str]): CSS selectors to remove from DOM
+- `blur_selectors` (list[str]): CSS selectors to blur
+- `blur_radius` (int): Blur radius in pixels (1-50, default: 10)
+- `fail_if_contains` (str): Fail if page contains this text
+- `fail_if_missing` (str): Fail if page is missing this text
+- `block_ads` (bool): Block ads and trackers
 
 ##### `pdf(url_or_options, options=None) -> bytes`
 
@@ -153,6 +185,14 @@ pdf = client.pdf({
 - `footerTemplate` (str): HTML template for footer
 - `scale` (float): Scale factor (default: 1)
 - `callback_url` (str): Webhook URL for async completion
+- `actions` (list): Pre-capture interactions `[{"type": "click|scroll|type|hover|wait", ...}]`
+- `hide_selectors` (list[str]): CSS selectors to hide (visibility: hidden)
+- `remove_selectors` (list[str]): CSS selectors to remove from DOM
+- `blur_selectors` (list[str]): CSS selectors to blur
+- `blur_radius` (int): Blur radius in pixels (1-50, default: 10)
+- `fail_if_contains` (str): Fail if page contains this text
+- `fail_if_missing` (str): Fail if page is missing this text
+- `block_ads` (bool): Block ads and trackers
 
 ##### `og(url, options=None) -> bytes`
 

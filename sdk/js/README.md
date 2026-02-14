@@ -82,6 +82,30 @@ const delayed = await client.screenshot('https://example.com', {
   waitFor: '.content-loaded',
 });
 
+// Pre-capture actions: click, scroll, type before taking the screenshot
+const interactive = await client.screenshot('https://example.com', {
+  actions: [
+    { type: 'click', selector: '#accept-cookies' },
+    { type: 'scroll', y: 500 },
+    { type: 'type', selector: '#search', value: 'hello' },
+  ],
+});
+
+// Hide, remove, or blur elements before capture
+const cleaned = await client.screenshot('https://example.com', {
+  hide_selectors: ['.ad-banner', '.cookie-popup'],
+  remove_selectors: ['.tracking-pixel'],
+  blur_selectors: ['.email-address', '.phone-number'],
+  blur_radius: 15,
+  block_ads: true,
+});
+
+// Content validation — fail if page contains/misses specific content
+const validated = await client.screenshot('https://example.com', {
+  fail_if_contains: 'Error 404',
+  fail_if_missing: '.main-content',
+});
+
 // Render from raw HTML instead of a URL
 const html = await client.screenshot({
   html: '<h1>Hello World</h1>',
@@ -96,14 +120,22 @@ const html = await client.screenshot({
 | `url` | `string` | URL to capture |
 | `html` | `string` | Raw HTML to render (alternative to URL) |
 | `viewport` | `{ width, height }` | Browser viewport dimensions |
-| `format` | `'png' \| 'jpeg'` | Image format |
-| `quality` | `number` | JPEG quality (1-100) |
+| `format` | `'png' \| 'jpeg' \| 'webp'` | Image format |
+| `quality` | `number` | JPEG/WebP quality (1-100) |
 | `fullPage` | `boolean` | Capture full scrollable page |
 | `selector` | `string` | CSS selector to capture a specific element |
 | `waitFor` | `string` | CSS selector to wait for before capture |
 | `darkMode` | `boolean` | Enable dark mode emulation |
 | `deviceScaleFactor` | `number` | Device pixel ratio (e.g. 2 for retina) |
 | `callback_url` | `string` | Webhook URL for async notifications |
+| `actions` | `Action[]` | Pre-capture interactions (click, scroll, type, hover, wait) |
+| `hide_selectors` | `string[]` | CSS selectors to hide (visibility: hidden) |
+| `remove_selectors` | `string[]` | CSS selectors to remove from DOM |
+| `blur_selectors` | `string[]` | CSS selectors to blur |
+| `blur_radius` | `number` | Blur radius in pixels (1-50, default: 10) |
+| `fail_if_contains` | `string` | Fail if page contains this text |
+| `fail_if_missing` | `string` | Fail if page is missing this text |
+| `block_ads` | `boolean` | Block ads and trackers |
 
 ---
 
@@ -152,6 +184,14 @@ const htmlPdf = await client.pdf({
 | `footerTemplate` | `string` | HTML template for page footer |
 | `scale` | `number` | Page scale factor (0.1-2.0) |
 | `callback_url` | `string` | Webhook URL for async notifications |
+| `actions` | `Action[]` | Pre-capture interactions (click, scroll, type, hover, wait) |
+| `hide_selectors` | `string[]` | CSS selectors to hide (visibility: hidden) |
+| `remove_selectors` | `string[]` | CSS selectors to remove from DOM |
+| `blur_selectors` | `string[]` | CSS selectors to blur |
+| `blur_radius` | `number` | Blur radius in pixels (1-50, default: 10) |
+| `fail_if_contains` | `string` | Fail if page contains this text |
+| `fail_if_missing` | `string` | Fail if page is missing this text |
+| `block_ads` | `boolean` | Block ads and trackers |
 
 ---
 
@@ -495,6 +535,7 @@ All types are exported from the package entry point:
 
 ```ts
 import type {
+  Action,
   ScreenshotOptions,
   PdfOptions,
   OgOptions,
@@ -511,6 +552,7 @@ import type {
 
 | Type | Description |
 |------|-------------|
+| `Action` | Pre-capture interaction (click, scroll, type, hover, wait) |
 | `ScreenshotOptions` | Options for `screenshot()` and `screenshotAsync()` |
 | `PdfOptions` | Options for `pdf()` and `pdfAsync()` |
 | `OgOptions` | Options for `og()` — title, theme, template |

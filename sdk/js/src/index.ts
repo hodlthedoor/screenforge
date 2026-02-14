@@ -7,6 +7,7 @@ export {
 } from './client';
 
 export type {
+  Action,
   AnalyticsData,
   AnalyticsDailyEntry,
   AnalyticsTypeBreakdown,

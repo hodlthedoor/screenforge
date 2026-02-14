@@ -254,3 +254,111 @@ def test_error_429_rate_limit():
 
     assert exc_info.value.status == 429
     assert exc_info.value.retry_after == 5
+
+
+def test_screenshot_with_actions():
+    """Test screenshot with pre-capture actions."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        assert body["url"] == "https://example.com"
+        assert len(body["actions"]) == 3
+        assert body["actions"][0] == {"type": "click", "selector": "#accept"}
+        assert body["actions"][1] == {"type": "scroll", "y": 500}
+        assert body["actions"][2] == {"type": "type", "selector": "#search", "value": "hello"}
+        return httpx.Response(200, content=b"fake-png-data")
+
+    transport = httpx.MockTransport(handler)
+    client = ScreenForgeClient(api_key="test-key", transport=transport)
+
+    result = client.screenshot("https://example.com", {
+        "actions": [
+            {"type": "click", "selector": "#accept"},
+            {"type": "scroll", "y": 500},
+            {"type": "type", "selector": "#search", "value": "hello"},
+        ]
+    })
+    assert result == b"fake-png-data"
+
+
+def test_screenshot_with_selector_options():
+    """Test screenshot with hide/remove/blur selectors."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        assert body["hide_selectors"] == [".ad-banner", ".cookie-popup"]
+        assert body["remove_selectors"] == [".tracking-pixel"]
+        assert body["blur_selectors"] == [".email", ".phone"]
+        assert body["blur_radius"] == 15
+        return httpx.Response(200, content=b"fake-png-data")
+
+    transport = httpx.MockTransport(handler)
+    client = ScreenForgeClient(api_key="test-key", transport=transport)
+
+    result = client.screenshot("https://example.com", {
+        "hide_selectors": [".ad-banner", ".cookie-popup"],
+        "remove_selectors": [".tracking-pixel"],
+        "blur_selectors": [".email", ".phone"],
+        "blur_radius": 15,
+    })
+    assert result == b"fake-png-data"
+
+
+def test_screenshot_with_content_validation():
+    """Test screenshot with fail_if_contains and fail_if_missing."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        assert body["fail_if_contains"] == "Error 404"
+        assert body["fail_if_missing"] == ".main-content"
+        return httpx.Response(200, content=b"fake-png-data")
+
+    transport = httpx.MockTransport(handler)
+    client = ScreenForgeClient(api_key="test-key", transport=transport)
+
+    result = client.screenshot("https://example.com", {
+        "fail_if_contains": "Error 404",
+        "fail_if_missing": ".main-content",
+    })
+    assert result == b"fake-png-data"
+
+
+def test_screenshot_with_block_ads():
+    """Test screenshot with block_ads option."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        assert body["block_ads"] is True
+        return httpx.Response(200, content=b"fake-png-data")
+
+    transport = httpx.MockTransport(handler)
+    client = ScreenForgeClient(api_key="test-key", transport=transport)
+
+    result = client.screenshot("https://example.com", {"block_ads": True})
+    assert result == b"fake-png-data"
+
+
+def test_pdf_with_rendering_options():
+    """Test PDF with actions, selectors, content validation, and block_ads."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        assert body["actions"] == [{"type": "click", "selector": "#expand-all"}]
+        assert body["hide_selectors"] == [".no-print"]
+        assert body["remove_selectors"] == [".sidebar"]
+        assert body["blur_selectors"] == [".ssn"]
+        assert body["blur_radius"] == 20
+        assert body["fail_if_contains"] == "Access Denied"
+        assert body["fail_if_missing"] == "#report-content"
+        assert body["block_ads"] is True
+        return httpx.Response(200, content=b"fake-pdf-data")
+
+    transport = httpx.MockTransport(handler)
+    client = ScreenForgeClient(api_key="test-key", transport=transport)
+
+    result = client.pdf("https://example.com", {
+        "actions": [{"type": "click", "selector": "#expand-all"}],
+        "hide_selectors": [".no-print"],
+        "remove_selectors": [".sidebar"],
+        "blur_selectors": [".ssn"],
+        "blur_radius": 20,
+        "fail_if_contains": "Access Denied",
+        "fail_if_missing": "#report-content",
+        "block_ads": True,
+    })
+    assert result == b"fake-pdf-data"

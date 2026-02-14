@@ -9,6 +9,7 @@ from .exceptions import (
     RenderError,
 )
 from .types import (
+    Action,
     ScreenshotOptions,
     PdfOptions,
     OgOptions,
@@ -20,7 +21,7 @@ from .types import (
     BatchRenderResponse,
 )
 
-__version__ = "1.0.0"
+__version__ = "1.2.0"
 
 __all__ = [
     # Clients
@@ -33,6 +34,7 @@ __all__ = [
     "ValidationError",
     "RenderError",
     # Types
+    "Action",
     "ScreenshotOptions",
     "PdfOptions",
     "OgOptions",

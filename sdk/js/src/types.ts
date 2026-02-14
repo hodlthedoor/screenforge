@@ -10,6 +10,14 @@ export interface Cookie {
   path?: string;
 }
 
+export interface Action {
+  type: 'click' | 'scroll' | 'type' | 'hover' | 'wait';
+  selector?: string;
+  value?: string;
+  x?: number;
+  y?: number;
+}
+
 export interface ScreenshotOptions {
   url?: string;
   html?: string;
@@ -24,6 +32,14 @@ export interface ScreenshotOptions {
   callback_url?: string;
   headers?: Record<string, string>;
   cookies?: Cookie[];
+  actions?: Action[];
+  hide_selectors?: string[];
+  remove_selectors?: string[];
+  blur_selectors?: string[];
+  blur_radius?: number;
+  fail_if_contains?: string;
+  fail_if_missing?: string;
+  block_ads?: boolean;
 }
 
 export interface PdfMargins {
@@ -46,6 +62,14 @@ export interface PdfOptions {
   callback_url?: string;
   headers?: Record<string, string>;
   cookies?: Cookie[];
+  actions?: Action[];
+  hide_selectors?: string[];
+  remove_selectors?: string[];
+  blur_selectors?: string[];
+  blur_radius?: number;
+  fail_if_contains?: string;
+  fail_if_missing?: string;
+  block_ads?: boolean;
 }
 
 export interface OgOptions {

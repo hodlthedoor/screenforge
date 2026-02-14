@@ -6,7 +6,7 @@ import {
   ScreenForgeError,
   ValidationError,
 } from '../src/index';
-import type { BatchItem, RenderJob, BatchJob } from '../src/types';
+import type { Action, BatchItem, RenderJob, BatchJob } from '../src/types';
 
 function jsonResponse(body: unknown, status = 200, headers: Record<string, string> = {}) {
   return new Response(JSON.stringify(body), {
@@ -365,5 +365,91 @@ describe('ScreenForge client', () => {
       name: 'ScreenForgeError',
       code: 'TIMEOUT',
     });
+  });
+
+  it('screenshot() sends actions array in request body', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(binaryResponse('png-data', 'image/png'));
+
+    const actions: Action[] = [
+      { type: 'click', selector: '#accept-cookies' },
+      { type: 'scroll', y: 500 },
+      { type: 'type', selector: '#search', value: 'hello' },
+      { type: 'hover', selector: '.menu-item' },
+      { type: 'wait', value: '1000' },
+    ];
+
+    await client.screenshot('https://example.com', { actions });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(String(init.body));
+    expect(body.actions).toEqual(actions);
+  });
+
+  it('screenshot() sends element selectors and blur options', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(binaryResponse('png-data', 'image/png'));
+
+    await client.screenshot('https://example.com', {
+      hide_selectors: ['.ad-banner', '.cookie-popup'],
+      remove_selectors: ['.tracking-pixel'],
+      blur_selectors: ['.email-address', '.phone-number'],
+      blur_radius: 15,
+    });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(String(init.body));
+    expect(body.hide_selectors).toEqual(['.ad-banner', '.cookie-popup']);
+    expect(body.remove_selectors).toEqual(['.tracking-pixel']);
+    expect(body.blur_selectors).toEqual(['.email-address', '.phone-number']);
+    expect(body.blur_radius).toBe(15);
+  });
+
+  it('screenshot() sends content validation params', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(binaryResponse('png-data', 'image/png'));
+
+    await client.screenshot('https://example.com', {
+      fail_if_contains: 'Error 404',
+      fail_if_missing: '.main-content',
+    });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(String(init.body));
+    expect(body.fail_if_contains).toBe('Error 404');
+    expect(body.fail_if_missing).toBe('.main-content');
+  });
+
+  it('screenshot() sends block_ads option', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(binaryResponse('png-data', 'image/png'));
+
+    await client.screenshot('https://example.com', { block_ads: true });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(String(init.body));
+    expect(body.block_ads).toBe(true);
+  });
+
+  it('pdf() sends actions and rendering options', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(binaryResponse('pdf-data', 'application/pdf'));
+
+    await client.pdf('https://example.com', {
+      actions: [{ type: 'click', selector: '#expand-all' }],
+      hide_selectors: ['.no-print'],
+      remove_selectors: ['.sidebar'],
+      blur_selectors: ['.ssn'],
+      blur_radius: 20,
+      fail_if_contains: 'Access Denied',
+      fail_if_missing: '#report-content',
+      block_ads: true,
+    });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(String(init.body));
+    expect(body.actions).toEqual([{ type: 'click', selector: '#expand-all' }]);
+    expect(body.hide_selectors).toEqual(['.no-print']);
+    expect(body.remove_selectors).toEqual(['.sidebar']);
+    expect(body.blur_selectors).toEqual(['.ssn']);
+    expect(body.blur_radius).toBe(20);
+    expect(body.fail_if_contains).toBe('Access Denied');
+    expect(body.fail_if_missing).toBe('#report-content');
+    expect(body.block_ads).toBe(true);
   });
 });
