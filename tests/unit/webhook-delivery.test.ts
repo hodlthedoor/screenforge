@@ -140,8 +140,10 @@ describe('webhook delivery', () => {
         'whsec_test_key',
       );
 
-      // Wait for webhook to be processed
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      // Poll for webhook delivery (CI can be slow)
+      for (let i = 0; i < 20 && requests.length === 0; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
 
       expect(requests).toHaveLength(1);
       const req = requests[0];
@@ -167,11 +169,15 @@ describe('webhook delivery', () => {
         'whsec_test_key',
       );
 
-      // Wait for webhook to be processed
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      // Poll for delivery completion (CI can be slow)
+      let delivery;
+      for (let i = 0; i < 20; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        delivery = await getDeliveryStatus(deliveryId);
+        if (delivery.status !== 'pending') break;
+      }
 
-      const delivery = await getDeliveryStatus(deliveryId);
-      expect(delivery.status).toBe('delivered');
+      expect(delivery!.status).toBe('delivered');
       expect(delivery.attempts).toBe(1);
       expect(delivery.lastStatusCode).toBe(200);
       expect(delivery.deliveredAt).toBeDefined();
@@ -196,11 +202,15 @@ describe('webhook delivery', () => {
         'whsec_test_key',
       );
 
-      // Wait for first attempt
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      // Poll for first attempt (CI can be slow)
+      let delivery;
+      for (let i = 0; i < 20; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        delivery = await getDeliveryStatus(deliveryId);
+        if (delivery.status !== 'pending') break;
+      }
 
-      const delivery = await getDeliveryStatus(deliveryId);
-      expect(delivery.status).toBe('retrying');
+      expect(delivery!.status).toBe('retrying');
       expect(delivery.attempts).toBe(1);
       expect(delivery.lastStatusCode).toBe(500);
     });
