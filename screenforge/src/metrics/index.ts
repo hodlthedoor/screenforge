@@ -100,6 +100,12 @@ export function initMetrics(): void {
     registers: [register],
   });
 
+  new Counter({
+    name: 'screenforge_storage_reclaimed_bytes_total',
+    help: 'Total bytes reclaimed by storage lifecycle cleanup',
+    registers: [register],
+  });
+
   metricsInitialized = true;
 }
 
@@ -178,5 +184,12 @@ export function updateCacheGauges(entries: number, sizeBytes: number): void {
   }
   if (sizeGauge) {
     sizeGauge.set(sizeBytes);
+  }
+}
+
+export function incrementStorageReclaimedBytes(bytes: number): void {
+  const counter = register.getSingleMetric('screenforge_storage_reclaimed_bytes_total') as Counter<string>;
+  if (counter) {
+    counter.inc(bytes);
   }
 }

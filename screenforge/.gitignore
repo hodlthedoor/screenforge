@@ -8,7 +8,7 @@ coverage/
 test-results/
 playwright-report/
 *.tgz
-storage/
-storage-test/
+/storage/
+/storage-test/
 .DS_Store
 tests/load/results.json

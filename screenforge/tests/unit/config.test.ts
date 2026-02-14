@@ -55,4 +55,20 @@ describe('config', () => {
     expect(config.PORT).toBe(8080);
     expect(typeof config.PORT).toBe('number');
   });
+
+  it('defaults STORAGE_RETENTION_DAYS to 7', () => {
+    const config = loadConfig(validEnv);
+    expect(config.STORAGE_RETENTION_DAYS).toBe(7);
+  });
+
+  it('accepts custom STORAGE_RETENTION_DAYS', () => {
+    const config = loadConfig({ ...validEnv, STORAGE_RETENTION_DAYS: '14' });
+    expect(config.STORAGE_RETENTION_DAYS).toBe(14);
+  });
+
+  it('rejects STORAGE_RETENTION_DAYS less than 1', () => {
+    expect(() =>
+      loadConfig({ ...validEnv, STORAGE_RETENTION_DAYS: '0' }),
+    ).toThrow('Invalid environment configuration');
+  });
 });

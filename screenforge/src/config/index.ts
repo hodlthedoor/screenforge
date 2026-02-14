@@ -5,6 +5,7 @@ const envSchema = z.object({
   REDIS_URL: z.string().default('redis://127.0.0.1:6379/0'),
   DATABASE_URL: z.string().default('postgresql:///screenforge?host=/var/run/postgresql'),
   STORAGE_PATH: z.string().default('./storage'),
+  STORAGE_RETENTION_DAYS: z.coerce.number().int().min(1).default(7),
   API_KEY_SALT: z.string().min(16),
   ADMIN_API_KEY: z.string().min(16).optional(),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),

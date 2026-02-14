@@ -11,6 +11,7 @@ import {
   updateQueueDepthGauge,
   updateBrowserPoolGauge,
   updateCacheGauges,
+  incrementStorageReclaimedBytes,
 } from '../../src/metrics/index.js';
 
 describe('metrics', () => {
@@ -71,6 +72,7 @@ describe('metrics', () => {
       expect(result).toContain('# TYPE screenforge_browser_pool_browsers gauge');
       expect(result).toContain('# TYPE screenforge_cache_entries gauge');
       expect(result).toContain('# TYPE screenforge_cache_size_bytes gauge');
+      expect(result).toContain('# TYPE screenforge_storage_reclaimed_bytes_total counter');
     });
   });
 
@@ -207,6 +209,24 @@ describe('metrics', () => {
       const metrics = await getMetrics();
       expect(metrics).toMatch(/screenforge_cache_entries\s+80/);
       expect(metrics).toMatch(/screenforge_cache_size_bytes\s+800000/);
+    });
+  });
+
+  describe('storage lifecycle metrics', () => {
+    it('increments storage reclaimed bytes counter', async () => {
+      incrementStorageReclaimedBytes(1024);
+      incrementStorageReclaimedBytes(2048);
+
+      const metrics = await getMetrics();
+      expect(metrics).toMatch(/screenforge_storage_reclaimed_bytes_total\s+\d+/);
+    });
+
+    it('allows zero bytes to be tracked', async () => {
+      incrementStorageReclaimedBytes(0);
+
+      const metrics = await getMetrics();
+      // Should still emit the counter even with 0
+      expect(metrics).toContain('screenforge_storage_reclaimed_bytes_total');
     });
   });
 });
