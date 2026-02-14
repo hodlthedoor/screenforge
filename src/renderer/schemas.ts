@@ -341,3 +341,51 @@ export const gifOptionsSchema = z.object({
 });
 
 export type GifOptions = z.infer<typeof gifOptionsSchema>;
+
+// Visual diff options — screenshot_options reused for 'urls' mode
+export const screenshotSubOptionsSchema = z.object({
+  width: z.number().int().min(1).max(7680).default(1920),
+  height: z.number().int().min(1).max(4320).default(1080),
+  fullPage: z.boolean().default(false),
+  darkMode: z.boolean().default(false),
+  deviceScaleFactor: z.number().min(0.5).max(4).default(1),
+  delay: z.number().int().min(0).max(30_000).default(0),
+  waitFor: z.string().optional(),
+  wait: waitStrategySchema.optional(),
+}).refine((data) => !(data.waitFor && data.wait), {
+  message: 'waitFor and wait are mutually exclusive',
+});
+
+export type ScreenshotSubOptions = z.infer<typeof screenshotSubOptionsSchema>;
+
+export const diffOptionsSchema = z.object({
+  // Input mode — discriminated by which fields are present
+  url_a: httpUrlSchema.optional(),
+  url_b: httpUrlSchema.optional(),
+  job_id_a: z.string().uuid().optional(),
+  job_id_b: z.string().uuid().optional(),
+  // screenshot options for 'urls' mode
+  screenshot_options: screenshotSubOptionsSchema.optional(),
+  // Diff tuning
+  threshold: z.number().min(0).max(1).default(0.1),
+  include_diff_image: z.boolean().default(true),
+  anti_aliasing_detection: z.boolean().default(false),
+  output_format: z.enum(['png', 'jpeg', 'webp']).default('png'),
+}).refine((data) => {
+  const hasUrls = data.url_a && data.url_b;
+  const hasJobs = data.job_id_a && data.job_id_b;
+  // Exactly one mode must be provided (images mode handled via multipart, not JSON body)
+  return (hasUrls && !hasJobs) || (!hasUrls && hasJobs);
+}, {
+  message: 'Provide either (url_a + url_b) or (job_id_a + job_id_b)',
+});
+
+export type DiffOptions = z.infer<typeof diffOptionsSchema>;
+
+export interface DiffResult {
+  mismatch_percentage: number;
+  total_pixels: number;
+  diff_pixels: number;
+  diff_image?: string; // base64-encoded
+  durationMs: number;
+}

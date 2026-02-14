@@ -10,7 +10,7 @@ import { getFormatFromContentType } from '../utils/format.js';
 export interface RenderJobData {
   jobId: string;
   apiKeyId: string | null;
-  type: 'screenshot' | 'pdf' | 'og' | 'gif';
+  type: 'screenshot' | 'pdf' | 'og' | 'gif' | 'diff';
   url?: string;
   options: Record<string, unknown>;
   callbackUrl?: string;

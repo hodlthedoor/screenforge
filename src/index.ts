@@ -16,6 +16,7 @@ import { asyncRenderRoutes } from './routes/async-render.js';
 import { batchRoutes } from './routes/batch.js';
 import { ogRoutes } from './routes/og.js';
 import { gifRoutes } from './routes/gif.js';
+import { diffRoutes } from './routes/diff.js';
 import { signedRoutes } from './routes/signed.js';
 import { devicesRoutes } from './routes/devices.js';
 import { requestIdHook } from './security/request-id.js';
@@ -256,6 +257,7 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
   await asyncRenderRoutes(app);
   await batchRoutes(app);
   await gifRoutes(app, pool, rateLimiter);
+  await diffRoutes(app, pool, rateLimiter);
   await ogRoutes(app, pool, cache);
   await webhooksRoutes(app);
   await analyticsRoutes(app);
