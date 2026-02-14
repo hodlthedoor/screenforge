@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { getPool, closePool } from '../../src/db/index.js';
 import { createApiKey } from '../../src/db/api-keys.js';
 import { loadConfig } from '../../src/config/index.js';
-import { enqueueWebhook, getDeliveryStatus, RETRY_DELAYS, processWebhookJob, closeWebhookQueue, type WebhookJobData } from '../../src/webhooks/delivery.js';
+import { enqueueWebhook, getDeliveryStatus, RETRY_DELAYS, processWebhookJob, closeWebhookQueue, getWebhookQueue, type WebhookJobData } from '../../src/webhooks/delivery.js';
 import type { Job } from 'bullmq';
 import { createServer, type Server } from 'node:http';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -54,6 +54,9 @@ describe('webhook delivery', () => {
   });
 
   afterEach(async () => {
+    // Drain BullMQ queue to prevent cross-test interference from workers in other test files
+    const queue = getWebhookQueue('redis://127.0.0.1:6379/15');
+    await queue.drain();
     requests = [];
     responseStatus = 200;
     await getPool().query('DELETE FROM webhook_deliveries WHERE api_key_id = $1', [apiKeyId]);
