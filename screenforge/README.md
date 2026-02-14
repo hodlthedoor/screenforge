@@ -339,44 +339,59 @@ pm2 start dist/index.js --name screenforge
 pm2 save
 ```
 
-### Nginx Reverse Proxy
+### Production Deployment with SSL
 
-Sample Nginx configuration for proxying to ScreenForge with SSL:
+ScreenForge includes production-ready nginx configuration with SSL, rate limiting, and security headers.
 
-```nginx
-server {
-    listen 443 ssl http2;
-    server_name api.screenforge.dev;
+#### Self-Signed Certificates (Internal/Development)
 
-    ssl_certificate     /etc/letsencrypt/live/api.screenforge.dev/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/api.screenforge.dev/privkey.pem;
+The repository includes `nginx-screenforge.conf` configured with self-signed certificates:
 
-    client_max_body_size 50M;
+```bash
+# 1. Deploy nginx configuration
+sudo bash deploy-nginx.sh
 
-    location / {
-        proxy_pass http://127.0.0.1:3100;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+# 2. Add domain to /etc/hosts (use your server's IP)
+echo "192.168.0.18 screenforge.local" | sudo tee -a /etc/hosts
 
-        # WebSocket support (for dashboard live updates)
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-    }
+# 3. Reload nginx
+sudo nginx -t && sudo systemctl reload nginx
 
-    # Increase timeout for long renders
-    proxy_read_timeout 120s;
-    proxy_send_timeout 120s;
-}
-
-server {
-    listen 80;
-    server_name api.screenforge.dev;
-    return 301 https://$host$request_uri;
-}
+# 4. Restart pm2 if running
+pm2 restart screenforge
 ```
+
+Access ScreenForge at `https://screenforge.local` (browsers will warn about self-signed cert; this is expected).
+
+#### Let's Encrypt SSL (Public Domain)
+
+For production with a public domain:
+
+```bash
+# 1. Update nginx-screenforge.conf server_name to your domain
+sed -i 's/screenforge.local/yourdomain.com/g' nginx-screenforge.conf
+
+# 2. Deploy nginx config
+sudo bash deploy-nginx.sh
+
+# 3. Install certbot and obtain SSL certificate
+sudo apt install certbot python3-certbot-nginx
+sudo certbot --nginx -d yourdomain.com
+
+# 4. Update .env BASE_URL
+sed -i 's|https://screenforge.local|https://yourdomain.com|' .env
+
+# 5. Reload nginx and restart pm2
+sudo systemctl reload nginx
+pm2 restart screenforge
+```
+
+The nginx config includes:
+- HTTP → HTTPS redirect (301)
+- Rate limiting (10 req/s per IP, burst 20)
+- Security headers (HSTS, X-Frame-Options, CSP-ready)
+- Gzip compression
+- 120s timeout for long renders
 
 ---
 
