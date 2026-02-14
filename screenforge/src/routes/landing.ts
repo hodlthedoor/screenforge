@@ -133,6 +133,7 @@ function landingHtml(baseUrl: string): string {
       <strong style="font-size:1.2rem">ScreenForge</strong>
       <div class="nav-links">
         <a href="/docs">Docs</a>
+        <a href="/playground">Playground</a>
         <a href="/pricing">Pricing</a>
         <a href="/login" class="btn btn-secondary" style="padding:8px 20px">Log In</a>
         <a href="/register" class="btn btn-primary" style="padding:8px 20px">Get Started</a>
@@ -440,6 +441,7 @@ export async function landingRoutes(app: FastifyInstance): Promise<void> {
       'User-agent: *',
       'Allow: /',
       'Allow: /docs',
+      'Allow: /playground',
       'Allow: /terms',
       'Allow: /privacy',
       'Disallow: /dashboard',
@@ -456,7 +458,7 @@ export async function landingRoutes(app: FastifyInstance): Promise<void> {
 
   app.get('/sitemap.xml', async (_req: FastifyRequest, reply: FastifyReply) => {
     const config = getConfig();
-    const publicPaths = ['/', '/docs', '/pricing', '/terms', '/privacy', '/login', '/register'];
+    const publicPaths = ['/', '/docs', '/playground', '/pricing', '/terms', '/privacy', '/login', '/register'];
     const today = new Date().toISOString().split('T')[0];
     const urls = publicPaths
       .map(
