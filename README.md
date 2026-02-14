@@ -29,6 +29,11 @@ The API is available at `http://localhost:3100`, Swagger docs at `http://localho
 - **Screenshots** -- full page, viewport, or element-level capture in PNG/JPEG with custom dimensions, dark mode, device scale factor, and delay
 - **PDF generation** -- render any URL to PDF with A4/Letter/Legal page formats, margins, landscape mode, and custom header/footer templates
 - **OG card generation** -- auto-generate Open Graph preview images with built-in templates and light/dark themes
+- **Pre-capture actions** *(v1.2.0)* -- automate click, scroll, type, hover, wait actions before capture for interactive pages
+- **Element hiding/removal** *(v1.2.0)* -- hide or remove DOM elements via CSS selectors before rendering
+- **Element blurring** *(v1.2.0)* -- blur sensitive content with configurable radius for privacy-safe screenshots
+- **Content validation** *(v1.2.0)* -- fail renders if specific text is present or missing from the page
+- **Ad blocking** *(v1.2.0)* -- block 40+ ad/tracker domains for cleaner screenshots
 - **Batch rendering** -- submit up to 50 mixed render jobs (screenshot, PDF, OG) in a single request
 - **Async rendering** -- queue any render job and poll for results, ideal for long-running captures
 - **Signed URLs** -- generate HMAC-signed GET URLs for screenshots and PDFs, perfect for embedding in HTML without exposing API keys
@@ -174,6 +179,90 @@ curl "http://localhost:3100/v1/signed/screenshot?url=https://example.com&width=1
 curl "http://localhost:3100/v1/signed/pdf?url=https://example.com&format=A4&signature=HMAC_SIG&expires=1700000000" \
   --output page.pdf
 ```
+
+#### Advanced Capture Controls (v1.2.0)
+
+ScreenForge supports powerful pre-capture interactions, element filtering, content validation, and ad blocking:
+
+**Pre-capture actions** -- automate interactions before screenshot/PDF capture:
+
+```bash
+curl -X POST http://localhost:3100/v1/screenshot \
+  -H "Authorization: Bearer sf_live_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://example.com",
+    "actions": [
+      {"type": "click", "selector": "#accept-cookies"},
+      {"type": "wait", "duration": 500},
+      {"type": "scroll", "x": 0, "y": 500},
+      {"type": "type", "selector": "#search", "text": "Hello"}
+    ]
+  }' \
+  --output interactive.png
+```
+
+Actions are executed in order before capture. Supported types: `click`, `scroll`, `type`, `hover`, `wait`, `delay`.
+
+**Element hiding and removal** -- hide or remove elements from the DOM:
+
+```bash
+curl -X POST http://localhost:3100/v1/screenshot \
+  -H "Authorization: Bearer sf_live_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://example.com",
+    "hide_selectors": [".sidebar", ".footer"],
+    "remove_selectors": ["#popup-banner"]
+  }' \
+  --output clean.png
+```
+
+- `hide_selectors`: elements hidden with CSS (`visibility: hidden`)
+- `remove_selectors`: elements removed from DOM entirely
+
+**Element blurring** -- blur sensitive content:
+
+```bash
+curl -X POST http://localhost:3100/v1/screenshot \
+  -H "Authorization: Bearer sf_live_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://example.com/dashboard",
+    "blur_selectors": [".email", ".phone", ".ssn"],
+    "blur_radius": 20
+  }' \
+  --output blurred.png
+```
+
+**Content validation** -- fail capture if conditions aren't met:
+
+```bash
+curl -X POST http://localhost:3100/v1/screenshot \
+  -H "Authorization: Bearer sf_live_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://example.com",
+    "fail_if_contains": "Error 404",
+    "fail_if_missing": "Welcome"
+  }'
+# Returns 400 if "Error 404" is found or "Welcome" is missing
+```
+
+**Ad blocking** -- block ads, trackers, and analytics:
+
+```bash
+curl -X POST http://localhost:3100/v1/screenshot \
+  -H "Authorization: Bearer sf_live_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://example.com",
+    "block_ads": true
+  }' \
+  --output no-ads.png
+```
+
+Blocks 40+ ad domains including Google Ads, Doubleclick, Amazon Ads, and common trackers.
 
 ---
 

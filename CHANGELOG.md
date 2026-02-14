@@ -2,6 +2,27 @@
 
 All notable changes to ScreenForge are documented here.
 
+## [1.2.0] - 2026-02-14
+
+### Added
+
+- **Pre-capture actions** — automate interactions before rendering with `click`, `scroll`, `type`, `hover`, `wait`, and `delay` actions executed in sequence (up to 10 actions per request)
+- **Element hiding** — hide DOM elements via CSS selectors with `hide_selectors` array (up to 20 selectors, uses `visibility: hidden`)
+- **Element removal** — remove DOM elements entirely with `remove_selectors` array (up to 20 selectors)
+- **Element blurring** — blur sensitive content with `blur_selectors` array and configurable `blur_radius` (1-50px, default 10px)
+- **Content validation** — fail renders if specific text is found (`fail_if_contains`) or missing (`fail_if_missing`) from page content
+- **Ad blocking** — block 40+ ad/tracker domains with `block_ads` flag (Google Ads, Doubleclick, Amazon Ads, AppNexus, etc.)
+- **SDK Phase 2 support** — JavaScript and Python SDKs updated with full Phase 2 rendering options
+
+### Changed
+
+- Expanded README with Advanced Capture Controls section and curl examples for Phase 2 features
+- Updated SDK documentation with Phase 2 option examples
+
+### Fixed
+
+- None
+
 ## [1.1.0] - 2026-02-14
 
 ### Features
@@ -91,6 +112,7 @@ All notable changes to ScreenForge are documented here.
 - Health check endpoints
 - OpenAPI/Swagger documentation
 
+[1.2.0]: https://github.com/hodlthedoor/screenforge/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/hodlthedoor/screenforge/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/hodlthedoor/screenforge/releases/tag/v1.0.0
 [0.2.0]: https://github.com/hodlthedoor/screenforge/releases/tag/v1.0.0
