@@ -63,7 +63,7 @@ SCREENFORGE_API_KEY=sk_xxx MCP_TRANSPORT=sse PORT=3333 npx @screenforge/mcp-serv
 SSE endpoints:
 
 - `GET /sse`
-- `POST /messages`
+- `POST /messages?sessionId=<id>` (use the `sessionId` from the SSE `endpoint` event)
 - `GET /health`
 
 ## Claude Desktop config example

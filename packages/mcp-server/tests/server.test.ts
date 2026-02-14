@@ -12,11 +12,13 @@ class MockSSETransport {
   static nextId = 1;
   static throwAfterSend = false;
   static instances: MockSSETransport[] = [];
+  static startCalls = 0;
 
   readonly sessionId: string;
   readonly endpoint: string;
   readonly res: MockResponse;
   handledPostMessages = 0;
+  onclose?: () => void;
 
   constructor(endpoint: string, res: ServerResponse) {
     this.sessionId = `session-${MockSSETransport.nextId++}`;
@@ -26,8 +28,12 @@ class MockSSETransport {
   }
 
   async start(): Promise<void> {
+    MockSSETransport.startCalls += 1;
     this.res.writeHead(200, { 'content-type': 'text/event-stream' });
-    this.res.end(`event: endpoint\ndata: ${this.endpoint}?sessionId=${this.sessionId}\n\n`);
+    this.res.write(`event: endpoint\ndata: ${this.endpoint}?sessionId=${this.sessionId}\n\n`);
+    this.res.on('close', () => {
+      this.onclose?.();
+    });
   }
 
   async handlePostMessage(_req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -44,8 +50,13 @@ class MockSSETransport {
 }
 
 class MockMcpServer {
+  static connectCalls = 0;
+
   registerTool(): void {}
-  async connect(): Promise<void> {}
+  async connect(transport: { start: () => Promise<void> }): Promise<void> {
+    MockMcpServer.connectCalls += 1;
+    await transport.start();
+  }
 }
 
 class MockScreenForge {
@@ -57,13 +68,19 @@ class MockResponse {
   headersSent = false;
   writableEnded = false;
   body = '';
+  private readonly listeners = new Map<string, Array<() => void>>();
 
-  writeHead(statusCode: number): this {
+  writeHead(statusCode: number, _headers?: Record<string, string>): this {
     if (this.headersSent) {
       throw new Error('ERR_HTTP_HEADERS_SENT');
     }
     this.statusCode = statusCode;
     this.headersSent = true;
+    return this;
+  }
+
+  write(chunk: string): this {
+    this.body += chunk;
     return this;
   }
 
@@ -73,6 +90,20 @@ class MockResponse {
     }
     this.writableEnded = true;
     return this;
+  }
+
+  on(event: 'close', listener: () => void): this {
+    const existing = this.listeners.get(event) ?? [];
+    existing.push(listener);
+    this.listeners.set(event, existing);
+    return this;
+  }
+
+  emit(event: 'close'): void {
+    const listeners = this.listeners.get(event) ?? [];
+    for (const listener of listeners) {
+      listener();
+    }
   }
 }
 
@@ -107,10 +138,12 @@ describe('startSseServer', () => {
     MockSSETransport.nextId = 1;
     MockSSETransport.throwAfterSend = false;
     MockSSETransport.instances = [];
+    MockSSETransport.startCalls = 0;
+    MockMcpServer.connectCalls = 0;
     vi.resetModules();
   });
 
-  it('routes POST messages by sessionId', async () => {
+  it('keeps SSE session alive for POST routing and validates sessionId', async () => {
     const { startSseServer } = await import('../src/server');
     await startSseServer(
       { apiKey: 'sk_test', apiUrl: 'http://localhost:3100', inlineDataLimitBytes: 1024 },
@@ -125,6 +158,10 @@ describe('startSseServer', () => {
       { method: 'GET', url: '/sse', headers: { host: 'localhost:3333' } } as IncomingMessage,
       sseRes as unknown as ServerResponse,
     );
+    expect(sseRes.statusCode).toBe(200);
+    expect(sseRes.writableEnded).toBe(false);
+    expect(MockMcpServer.connectCalls).toBe(1);
+    expect(MockSSETransport.startCalls).toBe(1);
     expect(MockSSETransport.instances).toHaveLength(1);
     const sessionId = MockSSETransport.instances[0]!.sessionId;
 
@@ -148,6 +185,33 @@ describe('startSseServer', () => {
       unknownSessionRes as unknown as ServerResponse,
     );
     expect(unknownSessionRes.statusCode).toBe(404);
+  });
+
+  it('removes session mapping when SSE connection closes', async () => {
+    const { startSseServer } = await import('../src/server');
+    await startSseServer(
+      { apiKey: 'sk_test', apiUrl: 'http://localhost:3100', inlineDataLimitBytes: 1024 },
+      { port: 3333, host: '127.0.0.1', ssePath: '/sse', messagesPath: '/messages' },
+    );
+
+    const handler = requestHandler;
+    expect(handler).toBeTruthy();
+
+    const sseRes = new MockResponse();
+    await handler!(
+      { method: 'GET', url: '/sse', headers: { host: 'localhost:3333' } } as IncomingMessage,
+      sseRes as unknown as ServerResponse,
+    );
+
+    const sessionId = MockSSETransport.instances[0]!.sessionId;
+    sseRes.emit('close');
+
+    const postRes = new MockResponse();
+    await handler!(
+      { method: 'POST', url: `/messages?sessionId=${sessionId}`, headers: { host: 'localhost:3333' } } as IncomingMessage,
+      postRes as unknown as ServerResponse,
+    );
+    expect(postRes.statusCode).toBe(404);
   });
 
   it('does not crash when an error occurs after response headers were sent', async () => {

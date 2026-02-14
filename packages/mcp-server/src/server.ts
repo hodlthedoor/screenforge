@@ -110,7 +110,6 @@ export async function startSseServer(config: McpServerConfig, options: SseServer
         }
 
         await server.connect(transport);
-        await transport.start();
         return;
       }
 
