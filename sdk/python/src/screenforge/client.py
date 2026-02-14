@@ -350,6 +350,22 @@ class _ClientMixin:
             body["include_screenshot"] = include_screenshot
         return body
 
+    @staticmethod
+    def _dict_to_schedule(data: Dict[str, Any]) -> Schedule:
+        """Convert API dict to Schedule dataclass."""
+        return Schedule(
+            id=data["id"],
+            name=data["name"],
+            cron_expression=data["cron_expression"],
+            render_type=data["render_type"],
+            render_config=data["render_config"],
+            enabled=data["enabled"],
+            created_at=data["created_at"],
+            updated_at=data["updated_at"],
+            next_run_at=data.get("next_run_at"),
+            last_run_at=data.get("last_run_at"),
+        )
+
 
 class ScreenForgeClient(_ClientMixin):
     """Synchronous ScreenForge API client."""
@@ -674,22 +690,6 @@ class ScreenForgeClient(_ClientMixin):
             schedule_id: Schedule ID
         """
         self._request("DELETE", f"/v1/schedules/{quote(schedule_id, safe='')}")
-
-    @staticmethod
-    def _dict_to_schedule(data: Dict[str, Any]) -> Schedule:
-        """Convert API dict to Schedule dataclass."""
-        return Schedule(
-            id=data["id"],
-            name=data["name"],
-            cron_expression=data["cron_expression"],
-            render_type=data["render_type"],
-            render_config=data["render_config"],
-            enabled=data["enabled"],
-            created_at=data["created_at"],
-            updated_at=data["updated_at"],
-            next_run_at=data.get("next_run_at"),
-            last_run_at=data.get("last_run_at"),
-        )
 
     def _request(
         self,

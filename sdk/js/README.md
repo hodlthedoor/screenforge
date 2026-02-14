@@ -862,10 +862,10 @@ import type {
   GifOptions,
   DiffOptions,
   DiffScreenshotOptions,
+  Schedule,
   ScheduleRenderType,
   CreateScheduleOptions,
   UpdateScheduleOptions,
-  Schedule,
 } from '@screenforge/sdk';
 ```
 
@@ -884,13 +884,6 @@ import type {
 | `AsyncRenderResponse` | Return type of `screenshotAsync()` and `pdfAsync()` |
 | `BatchRenderResponse` | Return type of `batchRender()` |
 | `ExtractOptions` | Options for `extract()` — CSS selectors, metadata, and screenshot |
-| `GifOptions` | Options for `gif()` and `gifAsync()` |
-| `DiffOptions` | Options for `diff()` — URL or job ID pairs for comparison |
-| `DiffScreenshotOptions` | Screenshot options specific to `diff()` |
-| `ScheduleRenderType` | Schedule render type: `'screenshot' | 'pdf' | 'og'` |
-| `CreateScheduleOptions` | Options for `createSchedule()` |
-| `UpdateScheduleOptions` | Options for `updateSchedule()` |
-| `Schedule` | Schedule object with cron and render config |
 | `ExtractResult` | Return type of `extract()` — extracted text, metadata, links |
 | `ExtractScreenshotOptions` | Screenshot options specific to `extract()` |
 | `AccessibilityOptions` | Options for `accessibility()` — standard, screenshot |
@@ -898,3 +891,10 @@ import type {
 | `AccessibilityScreenshotOptions` | Screenshot options specific to `accessibility()` |
 | `AccessibilityViolation` | A single accessibility violation with impact and nodes |
 | `AccessibilityViolationNode` | A DOM node affected by an accessibility violation |
+| `GifOptions` | Options for `gif()` and `gifAsync()` |
+| `DiffOptions` | Options for `diff()` — URL or job ID pairs for comparison |
+| `DiffScreenshotOptions` | Screenshot options specific to `diff()` |
+| `ScheduleRenderType` | Schedule render type: `'screenshot' | 'pdf' | 'og'` |
+| `CreateScheduleOptions` | Options for `createSchedule()` |
+| `UpdateScheduleOptions` | Options for `updateSchedule()` |
+| `Schedule` | Schedule object with cron and render config |

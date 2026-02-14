@@ -343,6 +343,147 @@ async with AsyncScreenForgeClient(api_key="your-api-key") as client:
     print(f"Violations: {report.violationsCount}")
 ```
 
+##### `gif(options: GifOptions) -> bytes`
+
+Render an animated GIF by scrolling through a webpage.
+
+```python
+gif_data = client.gif({
+    "url": "https://example.com",
+    "duration": 5000,
+    "fps": 30,
+    "scrollDistance": 1000,
+})
+with open("animation.gif", "wb") as f:
+    f.write(gif_data)
+
+# Async version
+async with AsyncScreenForgeClient(api_key="your-api-key") as client:
+    gif_data = await client.gif({"url": "https://example.com", "duration": 5000})
+```
+
+**Options:**
+- `url` (str): URL to render
+- `duration` (int): Animation duration in ms (default: 5000)
+- `fps` (int): Frames per second (default: 30)
+- `scrollDistance` (int): Vertical scroll distance in pixels
+- `viewport` (dict): `{"width": int, "height": int}`
+- `waitFor` (str): CSS selector to wait for before starting
+- `headers` (dict): Custom HTTP headers
+- `cookies` (list): Cookies to set
+- `actions` (list): Pre-capture interactions
+
+##### `gif_async(options: GifOptions) -> AsyncRenderResponse`
+
+Queue a GIF render job asynchronously.
+
+```python
+job = client.gif_async({"url": "https://example.com", "duration": 10000})
+print(f"Job ID: {job.jobId}")
+status = client.poll_job(job.jobId)
+```
+
+##### `diff(options: DiffOptions) -> bytes`
+
+Generate a visual diff image comparing two screenshots.
+
+```python
+# Compare two URLs
+diff_image = client.diff({
+    "url_a": "https://example.com/old",
+    "url_b": "https://example.com/new",
+    "threshold": 0.1,
+})
+with open("diff.png", "wb") as f:
+    f.write(diff_image)
+
+# Compare two existing render jobs
+diff_image = client.diff({
+    "job_id_a": "job_123",
+    "job_id_b": "job_456",
+})
+
+# Async version
+async with AsyncScreenForgeClient(api_key="your-api-key") as client:
+    diff_image = await client.diff({
+        "url_a": "https://example.com/v1",
+        "url_b": "https://example.com/v2",
+    })
+```
+
+**Options:**
+- `url_a` (str): First URL to compare
+- `url_b` (str): Second URL to compare
+- `job_id_a` (str): First job ID to compare (alternative to `url_a`)
+- `job_id_b` (str): Second job ID to compare (alternative to `url_b`)
+- `threshold` (float): Diff sensitivity (0-1, default: 0.1)
+- `screenshot_options` (dict): Screenshot capture settings
+
+##### `create_schedule(options: ScheduleCreate) -> Schedule`
+
+Create a recurring render schedule using cron expressions.
+
+```python
+schedule = client.create_schedule({
+    "name": "Daily homepage screenshot",
+    "cron_expression": "0 9 * * *",
+    "render_type": "screenshot",
+    "render_config": {"url": "https://example.com", "fullPage": True},
+})
+print(f"Created: {schedule.id}, Next run: {schedule.next_run_at}")
+
+# Async version
+async with AsyncScreenForgeClient(api_key="your-api-key") as client:
+    schedule = await client.create_schedule({...})
+```
+
+##### `list_schedules() -> List[Schedule]`
+
+List all schedules for the authenticated API key.
+
+```python
+schedules = client.list_schedules()
+for s in schedules:
+    print(f"{s.id}: {s.name} ({s.cron_expression})")
+```
+
+##### `get_schedule(schedule_id: str) -> Schedule`
+
+Get a specific schedule by ID.
+
+```python
+schedule = client.get_schedule("sched_123")
+print(schedule.name)
+```
+
+##### `update_schedule(schedule_id: str, options: ScheduleUpdate) -> Schedule`
+
+Update an existing schedule.
+
+```python
+updated = client.update_schedule("sched_123", {"name": "Updated name", "enabled": False})
+```
+
+##### `delete_schedule(schedule_id: str) -> None`
+
+Delete a schedule.
+
+```python
+client.delete_schedule("sched_123")
+```
+
+**Schedule object properties:**
+- `id` (str): Schedule ID
+- `name` (str): Schedule name
+- `cron_expression` (str): Unix cron format
+- `render_type` (str): `"screenshot"`, `"pdf"`, or `"og"`
+- `render_config` (dict): Render options
+- `enabled` (bool): Whether the schedule is active
+- `next_run_at` (str | None): ISO 8601 timestamp of next run
+- `last_run_at` (str | None): ISO 8601 timestamp of last run
+- `created_at` (str): ISO 8601 creation timestamp
+- `updated_at` (str): ISO 8601 last update timestamp
+
 ## Error Handling
 
 The SDK raises typed exceptions for different error scenarios:
