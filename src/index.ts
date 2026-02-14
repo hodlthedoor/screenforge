@@ -7,6 +7,7 @@ import { loadConfig } from './config/index.js';
 import { BrowserPool } from './renderer/browser-pool.js';
 import { RenderCache } from './cache/index.js';
 import { SlidingWindowRateLimiter } from './auth/rate-limiter.js';
+import { StorageLifecycleManager } from './storage/lifecycle.js';
 import { renderRoutes } from './routes/render.js';
 import { adminRoutes } from './routes/admin.js';
 import { usageRoutes } from './routes/usage.js';
@@ -119,6 +120,12 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
   const cache = new RenderCache(config.REDIS_URL, config.STORAGE_PATH, config.CACHE_TTL_SECONDS);
   const rateLimiter = new SlidingWindowRateLimiter(config.REDIS_URL);
 
+  const storageLifecycle = new StorageLifecycleManager({
+    storagePath: config.STORAGE_PATH,
+    retentionDays: config.STORAGE_RETENTION_DAYS,
+    logger: app.log.child({ module: 'storage' }),
+  });
+
   const startTime = Date.now();
 
   // API docs (register before routes so swagger captures all endpoints)
@@ -222,6 +229,7 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
   });
 
   app.addHook('onClose', async () => {
+    storageLifecycle.stop();
     await pool.close();
     await cache.close();
     await rateLimiter.close();
@@ -233,6 +241,7 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
 
   app.decorate('browserPool', pool);
   app.decorate('renderCache', cache);
+  app.decorate('storageLifecycle', storageLifecycle);
 
   return app;
 }
@@ -305,6 +314,12 @@ export async function start() {
 
   // Start usage monitor (hourly quota check)
   createUsageMonitor(config.REDIS_URL);
+
+  // Start storage lifecycle manager (hourly cleanup)
+  const lifecycle = (app as unknown as { storageLifecycle?: StorageLifecycleManager }).storageLifecycle;
+  if (lifecycle) {
+    lifecycle.start();
+  }
 
   try {
     await app.listen({ port: config.PORT, host: '0.0.0.0' });
