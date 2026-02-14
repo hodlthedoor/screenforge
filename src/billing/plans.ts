@@ -6,6 +6,7 @@ export interface Plan {
   rateLimit: number;
   monthlyQuota: number;
   maxSchedules: number;
+  maxExtractionsDaily: number;
 }
 
 export const PLANS: Record<string, Plan> = {
@@ -17,6 +18,7 @@ export const PLANS: Record<string, Plan> = {
     rateLimit: 10,
     monthlyQuota: 100,
     maxSchedules: 3,
+    maxExtractionsDaily: 10,
   },
   starter: {
     name: 'Starter',
@@ -26,6 +28,7 @@ export const PLANS: Record<string, Plan> = {
     rateLimit: 50,
     monthlyQuota: 5_000,
     maxSchedules: 10,
+    maxExtractionsDaily: 50,
   },
   pro: {
     name: 'Pro',
@@ -35,6 +38,7 @@ export const PLANS: Record<string, Plan> = {
     rateLimit: 200,
     monthlyQuota: 25_000,
     maxSchedules: 50,
+    maxExtractionsDaily: 100,
   },
   business: {
     name: 'Business',
@@ -44,6 +48,7 @@ export const PLANS: Record<string, Plan> = {
     rateLimit: 1_000,
     monthlyQuota: 999_999_999,
     maxSchedules: 999,
+    maxExtractionsDaily: 1_000,
   },
 };
 

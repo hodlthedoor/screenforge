@@ -42,6 +42,7 @@ import { playgroundRoutes } from './routes/playground.js';
 import { docsSiteRoutes } from './routes/docs-site.js';
 import { analyticsRoutes } from './routes/analytics.js';
 import { schedulesRoutes } from './routes/schedules.js';
+import { extractRoutes } from './routes/extract.js';
 import { registerLoggers, getLogger } from './logging/index.js';
 import { startScheduler, stopScheduler } from './scheduler/index.js';
 import { buildErrorResponse } from './security/errors.js';
@@ -264,6 +265,7 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
   await webhooksRoutes(app);
   await analyticsRoutes(app);
   await schedulesRoutes(app);
+  await extractRoutes(app);
 
   app.setNotFoundHandler((req, reply) => {
     const response = buildErrorResponse('NOT_FOUND', req);

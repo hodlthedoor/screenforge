@@ -42,6 +42,9 @@ const envSchema = z.object({
   SCHEDULER_ENABLED: z.enum(['true', 'false']).default('true').transform((v) => v === 'true'),
   SCHEDULER_POLL_INTERVAL_MS: z.coerce.number().int().min(5000).default(60_000),
 
+  // Anthropic API key for LLM extraction (optional — users can also bring their own via header)
+  ANTHROPIC_API_KEY: z.string().min(1).optional(),
+
   // Storage backend: 'local' (default) or 's3' (S3-compatible)
   STORAGE_BACKEND: z.enum(['local', 's3']).default('local'),
   S3_BUCKET: z.string().optional(),
