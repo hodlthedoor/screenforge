@@ -39,10 +39,7 @@ vi.mock('../../src/storage/index.js', () => ({
 }));
 
 import { extractFromImage } from '../../src/api/anthropic.js';
-import { getStorageBackend } from '../../src/storage/index.js';
-
 const mockExtract = vi.mocked(extractFromImage);
-const mockGetStorage = vi.mocked(getStorageBackend);
 
 describe('extract routes', () => {
   let app: FastifyInstance;
