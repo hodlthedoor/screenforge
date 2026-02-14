@@ -313,6 +313,32 @@ describe('accessibility routes', () => {
       expect(body.violations).toHaveLength(0);
     });
 
+    it('blocks private URLs when ALLOW_PRIVATE_URLS is disabled', async () => {
+      const ssrfApp = await buildServer({ skipBrowserInit: true });
+      ssrfApp.browserPool.acquire = vi.fn().mockResolvedValue(createMockContext());
+
+      // Override config to block private URLs
+      const { getConfig } = await import('../../src/config/index.js');
+      const origAllow = getConfig().ALLOW_PRIVATE_URLS;
+      getConfig().ALLOW_PRIVATE_URLS = false;
+
+      try {
+        const response = await ssrfApp.inject({
+          method: 'POST',
+          url: '/v1/accessibility',
+          headers: { 'x-api-key': rawApiKey },
+          payload: { url: 'http://127.0.0.1/admin' },
+        });
+
+        expect(response.statusCode).toBe(400);
+        const body = JSON.parse(response.body);
+        expect(body.error.code).toBe('SSRF_BLOCKED');
+      } finally {
+        getConfig().ALLOW_PRIVATE_URLS = origAllow;
+        await ssrfApp.close();
+      }
+    });
+
     it('handles axe-core failures gracefully', async () => {
       mockAnalyze.mockRejectedValueOnce(new Error('Browser context closed'));
 
@@ -406,6 +432,30 @@ describe('accessibility routes', () => {
       const body = JSON.parse(response.body);
       expect(body.audits).toHaveLength(2);
       expect(body.total).toBe(3);
+    });
+
+    it('excludes violations from list response (summary only)', async () => {
+      mockAnalyze.mockResolvedValueOnce(makeAxeResult());
+      await app.inject({
+        method: 'POST',
+        url: '/v1/accessibility',
+        headers: { 'x-api-key': rawApiKey },
+        payload: { url: 'https://example.com' },
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/v1/accessibility',
+        headers: { 'x-api-key': rawApiKey },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.audits).toHaveLength(1);
+      expect(body.audits[0].violationsCount).toBe(1);
+      expect(body.audits[0].violations).toBeUndefined();
+      expect(body.audits[0].screenshotPath).toBeUndefined();
+      expect(body.audits[0].annotatedScreenshotPath).toBeUndefined();
     });
 
     it('returns empty list when no audits exist', async () => {

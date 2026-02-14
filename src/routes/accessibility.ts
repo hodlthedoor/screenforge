@@ -6,6 +6,7 @@ import { incrementUsage } from '../db/api-keys.js';
 import { PLANS } from '../billing/plans.js';
 import { sendError } from '../security/errors.js';
 import { getStorageBackend } from '../storage/index.js';
+import { isPrivateUrl } from '../renderer/schemas.js';
 import sharp from 'sharp';
 
 const accessibilityRequestSchema = z.object({
@@ -111,6 +112,22 @@ function formatAudit(row: Record<string, unknown>) {
     violations: row.violations,
     screenshotPath: row.screenshot_path,
     annotatedScreenshotPath: row.annotated_screenshot_path,
+    durationMs: row.duration_ms,
+    error: row.error,
+    createdAt: row.created_at,
+    completedAt: row.completed_at,
+  };
+}
+
+function formatAuditSummary(row: Record<string, unknown>) {
+  return {
+    id: row.id,
+    url: row.url,
+    standard: row.standard,
+    status: row.status,
+    violationsCount: row.violations_count,
+    passesCount: row.passes_count,
+    incompleteCount: row.incomplete_count,
     durationMs: row.duration_ms,
     error: row.error,
     createdAt: row.created_at,
@@ -243,16 +260,24 @@ export async function accessibilityRoutes(app: FastifyInstance) {
       );
       const auditId = jobInsert.rows[0].id;
 
+      // SSRF protection
+      const { getConfig } = await import('../config/index.js');
+      const config = getConfig();
+      if (!config.ALLOW_PRIVATE_URLS && isPrivateUrl(url)) {
+        return sendError(reply, req, 'SSRF_BLOCKED', {
+          message: 'Access to private/internal URLs is not allowed',
+        });
+      }
+
+      let context: Awaited<ReturnType<typeof app.browserPool.acquire>> | undefined;
       try {
         // Acquire browser context and navigate
         const browserPool = app.browserPool;
-        const { getConfig } = await import('../config/index.js');
-        const config = getConfig();
 
         const viewportWidth = screenshot_options?.viewport_width ?? 1280;
         const viewportHeight = screenshot_options?.viewport_height ?? 800;
 
-        const context = await browserPool.acquire({
+        context = await browserPool.acquire({
           viewport: { width: viewportWidth, height: viewportHeight },
         });
 
@@ -341,7 +366,6 @@ export async function accessibilityRoutes(app: FastifyInstance) {
           return reply.send(response);
         } finally {
           await page.close();
-          await context.close();
         }
       } catch (err) {
         const durationMs = Math.round(performance.now() - start);
@@ -357,6 +381,10 @@ export async function accessibilityRoutes(app: FastifyInstance) {
         return sendError(reply, req, 'ACCESSIBILITY_FAILED', {
           message: `Accessibility audit failed: ${errorMessage}`,
         });
+      } finally {
+        if (context) {
+          await context.close();
+        }
       }
     },
   );
@@ -487,7 +515,7 @@ export async function accessibilityRoutes(app: FastifyInstance) {
       ]);
 
       return reply.send({
-        audits: result.rows.map(formatAudit),
+        audits: result.rows.map(formatAuditSummary),
         total: countResult.rows[0].total,
       });
     },
