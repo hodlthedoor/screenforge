@@ -1,6 +1,6 @@
 # ScreenForge
 
-[![CI](https://github.com/hodlthedoor/atlas-project/actions/workflows/ci.yml/badge.svg)](https://github.com/hodlthedoor/atlas-project/actions/workflows/ci.yml)
+[![CI](https://github.com/hodlthedoor/screenforge/actions/workflows/ci.yml/badge.svg)](https://github.com/hodlthedoor/screenforge/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker)](docker-compose.yml)
 
@@ -11,8 +11,8 @@
 ## Quick Start
 
 ```bash
-git clone https://github.com/hodlthedoor/atlas-project.git
-cd atlas-project/screenforge
+git clone https://github.com/hodlthedoor/screenforge.git
+cd screenforge
 cp .env.example .env
 # Generate required secrets:
 #   openssl rand -hex 32   -> API_KEY_SALT
@@ -278,8 +278,8 @@ The easiest way to run ScreenForge. Docker Compose starts the API server, Postgr
 
 ```bash
 # 1. Clone and enter the project
-git clone https://github.com/hodlthedoor/atlas-project.git
-cd atlas-project/screenforge
+git clone https://github.com/hodlthedoor/screenforge.git
+cd screenforge
 
 # 2. Create and configure .env
 cp .env.example .env
@@ -309,8 +309,8 @@ Prerequisites:
 
 ```bash
 # 1. Clone and install
-git clone https://github.com/hodlthedoor/atlas-project.git
-cd atlas-project/screenforge
+git clone https://github.com/hodlthedoor/screenforge.git
+cd screenforge
 npm install --include=dev
 
 # 2. Install Playwright browsers

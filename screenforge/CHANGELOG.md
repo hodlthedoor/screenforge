@@ -56,6 +56,6 @@ All notable changes to ScreenForge are documented here.
 - Health check endpoints
 - OpenAPI/Swagger documentation
 
-[1.0.0]: https://github.com/hodlthedoor/atlas-project/compare/v0.2.0...v1.0.0
-[0.2.0]: https://github.com/hodlthedoor/atlas-project/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/hodlthedoor/atlas-project/releases/tag/v0.1.0
+[1.0.0]: https://github.com/hodlthedoor/screenforge/compare/v0.2.0...v1.0.0
+[0.2.0]: https://github.com/hodlthedoor/screenforge/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/hodlthedoor/screenforge/releases/tag/v0.1.0
