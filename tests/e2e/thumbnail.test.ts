@@ -25,7 +25,7 @@ describe('thumbnail E2E', { timeout: 120_000 }, () => {
     expect(res.ok).toBe(true);
     const data = await res.json();
 
-    expect(data).toHaveProperty('image');
+    expect(data).toHaveProperty('data');
     expect(data).toHaveProperty('thumbnail');
     expect(data).toHaveProperty('metadata');
     expect(data).toHaveProperty('contentType');
@@ -53,7 +53,7 @@ describe('thumbnail E2E', { timeout: 120_000 }, () => {
     expect(res.ok).toBe(true);
     const data = await res.json();
 
-    expect(data).toHaveProperty('image');
+    expect(data).toHaveProperty('data');
     expect(data).not.toHaveProperty('thumbnail');
   });
 

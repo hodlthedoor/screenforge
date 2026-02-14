@@ -16,6 +16,17 @@ import { sendError } from '../security/errors.js';
 import type { RenderMetadata } from '../renderer/schemas.js';
 
 import { FORMAT_EXT, getFormatFromContentType } from '../utils/format.js';
+import sharp from 'sharp';
+import type { ThumbnailOptions } from '../renderer/schemas.js';
+
+async function generateThumbnail(buffer: Buffer, opts: NonNullable<ThumbnailOptions>): Promise<Buffer> {
+  const { width, height, fit, format, quality } = opts;
+  let s = sharp(buffer).resize(width, height, { fit });
+  if (format === 'png') s = s.png();
+  else if (format === 'jpeg') s = s.jpeg({ quality: Math.max(1, quality) });
+  else s = s.webp({ quality: Math.max(1, quality) });
+  return s.toBuffer();
+}
 
 function sendMetadataEnvelope(
   reply: import('fastify').FastifyReply,
@@ -27,13 +38,13 @@ function sendMetadataEnvelope(
   thumbnailBuffer?: Buffer,
 ) {
   const responseData: {
-    image: string;
+    data: string;
     contentType: string;
     durationMs: number;
     metadata: RenderMetadata | null;
     thumbnail?: string;
   } = {
-    image: buffer.toString('base64'),
+    data: buffer.toString('base64'),
     contentType,
     durationMs,
     metadata,
@@ -346,6 +357,17 @@ export async function renderRoutes(
             default: false,
             description: 'Extract enhanced metadata (Open Graph tags, Twitter Cards, favicon, canonical URL, language/locale) from the page. Only populated when metadata=true query parameter is also used.',
           },
+          thumbnail: {
+            type: 'object',
+            description: 'Generate a thumbnail alongside the screenshot. Returned as base64 in metadata envelope or stored for async jobs.',
+            properties: {
+              width: { type: 'integer', minimum: 1, maximum: 2048, default: 320, description: 'Thumbnail width in pixels' },
+              height: { type: 'integer', minimum: 1, maximum: 2048, default: 240, description: 'Thumbnail height in pixels' },
+              fit: { type: 'string', enum: ['cover', 'contain', 'fill'], default: 'cover', description: 'Resize fit mode' },
+              format: { type: 'string', enum: ['png', 'jpeg', 'webp'], default: 'webp', description: 'Thumbnail image format' },
+              quality: { type: 'integer', minimum: 0, maximum: 100, default: 80, description: 'Compression quality (jpeg/webp)' },
+            },
+          },
         },
       },
     },
@@ -444,7 +466,8 @@ export async function renderRoutes(
       const buffer = await cache.readFile(cached.filePath);
 
       if (wantsMetadata) {
-        return sendMetadataEnvelope(reply, buffer, cached.contentType, 0, 'HIT', cached.metadata ?? null);
+        const thumb = options.thumbnail ? await generateThumbnail(buffer, options.thumbnail) : undefined;
+        return sendMetadataEnvelope(reply, buffer, cached.contentType, 0, 'HIT', cached.metadata ?? null, thumb);
       }
       return sendBinaryResponse(reply, buffer, cached.contentType, 0, 'HIT');
     }

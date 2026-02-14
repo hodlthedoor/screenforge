@@ -107,28 +107,11 @@ export async function takeScreenshot(pool: BrowserPool, options: ScreenshotOptio
     let thumbnailBuffer: Buffer | undefined;
     if (options.thumbnail) {
       const { width, height, fit, format, quality } = options.thumbnail;
-
-      let sharpInstance = sharp(buffer);
-
-      // Apply resize with specified fit mode
-      if (fit === 'cover') {
-        sharpInstance = sharpInstance.resize(width, height, { fit: 'cover' });
-      } else if (fit === 'contain') {
-        sharpInstance = sharpInstance.resize(width, height, { fit: 'contain' });
-      } else if (fit === 'fill') {
-        sharpInstance = sharpInstance.resize(width, height, { fit: 'fill' });
-      }
-
-      // Apply format conversion
-      if (format === 'png') {
-        sharpInstance = sharpInstance.png();
-      } else if (format === 'jpeg') {
-        sharpInstance = sharpInstance.jpeg({ quality: Math.max(1, quality) });
-      } else if (format === 'webp') {
-        sharpInstance = sharpInstance.webp({ quality: Math.max(1, quality) });
-      }
-
-      thumbnailBuffer = await sharpInstance.toBuffer();
+      let s = sharp(buffer).resize(width, height, { fit });
+      if (format === 'png') s = s.png();
+      else if (format === 'jpeg') s = s.jpeg({ quality: Math.max(1, quality) });
+      else s = s.webp({ quality: Math.max(1, quality) });
+      thumbnailBuffer = await s.toBuffer();
     }
 
     // Extract image dimensions
