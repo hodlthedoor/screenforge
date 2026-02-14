@@ -243,18 +243,18 @@ client = ScreenForgeClient(
 )
 
 # Screenshot
-png_bytes = client.screenshot('https://example.com', full_page=True)
+png_bytes = client.screenshot('https://example.com', {'fullPage': True})
 
 # PDF
-pdf_bytes = client.pdf('https://example.com', format='a4')
+pdf_bytes = client.pdf('https://example.com', {'format': 'a4'})
 
 # OG Card
-og_bytes = client.og('https://example.com', theme='dark')
+og_bytes = client.og('https://example.com', {'theme': 'dark'})
 
-# Async (for async client, use ScreenForgeAsyncClient)
-from screenforge import ScreenForgeAsyncClient
+# Async
+from screenforge import AsyncScreenForgeClient
 
-async_client = ScreenForgeAsyncClient(api_key='sf_live_...', base_url='https://api.screenforge.dev')
+async_client = AsyncScreenForgeClient(api_key='sf_live_...', base_url='https://api.screenforge.dev')
 result = await async_client.screenshot('https://example.com')
 ```
 

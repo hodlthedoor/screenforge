@@ -371,5 +371,5 @@ MIT
 - [ScreenForge Homepage](https://screenforge.dev)
 - [Documentation](https://docs.screenforge.dev)
 - [API Reference](https://docs.screenforge.dev/api)
-- [GitHub Repository](https://github.com/screenforge/screenforge)
-- [Bug Reports](https://github.com/screenforge/screenforge/issues)
+- [GitHub Repository](https://github.com/hodlthedoor/screenforge)
+- [Bug Reports](https://github.com/hodlthedoor/screenforge/issues)
