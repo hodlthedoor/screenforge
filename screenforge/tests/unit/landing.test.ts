@@ -115,11 +115,12 @@ describe('landing page', () => {
       expect(body).toContain('<meta name="description"');
       expect(body).toContain('og:title');
       expect(body).toContain('og:description');
-      expect(body).toContain('og:image');
+      expect(body).not.toContain('og:image');
       expect(body).toContain('og:url');
       expect(body).toContain('twitter:card');
       expect(body).toContain('twitter:title');
       expect(body).toContain('twitter:description');
+      expect(body).not.toContain('twitter:image');
     });
 
     it('contains JSON-LD structured data', async () => {
@@ -183,6 +184,9 @@ describe('landing page', () => {
       expect(body).toContain('<urlset');
       expect(body).toContain('sitemaps.org');
       expect(body).toContain('<loc>');
+      expect(body).toContain('<lastmod>');
+      expect(body).toContain('<changefreq>weekly</changefreq>');
+      expect(body).toContain('<changefreq>monthly</changefreq>');
       // Should contain public pages
       expect(body).toContain('/docs');
       expect(body).toContain('/terms');
