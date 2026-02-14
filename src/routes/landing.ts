@@ -14,13 +14,11 @@ function landingHtml(baseUrl: string): string {
   <link rel="canonical" href="${safeBaseUrl}/">
   <meta property="og:title" content="ScreenForge — Screenshot &amp; Render API">
   <meta property="og:description" content="Capture screenshots, generate PDFs, and create OG cards with a single API call. Self-hostable, fast, and developer-friendly.">
-  <meta property="og:image" content="${safeBaseUrl}/og-image.png">
   <meta property="og:url" content="${safeBaseUrl}/">
   <meta property="og:type" content="website">
-  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="ScreenForge — Screenshot &amp; Render API">
   <meta name="twitter:description" content="Capture screenshots, generate PDFs, and create OG cards with a single API call.">
-  <meta name="twitter:image" content="${safeBaseUrl}/og-image.png">
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -459,10 +457,11 @@ export async function landingRoutes(app: FastifyInstance): Promise<void> {
   app.get('/sitemap.xml', async (_req: FastifyRequest, reply: FastifyReply) => {
     const config = getConfig();
     const publicPaths = ['/', '/docs', '/pricing', '/terms', '/privacy', '/login', '/register'];
+    const today = new Date().toISOString().split('T')[0];
     const urls = publicPaths
       .map(
         (path) =>
-          `  <url><loc>${escapeHtml(config.BASE_URL)}${path}</loc></url>`,
+          `  <url>\n    <loc>${escapeHtml(config.BASE_URL)}${path}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>${path === '/' ? 'weekly' : 'monthly'}</changefreq>\n  </url>`,
       )
       .join('\n');
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
