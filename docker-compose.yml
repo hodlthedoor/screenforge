@@ -3,6 +3,7 @@ version: "3.9"
 services:
   screenforge:
     build: .
+    # image: hodlthedoor/screenforge:latest  # Alternative: pull from Docker Hub instead of building
     ports:
       - "3100:3100"
     environment:
