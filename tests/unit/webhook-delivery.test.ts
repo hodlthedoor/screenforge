@@ -56,8 +56,8 @@ describe('webhook delivery', () => {
   });
 
   afterEach(async () => {
-    // Wait a bit for any pending webhooks to finish
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    // Wait for any in-flight webhook deliveries to finish processing
+    await new Promise((resolve) => setTimeout(resolve, 300));
     requests = [];
     responseStatus = 200;
     await getPool().query('DELETE FROM webhook_deliveries WHERE api_key_id = $1', [apiKeyId]);
