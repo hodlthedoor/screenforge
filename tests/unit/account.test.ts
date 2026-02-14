@@ -20,7 +20,7 @@ describe('account management', () => {
   beforeAll(async () => {
     process.env.API_KEY_SALT = 'test-salt-must-be-16-chars-long';
     process.env.SESSION_SECRET = 'test-secret-must-be-32-chars-long-to-work';
-    process.env.DATABASE_URL = 'postgresql:///screenforge_test?host=/var/run/postgresql';
+    process.env.DATABASE_URL ??= 'postgresql:///screenforge_test?host=/var/run/postgresql';
     app = await buildServer();
   });
 

@@ -10,7 +10,7 @@ describe('Security audit', () => {
     process.env.NODE_ENV = 'test';
     process.env.API_KEY_SALT = 'test-salt-must-be-16-chars-long';
     process.env.SESSION_SECRET = 'test-session-secret-must-be-32-chars-long-minimum';
-    process.env.DATABASE_URL = 'postgresql:///screenforge_test?host=/var/run/postgresql';
+    process.env.DATABASE_URL ??= 'postgresql:///screenforge_test?host=/var/run/postgresql';
     process.env.REDIS_URL = 'redis://127.0.0.1:6379/15';
     process.env.METRICS_ENABLED = 'true';
     process.env.REQUIRE_AUTH = 'false';

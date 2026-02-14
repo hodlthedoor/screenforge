@@ -13,7 +13,7 @@ describe('signed URLs', () => {
 
   beforeAll(async () => {
     process.env.NODE_ENV = 'test';
-    process.env.DATABASE_URL = 'postgresql:///screenforge?host=/var/run/postgresql';
+    process.env.DATABASE_URL ??= 'postgresql:///screenforge?host=/var/run/postgresql';
     process.env.REDIS_URL = 'redis://127.0.0.1:6379/15';
     process.env.API_KEY_SALT = 'test-salt-must-be-16-chars-long';
     process.env.SESSION_SECRET = 'test-session-secret-32-chars-minimum-required';
