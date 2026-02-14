@@ -384,5 +384,132 @@ describe('billing routes', () => {
       // Cleanup
       await pool.query("DELETE FROM subscriptions WHERE stripe_sub_id = 'sub_fail_123'");
     });
+
+    it('handles customer.subscription.updated event with known price ID', async () => {
+      const pool = getPool();
+      const userResult = await pool.query(
+        "SELECT id FROM users WHERE email = $1",
+        [testEmail],
+      );
+      const userId = userResult.rows[0].id;
+      await pool.query(
+        "UPDATE users SET stripe_customer_id = 'cus_updated_test', stripe_subscription_id = 'sub_updated_123' WHERE id = $1",
+        [userId],
+      );
+      await pool.query(
+        `INSERT INTO subscriptions (user_id, stripe_sub_id, plan, status, current_period_end)
+         VALUES ($1, 'sub_updated_123', 'starter', 'active', now() + interval '30 days')
+         ON CONFLICT (stripe_sub_id) DO NOTHING`,
+        [userId],
+      );
+
+      mockWebhooksConstructEvent.mockReturnValueOnce({
+        type: 'customer.subscription.updated',
+        data: {
+          object: {
+            id: 'sub_updated_123',
+            customer: 'cus_updated_test',
+            status: 'active',
+            current_period_end: Math.floor(Date.now() / 1000) + 86400 * 30,
+            items: {
+              data: [
+                {
+                  price: {
+                    id: process.env.STRIPE_PRICE_ID_PRO ?? 'price_pro_monthly',
+                  },
+                },
+              ],
+            },
+          },
+        },
+      });
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/billing/webhook',
+        headers: { 'stripe-signature': 'valid_sig', 'content-type': 'application/json' },
+        payload: '{}',
+      });
+      expect(res.statusCode).toBe(200);
+
+      // Cleanup
+      await pool.query("DELETE FROM subscriptions WHERE stripe_sub_id = 'sub_updated_123'");
+      await pool.query("UPDATE users SET stripe_customer_id = NULL, stripe_subscription_id = NULL WHERE id = $1", [userId]);
+    });
+
+    it('handles customer.subscription.updated event with unknown price ID', async () => {
+      const pool = getPool();
+      const userResult = await pool.query(
+        "SELECT id FROM users WHERE email = $1",
+        [testEmail],
+      );
+      const userId = userResult.rows[0].id;
+      await pool.query(
+        "UPDATE users SET stripe_customer_id = 'cus_unknown_price', stripe_subscription_id = 'sub_unknown_123' WHERE id = $1",
+        [userId],
+      );
+      await pool.query(
+        `INSERT INTO subscriptions (user_id, stripe_sub_id, plan, status, current_period_end)
+         VALUES ($1, 'sub_unknown_123', 'pro', 'active', now() + interval '30 days')
+         ON CONFLICT (stripe_sub_id) DO NOTHING`,
+        [userId],
+      );
+
+      mockWebhooksConstructEvent.mockReturnValueOnce({
+        type: 'customer.subscription.updated',
+        data: {
+          object: {
+            id: 'sub_unknown_123',
+            customer: 'cus_unknown_price',
+            status: 'canceled',
+            current_period_end: Math.floor(Date.now() / 1000) + 86400 * 30,
+            items: {
+              data: [
+                {
+                  price: {
+                    id: 'price_unknown_not_in_config',
+                  },
+                },
+              ],
+            },
+          },
+        },
+      });
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/billing/webhook',
+        headers: { 'stripe-signature': 'valid_sig', 'content-type': 'application/json' },
+        payload: '{}',
+      });
+      expect(res.statusCode).toBe(200);
+
+      // Should downgrade to free tier when subscription is canceled
+      const subResult = await pool.query(
+        "SELECT status FROM subscriptions WHERE stripe_sub_id = 'sub_unknown_123'",
+      );
+      expect(subResult.rows[0].status).toBe('canceled');
+
+      // Cleanup
+      await pool.query("DELETE FROM subscriptions WHERE stripe_sub_id = 'sub_unknown_123'");
+      await pool.query("UPDATE users SET stripe_customer_id = NULL, stripe_subscription_id = NULL WHERE id = $1", [userId]);
+    });
+
+    it('handles webhook signature verification failures', async () => {
+      mockWebhooksConstructEvent.mockImplementationOnce(() => {
+        throw new Error('Signature verification failed');
+      });
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/billing/webhook',
+        headers: { 'stripe-signature': 'invalid_sig', 'content-type': 'application/json' },
+        payload: '{}',
+      });
+
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.body);
+      expect(body.error).toContain('signature');
+    });
   });
 });
