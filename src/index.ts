@@ -21,6 +21,7 @@ import { requestIdHook } from './security/request-id.js';
 import { getExtFromFormat, getFormatFromContentType } from './utils/format.js';
 import { requestTimeoutHook, requestTimeoutCleanupHook } from './renderer/timeout.js';
 import { ActionError } from './renderer/actions.js';
+import { ContentValidationError } from './renderer/content-validation.js';
 import { getQueueMetrics, createWorker, type RenderJobData, type RenderJobResult } from './queue/render-queue.js';
 import { closePool } from './db/index.js';
 import { closeQueue } from './queue/render-queue.js';
@@ -263,6 +264,18 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
 
   app.setErrorHandler((error: { message: string; statusCode?: number; code?: string; validation?: unknown }, req, reply) => {
     const statusCode = error.statusCode ?? 500;
+
+    // Handle ContentValidationError (content validation failure)
+    if (error instanceof ContentValidationError) {
+      const response = buildErrorResponse('CONTENT_VALIDATION_FAILED', req, {
+        message: error.message,
+        details: {
+          validationType: error.validationType,
+          matchedText: error.matchedText,
+        },
+      });
+      return reply.status(422).send(response);
+    }
 
     // Handle ActionError (pre-capture action failure)
     if (error instanceof ActionError) {

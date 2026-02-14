@@ -3,6 +3,7 @@ import type { PdfOptions, RenderResult } from './schemas.js';
 import { applyPreNavigationFilters, applyPostNavigationFilters } from './filters.js';
 import { applyWaitStrategy } from './wait.js';
 import { executeActions } from './actions.js';
+import { validateContent } from './content-validation.js';
 import { toPlaywrightCookies } from '../security/sanitize.js';
 import { getConfig } from '../config/index.js';
 
@@ -68,6 +69,8 @@ export async function renderPdf(pool: BrowserPool, options: PdfOptions, timeoutM
     await applyWaitStrategy(page, options.wait, options.waitFor, timeoutMs);
 
     await executeActions(page, options.actions);
+
+    await validateContent(page, options.fail_if_contains, options.fail_if_missing);
 
     const size = FORMAT_SIZE[options.format];
 

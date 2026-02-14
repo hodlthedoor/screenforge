@@ -147,6 +147,8 @@ const screenshotBaseOptionsSchema = z.object({
   cache_ttl: z.number().int().min(0).max(2592000).optional(),
   cache_key: z.string().max(128).optional(),
   actions: z.array(actionSchema).max(10).optional(),
+  fail_if_contains: z.string().max(500).optional(),
+  fail_if_missing: z.string().max(500).optional(),
 });
 
 export const screenshotOptionsSchema = z.object({
@@ -217,6 +219,8 @@ const pdfBaseOptionsSchema = z.object({
   cache_ttl: z.number().int().min(0).max(2592000).optional(),
   cache_key: z.string().max(128).optional(),
   actions: z.array(actionSchema).max(10).optional(),
+  fail_if_contains: z.string().max(500).optional(),
+  fail_if_missing: z.string().max(500).optional(),
 });
 
 export const pdfOptionsSchema = z.object({

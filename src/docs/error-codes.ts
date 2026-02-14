@@ -25,6 +25,10 @@ const ERROR_DOCUMENTATION: Record<string, Omit<ErrorCodeDoc, 'code' | 'http_stat
     description: 'A pre-capture interaction action failed (e.g., selector not found, timeout). Check details.actionIndex and details.actionType for the failing action.',
     retry_guidance: 'Fix the action (check selector validity, increase timeouts) or remove the failing action.',
   },
+  CONTENT_VALIDATION_FAILED: {
+    description: 'Content validation failed. The page either contains unwanted text (fail_if_contains) or is missing required text (fail_if_missing). Check details.validationType and details.matchedText.',
+    retry_guidance: 'Fix the page content or adjust validation rules. This indicates the page did not load correctly or shows an error state.',
+  },
   AUTH_REQUIRED: {
     description: 'API key required for this endpoint.',
     retry_guidance: 'Include a valid API key in the Authorization or X-Api-Key header.',

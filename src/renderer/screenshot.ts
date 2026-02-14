@@ -3,6 +3,7 @@ import type { ScreenshotOptions, RenderResult } from './schemas.js';
 import { applyPreNavigationFilters, applyPostNavigationFilters } from './filters.js';
 import { applyWaitStrategy } from './wait.js';
 import { executeActions } from './actions.js';
+import { validateContent } from './content-validation.js';
 import { toPlaywrightCookies } from '../security/sanitize.js';
 import { imageSize } from 'image-size';
 import { getConfig } from '../config/index.js';
@@ -73,6 +74,8 @@ export async function takeScreenshot(pool: BrowserPool, options: ScreenshotOptio
     await applyWaitStrategy(page, options.wait, options.waitFor, timeoutMs);
 
     await executeActions(page, options.actions);
+
+    await validateContent(page, options.fail_if_contains, options.fail_if_missing);
 
     const screenshotTarget = options.selector ? page.locator(options.selector) : page;
 

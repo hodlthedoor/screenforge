@@ -318,6 +318,16 @@ export async function renderRoutes(
               required: ['type'],
             },
           },
+          fail_if_contains: {
+            type: 'string',
+            maxLength: 500,
+            description: 'Text that should NOT be present on the page. If found, render fails with 422 status. Case-sensitive plain text search (not regex). Useful for detecting error pages or loading states.',
+          },
+          fail_if_missing: {
+            type: 'string',
+            maxLength: 500,
+            description: 'Text that MUST be present on the page. If missing, render fails with 422 status. Case-sensitive plain text search (not regex). Useful for ensuring page loaded successfully.',
+          },
         },
       },
     },
@@ -621,6 +631,16 @@ export async function renderRoutes(
               },
               required: ['type'],
             },
+          },
+          fail_if_contains: {
+            type: 'string',
+            maxLength: 500,
+            description: 'Text that should NOT be present on the page. If found, render fails with 422 status. Case-sensitive plain text search (not regex). Useful for detecting error pages or loading states.',
+          },
+          fail_if_missing: {
+            type: 'string',
+            maxLength: 500,
+            description: 'Text that MUST be present on the page. If missing, render fails with 422 status. Case-sensitive plain text search (not regex). Useful for ensuring page loaded successfully.',
           },
         },
       },

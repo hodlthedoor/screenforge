@@ -578,4 +578,177 @@ describe('API endpoints', { timeout: 120_000 }, () => {
       expect(body.error.code).toBe('VALIDATION_ERROR');
     });
   });
+
+  describe('POST /v1/screenshot with content validation', () => {
+    it('returns 422 when page contains fail_if_contains text', async () => {
+      // Create a test server that returns error page
+      const errorServer = createServer((_req, res) => {
+        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.end('<html><body><h1>Error 404</h1><p>Page not found</p></body></html>');
+      });
+      await new Promise<void>((resolve) => errorServer.listen(0, '127.0.0.1', resolve));
+      const addr = errorServer.address();
+      const errorUrl = typeof addr === 'object' && addr ? `http://127.0.0.1:${addr.port}` : '';
+
+      try {
+        const res = await app.inject({
+          method: 'POST',
+          url: '/v1/screenshot',
+          payload: {
+            url: errorUrl,
+            fail_if_contains: 'Error 404',
+          },
+        });
+        expect(res.statusCode).toBe(422);
+        const body = JSON.parse(res.body);
+        expect(body.error.code).toBe('CONTENT_VALIDATION_FAILED');
+        expect(body.error.message).toContain('contains');
+        expect(body.error.message).toContain('Error 404');
+        expect(body.error.details).toBeDefined();
+        expect(body.error.details.matchedText).toBeDefined();
+        expect(body.error.details.matchedText.length).toBeLessThanOrEqual(100);
+        expect(body.error.request_id).toBeDefined();
+      } finally {
+        await new Promise<void>((resolve) => errorServer.close(() => resolve()));
+      }
+    });
+
+    it('returns 422 when page is missing fail_if_missing text', async () => {
+      // Create a test server that returns page without "Welcome"
+      const testServer = createServer((_req, res) => {
+        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.end('<html><body><h1>Loading...</h1></body></html>');
+      });
+      await new Promise<void>((resolve) => testServer.listen(0, '127.0.0.1', resolve));
+      const addr = testServer.address();
+      const testUrl = typeof addr === 'object' && addr ? `http://127.0.0.1:${addr.port}` : '';
+
+      try {
+        const res = await app.inject({
+          method: 'POST',
+          url: '/v1/screenshot',
+          payload: {
+            url: testUrl,
+            fail_if_missing: 'Welcome',
+          },
+        });
+        expect(res.statusCode).toBe(422);
+        const body = JSON.parse(res.body);
+        expect(body.error.code).toBe('CONTENT_VALIDATION_FAILED');
+        expect(body.error.message).toContain('missing');
+        expect(body.error.message).toContain('Welcome');
+        expect(body.error.request_id).toBeDefined();
+      } finally {
+        await new Promise<void>((resolve) => testServer.close(() => resolve()));
+      }
+    });
+
+    it('succeeds when content validation passes', async () => {
+      // Create a test server with successful content
+      const successServer = createServer((_req, res) => {
+        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.end('<html><body><h1>Welcome</h1><p>Everything is fine</p></body></html>');
+      });
+      await new Promise<void>((resolve) => successServer.listen(0, '127.0.0.1', resolve));
+      const addr = successServer.address();
+      const successUrl = typeof addr === 'object' && addr ? `http://127.0.0.1:${addr.port}` : '';
+
+      try {
+        const res = await app.inject({
+          method: 'POST',
+          url: '/v1/screenshot',
+          payload: {
+            url: successUrl,
+            fail_if_contains: 'Error',
+            fail_if_missing: 'Welcome',
+          },
+        });
+        expect(res.statusCode).toBe(200);
+        expect(res.headers['content-type']).toBe('image/png');
+      } finally {
+        await new Promise<void>((resolve) => successServer.close(() => resolve()));
+      }
+    });
+
+    it('returns 400 for fail_if_contains exceeding 500 chars', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/screenshot',
+        payload: {
+          url: fixtureUrl,
+          fail_if_contains: 'x'.repeat(501),
+        },
+      });
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.body);
+      expect(body.error.code).toBe('VALIDATION_ERROR');
+    });
+
+    it('returns 400 for fail_if_missing exceeding 500 chars', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/screenshot',
+        payload: {
+          url: fixtureUrl,
+          fail_if_missing: 'x'.repeat(501),
+        },
+      });
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.body);
+      expect(body.error.code).toBe('VALIDATION_ERROR');
+    });
+  });
+
+  describe('POST /v1/pdf with content validation', () => {
+    it('returns 422 when PDF page contains fail_if_contains text', async () => {
+      const errorServer = createServer((_req, res) => {
+        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.end('<html><body><h1>Error 500</h1></body></html>');
+      });
+      await new Promise<void>((resolve) => errorServer.listen(0, '127.0.0.1', resolve));
+      const addr = errorServer.address();
+      const errorUrl = typeof addr === 'object' && addr ? `http://127.0.0.1:${addr.port}` : '';
+
+      try {
+        const res = await app.inject({
+          method: 'POST',
+          url: '/v1/pdf',
+          payload: {
+            url: errorUrl,
+            fail_if_contains: 'Error 500',
+          },
+        });
+        expect(res.statusCode).toBe(422);
+        const body = JSON.parse(res.body);
+        expect(body.error.code).toBe('CONTENT_VALIDATION_FAILED');
+      } finally {
+        await new Promise<void>((resolve) => errorServer.close(() => resolve()));
+      }
+    });
+
+    it('succeeds when PDF content validation passes', async () => {
+      const successServer = createServer((_req, res) => {
+        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.end('<html><body><h1>Report</h1><p>Data loaded successfully</p></body></html>');
+      });
+      await new Promise<void>((resolve) => successServer.listen(0, '127.0.0.1', resolve));
+      const addr = successServer.address();
+      const successUrl = typeof addr === 'object' && addr ? `http://127.0.0.1:${addr.port}` : '';
+
+      try {
+        const res = await app.inject({
+          method: 'POST',
+          url: '/v1/pdf',
+          payload: {
+            url: successUrl,
+            fail_if_missing: 'Report',
+          },
+        });
+        expect(res.statusCode).toBe(200);
+        expect(res.headers['content-type']).toBe('application/pdf');
+      } finally {
+        await new Promise<void>((resolve) => successServer.close(() => resolve()));
+      }
+    });
+  });
 });
