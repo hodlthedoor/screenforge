@@ -24,6 +24,8 @@ export let fixtureServer: Server;
 export let fixtureUrl: string;
 
 beforeAll(async () => {
+  // Use CI DATABASE_URL if set, otherwise fall back to local test DB
+  process.env.DATABASE_URL ??= 'postgresql:///screenforge_test?host=/var/run/postgresql';
   process.env.STORAGE_PATH = TEST_STORAGE;
 
   await mkdir(TEST_STORAGE, { recursive: true });

@@ -16,7 +16,6 @@ export default defineConfig({
       NODE_ENV: 'test',
       API_KEY_SALT: 'test-salt-must-be-16-chars-long',
       ALLOW_PRIVATE_URLS: 'true',
-      DATABASE_URL: 'postgresql:///screenforge_test?host=/var/run/postgresql',
       SESSION_SECRET: 'e2e-test-session-secret-32-chars-long!!',
     },
     testTimeout: 60_000,

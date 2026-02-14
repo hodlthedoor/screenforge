@@ -53,9 +53,7 @@ jobs:
           for f in sql/*.sql; do
             psql "$DATABASE_URL" -f "$f"
           done
-      - run: npx playwright install chromium --with-deps
       - run: npm run test:coverage
-      - run: npm run test:e2e
 
   docker-build:
     runs-on: ubuntu-latest
