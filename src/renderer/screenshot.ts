@@ -39,6 +39,7 @@ export async function takeScreenshot(pool: BrowserPool, options: ScreenshotOptio
         type: options.format,
         quality: options.format === 'png' ? undefined : options.quality,
         fullPage: options.fullPage,
+        clip: options.clip,
       }),
     );
 

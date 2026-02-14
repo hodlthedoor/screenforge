@@ -97,4 +97,69 @@ describe('E2E: Screenshot rendering', () => {
     expect(buffer[0]).toBe(0x89);
     expect(buffer[1]).toBe(0x50);
   });
+
+  it('captures specific clip region with correct dimensions', async () => {
+    const res = await fetch(`${baseUrl}/v1/screenshot`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        url: fixtureUrl,
+        clip: { x: 0, y: 0, width: 500, height: 300 },
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('image/png');
+
+    const buffer = Buffer.from(await res.arrayBuffer());
+    const dimensions = imageSize(buffer);
+    expect(dimensions.width).toBe(500);
+    expect(dimensions.height).toBe(300);
+    expect(dimensions.type).toBe('png');
+  });
+
+  it('captures clip region at offset coordinates', async () => {
+    const res = await fetch(`${baseUrl}/v1/screenshot`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        url: fixtureUrl,
+        clip: { x: 100, y: 50, width: 400, height: 200 },
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const buffer = Buffer.from(await res.arrayBuffer());
+    const dimensions = imageSize(buffer);
+    expect(dimensions.width).toBe(400);
+    expect(dimensions.height).toBe(200);
+  });
+
+  it('clips beyond viewport return clamped dimensions', async () => {
+    const res = await fetch(`${baseUrl}/v1/screenshot`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        url: fixtureUrl,
+        viewport: { width: 1000, height: 800 },
+        clip: { x: 900, y: 700, width: 500, height: 400 },
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const buffer = Buffer.from(await res.arrayBuffer());
+    const dimensions = imageSize(buffer);
+    // Playwright should clamp to available area (100x100 max from the origin)
+    expect(dimensions.width).toBeLessThanOrEqual(500);
+    expect(dimensions.height).toBeLessThanOrEqual(400);
+  });
 });

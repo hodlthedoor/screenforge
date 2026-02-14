@@ -89,6 +89,66 @@ describe('screenshotOptionsSchema', () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it('accepts valid clip region', () => {
+    const result = screenshotOptionsSchema.safeParse({
+      url: 'https://example.com',
+      clip: { x: 100, y: 50, width: 800, height: 600 },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.clip).toEqual({ x: 100, y: 50, width: 800, height: 600 });
+    }
+  });
+
+  it('accepts clip at origin (0, 0)', () => {
+    const result = screenshotOptionsSchema.safeParse({
+      url: 'https://example.com',
+      clip: { x: 0, y: 0, width: 500, height: 300 },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects clip with negative x', () => {
+    const result = screenshotOptionsSchema.safeParse({
+      url: 'https://example.com',
+      clip: { x: -10, y: 0, width: 800, height: 600 },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects clip with negative y', () => {
+    const result = screenshotOptionsSchema.safeParse({
+      url: 'https://example.com',
+      clip: { x: 0, y: -5, width: 800, height: 600 },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects clip with zero width', () => {
+    const result = screenshotOptionsSchema.safeParse({
+      url: 'https://example.com',
+      clip: { x: 0, y: 0, width: 0, height: 600 },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects clip with zero height', () => {
+    const result = screenshotOptionsSchema.safeParse({
+      url: 'https://example.com',
+      clip: { x: 0, y: 0, width: 800, height: 0 },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects clip + selector (mutually exclusive)', () => {
+    const result = screenshotOptionsSchema.safeParse({
+      url: 'https://example.com',
+      clip: { x: 0, y: 0, width: 800, height: 600 },
+      selector: '#main',
+    });
+    expect(result.success).toBe(false);
+  });
 });
 
 describe('pdfOptionsSchema', () => {

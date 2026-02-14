@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { baseUrl, apiKey, fixtureUrl } from './setup.js';
+import imageSize from 'image-size';
 
 async function pollJob(jobId: string, maxWaitMs = 30_000): Promise<{
   id: string;
@@ -106,5 +107,34 @@ describe('E2E: Async rendering', () => {
     expect(res.status).toBe(404);
     const body = await res.json();
     expect(body.error.code).toBe('JOB_NOT_FOUND');
+  });
+
+  it('async screenshot with clip completes with correct dimensions', async () => {
+    const res = await fetch(`${baseUrl}/v1/screenshot?async=true`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        url: fixtureUrl,
+        clip: { x: 0, y: 0, width: 600, height: 400 },
+      }),
+    });
+
+    expect(res.status).toBe(202);
+    const { id: jobId } = await res.json();
+
+    const jobStatus = await pollJob(jobId);
+    expect(jobStatus.status).toBe('completed');
+    expect(jobStatus.contentType).toBe('image/png');
+
+    const contentRes = await fetch(`${baseUrl}/v1/render/${jobId}`, {
+      headers: { Accept: 'image/png' },
+    });
+    const buffer = Buffer.from(await contentRes.arrayBuffer());
+    const dimensions = imageSize(buffer);
+    expect(dimensions.width).toBe(600);
+    expect(dimensions.height).toBe(400);
   });
 });

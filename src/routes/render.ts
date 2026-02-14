@@ -123,6 +123,17 @@ export async function renderRoutes(
           },
           fullPage: { type: 'boolean', default: false },
           selector: { type: 'string', description: 'CSS selector to capture' },
+          clip: {
+            type: 'object',
+            description: 'Capture specific rectangular region (mutually exclusive with selector)',
+            properties: {
+              x: { type: 'number', minimum: 0, description: 'X coordinate' },
+              y: { type: 'number', minimum: 0, description: 'Y coordinate' },
+              width: { type: 'number', minimum: 1, description: 'Width in pixels' },
+              height: { type: 'number', minimum: 1, description: 'Height in pixels' },
+            },
+            required: ['x', 'y', 'width', 'height'],
+          },
           waitFor: { type: 'string', description: 'CSS selector to wait for' },
           darkMode: { type: 'boolean', default: false },
           deviceScaleFactor: { type: 'number', minimum: 0.5, maximum: 4, default: 1 },

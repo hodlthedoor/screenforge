@@ -43,12 +43,20 @@ export const viewportSchema = z.object({
   height: z.number().int().min(1).max(4320).default(1080),
 });
 
+const clipSchema = z.object({
+  x: z.number().min(0),
+  y: z.number().min(0),
+  width: z.number().min(1),
+  height: z.number().min(1),
+});
+
 const screenshotBaseOptionsSchema = z.object({
   viewport: viewportSchema.default({ width: 1920, height: 1080 }),
   format: z.enum(['png', 'jpeg']).default('png'),
   quality: z.number().int().min(0).max(100).optional(),
   fullPage: z.boolean().default(false),
   selector: z.string().optional(),
+  clip: clipSchema.optional(),
   waitFor: z.string().optional(),
   darkMode: z.boolean().default(false),
   deviceScaleFactor: z.number().min(0.5).max(4).default(1),
@@ -63,6 +71,8 @@ export const screenshotOptionsSchema = z.object({
   ...contentFilterSchema.shape,
 }).refine((data) => (data.url && !data.html) || (!data.url && data.html), {
   message: 'Exactly one of url or html must be provided',
+}).refine((data) => !(data.selector && data.clip), {
+  message: 'clip and selector are mutually exclusive',
 });
 
 export type ScreenshotOptions = z.infer<typeof screenshotOptionsSchema>;

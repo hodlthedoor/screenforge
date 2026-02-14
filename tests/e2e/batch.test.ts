@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { baseUrl, apiKey, fixtureUrl } from './setup.js';
+import imageSize from 'image-size';
 
 async function pollBatch(batchId: string, maxWaitMs = 30_000): Promise<{
   id: string;
@@ -86,5 +87,38 @@ describe('E2E: Batch rendering', () => {
 
     const buffer = Buffer.from(await jobRes.arrayBuffer());
     expect(buffer[0]).toBe(0x89); // PNG magic
+  });
+
+  it('batch screenshot with clip completes with correct dimensions', async () => {
+    const res = await fetch(`${baseUrl}/v1/batch`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        items: [
+          {
+            type: 'screenshot',
+            url: fixtureUrl,
+            options: { clip: { x: 50, y: 50, width: 700, height: 500 } },
+          },
+        ],
+      }),
+    });
+
+    expect(res.status).toBe(202);
+    const body = await res.json();
+    const result = await pollBatch(body.batchId);
+    expect(result.status).toBe('completed');
+    expect(result.completed).toBe(1);
+
+    const jobRes = await fetch(`${baseUrl}/v1/render/${result.jobs[0].id}`, {
+      headers: { Accept: 'image/png' },
+    });
+    const buffer = Buffer.from(await jobRes.arrayBuffer());
+    const dimensions = imageSize(buffer);
+    expect(dimensions.width).toBe(700);
+    expect(dimensions.height).toBe(500);
   });
 });

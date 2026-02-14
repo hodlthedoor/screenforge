@@ -103,6 +103,39 @@ describe('API endpoints', { timeout: 120_000 }, () => {
       expect(res.headers['x-cache']).toBe('HIT');
       expect(res.headers['x-render-duration-ms']).toBe('0');
     });
+
+    it('returns 400 for negative clip x', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/screenshot',
+        payload: { url: fixtureUrl, clip: { x: -10, y: 0, width: 800, height: 600 } },
+      });
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.body);
+      expect(body.error.code).toBe('VALIDATION_ERROR');
+    });
+
+    it('returns 400 for zero clip width', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/screenshot',
+        payload: { url: fixtureUrl, clip: { x: 0, y: 0, width: 0, height: 600 } },
+      });
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.body);
+      expect(body.error.code).toBe('VALIDATION_ERROR');
+    });
+
+    it('returns 400 for clip + selector (mutually exclusive)', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/screenshot',
+        payload: { url: fixtureUrl, clip: { x: 0, y: 0, width: 800, height: 600 }, selector: '#target' },
+      });
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.body);
+      expect(body.error.code).toBe('VALIDATION_ERROR');
+    });
   });
 
   describe('POST /v1/pdf', () => {
