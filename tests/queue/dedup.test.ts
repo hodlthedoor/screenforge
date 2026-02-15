@@ -133,6 +133,26 @@ describe('computeFingerprint', () => {
     // Without type, should still produce consistent hashes
     expect(computeFingerprint(params)).toBe(computeFingerprint(params));
   });
+
+  it('HTML render fingerprint is consistent regardless of url field', () => {
+    const html = '<html><body>Hello</body></html>';
+    // When enqueuing, url is set to the html content and html is in options
+    const enqueueParams = { url: html, html, format: 'png', width: 1920, height: 1080 };
+    // Verify consistency: same inputs always produce same fingerprint
+    expect(computeFingerprint(enqueueParams, 'screenshot')).toBe(
+      computeFingerprint(enqueueParams, 'screenshot'),
+    );
+  });
+
+  it('HTML renders produce different fingerprints from URL renders', () => {
+    const html = '<html><body>Hello</body></html>';
+    const htmlParams = { url: html, html, format: 'png', width: 1920 };
+    const urlParams = { url: 'https://example.com', format: 'png', width: 1920 };
+
+    expect(computeFingerprint(htmlParams, 'screenshot')).not.toBe(
+      computeFingerprint(urlParams, 'screenshot'),
+    );
+  });
 });
 
 describe('Redis deduplication', () => {

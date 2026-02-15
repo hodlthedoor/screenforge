@@ -6,7 +6,7 @@ import { getWebhookConfig } from '../db/api-keys.js';
 import { incrementRenderCounter, observeRenderDuration } from '../metrics/index.js';
 import { getConfig } from '../config/index.js';
 import { getFormatFromContentType } from '../utils/format.js';
-import { computeFingerprint, clearDedup } from './dedup.js';
+import { clearDedup } from './dedup.js';
 
 const TIER_PRIORITY: Record<string, number> = {
   business: 10,
@@ -27,6 +27,7 @@ export interface RenderJobData {
   options: Record<string, unknown>;
   callbackUrl?: string;
   batchId?: string;
+  dedupFingerprint?: string;
 }
 
 export interface RenderJobResult {
@@ -165,14 +166,10 @@ export function createWorker(
     const format = job.data.type === 'pdf' ? 'pdf' : 'png';
     incrementRenderCounter(job.data.type, format, 'failed', false);
 
-    // Clear dedup key if deduplication is enabled
-    if (config.DEDUP_ENABLED) {
+    // Clear dedup key if deduplication is enabled and fingerprint was stored
+    if (config.DEDUP_ENABLED && job.data.dedupFingerprint) {
       try {
-        const fingerprint = computeFingerprint({
-          url: job.data.url,
-          ...job.data.options,
-        }, job.data.type);
-        await clearDedup(getDedupRedis(config.REDIS_URL), fingerprint);
+        await clearDedup(getDedupRedis(config.REDIS_URL), job.data.dedupFingerprint);
       } catch {
         // Non-critical - log but don't fail the job
       }

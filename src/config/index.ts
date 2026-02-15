@@ -67,7 +67,7 @@ const envSchema = z.object({
   PROXY_PASSWORD: z.string().optional(),
 
   // Job deduplication: share browser execution for identical concurrent render requests
-  DEDUP_ENABLED: z.enum(['true', 'false']).default('true').transform((v) => v === 'true'),
+  DEDUP_ENABLED: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
   DEDUP_WINDOW_MS: z.coerce.number().int().min(1000).max(300_000).default(30_000),
 });
 

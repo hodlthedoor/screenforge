@@ -118,6 +118,7 @@ export async function renderRoutes(
     options: Record<string, unknown>,
     callbackUrl: string | undefined,
     priority: number,
+    dedupFingerprint?: string,
   ): Promise<string> {
     const jobResult = await getPool().query(
       `INSERT INTO render_jobs (api_key_id, type, url, options, callback_url, priority) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
@@ -129,6 +130,7 @@ export async function renderRoutes(
     const jobData: RenderJobData = {
       jobId, apiKeyId, type, options, callbackUrl,
       ...(options.html ? {} : { url }),
+      ...(dedupFingerprint ? { dedupFingerprint } : {}),
     };
     await q.add(`render-${jobId}`, jobData, { priority });
     return jobId;
@@ -175,7 +177,7 @@ export async function renderRoutes(
 
       if (lockAcquired === 'OK') {
         incrementDedupMisses();
-        jobId = await createAndEnqueueJob(apiKeyId, type, url, options, callbackUrl, priority);
+        jobId = await createAndEnqueueJob(apiKeyId, type, url, options, callbackUrl, priority, fingerprint);
         // Update lock with actual job ID (keep same TTL)
         await redis.set(`dedup:${fingerprint}`, jobId, 'PX', config.DEDUP_WINDOW_MS);
       } else {
@@ -193,7 +195,7 @@ export async function renderRoutes(
           jobId = existingJobId;
         } else {
           // Fallback: winner timed out or crashed — create a new job
-          jobId = await createAndEnqueueJob(apiKeyId, type, url, options, callbackUrl, priority);
+          jobId = await createAndEnqueueJob(apiKeyId, type, url, options, callbackUrl, priority, fingerprint);
         }
       }
     } else {
