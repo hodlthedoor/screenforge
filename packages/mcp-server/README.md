@@ -9,7 +9,7 @@ MCP server for ScreenForge. It exposes ScreenForge render and schedule APIs as M
 - `og(url, opts)`
 - `gif(url, opts)`
 - `diff(url_a, url_b, opts)`
-- `extract(url, prompt, schema?, model?, screenshot_options?)`
+- `extract(url, prompt, schema?, model?, llm_api_key?, screenshot_options?)`
 - `accessibility(url, standard?, include_screenshot?)`
 - `create_schedule(opts)`
 - `list_schedules()`
@@ -30,6 +30,11 @@ Binary results are returned as:
 - `modelUsed`
 - `tokensUsed`
 - optional `screenshotUrl`
+
+`extract` key requirements:
+
+- If the ScreenForge server has `ANTHROPIC_API_KEY` configured, `extract` works without extra arguments.
+- If the server does not have `ANTHROPIC_API_KEY`, pass `llm_api_key` in the tool call (explicit BYOK), or set `SCREENFORGE_MCP_EXTRACT_LLM_API_KEY` on this MCP server for a default BYOK key.
 
 `accessibility` returns normalized audit data from `/v1/accessibility`:
 
@@ -59,6 +64,7 @@ Optional:
 - `SCREENFORGE_API_URL`: ScreenForge API base URL (default `http://localhost:3100`)
 - `SCREENFORGE_MCP_INLINE_LIMIT_BYTES`: inline base64 limit in bytes (default `524288`)
 - `SCREENFORGE_MCP_ARTIFACT_DIR`: directory for large payload files
+- `SCREENFORGE_MCP_EXTRACT_LLM_API_KEY`: optional default Anthropic key used for `extract` BYOK forwarding
 - `MCP_TRANSPORT`: `stdio` (default) or `sse`
 - `PORT`: SSE port (default `3333`)
 - `HOST`: SSE host (default `0.0.0.0`)
@@ -142,6 +148,7 @@ Use when an agent needs specific facts from a page (pricing, metadata, headings,
     "url": "https://example.com/pricing",
     "prompt": "Extract plan names, monthly price, and CTA links.",
     "model": "sonnet",
+    "llm_api_key": "sk-ant-...",
     "schema": {
       "type": "object",
       "properties": {

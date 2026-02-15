@@ -45,9 +45,11 @@ export interface ToolRegistrar {
 
 export interface ToolRegistryOptions {
   client: ScreenForgeClientLike;
+  apiUrl: string;
   inlineDataLimitBytes: number;
   artifactDir?: string;
   apiKey: string;
+  extractLlmApiKey?: string;
 }
 
 interface EncodedBinary {
@@ -239,6 +241,7 @@ export function createToolRegistry(options: ToolRegistryOptions) {
           prompt: { type: 'string' },
           schema: { type: 'object', additionalProperties: true },
           model: { type: 'string', enum: ['sonnet', 'haiku'] },
+          llm_api_key: { type: 'string' },
           screenshot_options: {
             type: 'object',
             additionalProperties: true,
@@ -257,15 +260,20 @@ export function createToolRegistry(options: ToolRegistryOptions) {
         const prompt = requireString(args.prompt, 'prompt');
         const schema = optionalObject(args.schema, 'schema');
         const model = optionalEnum(args.model, ['sonnet', 'haiku'], 'model');
+        const llmApiKey = optionalString(args.llm_api_key, 'llm_api_key') ?? options.extractLlmApiKey;
         const screenshotOptions = optionalObject(args.screenshot_options, 'screenshot_options');
 
-        const result = await options.client.extract({
+        const extractPayload = {
           url,
           prompt,
           ...(schema ? { schema } : {}),
           ...(model ? { model } : {}),
           ...(screenshotOptions ? { screenshot_options: screenshotOptions } : {}),
-        });
+        } as ExtractOptions;
+
+        const result = llmApiKey
+          ? await runExtractWithByok(options.apiUrl, options.apiKey, llmApiKey, extractPayload)
+          : await options.client.extract(extractPayload);
 
         return {
           status: 'completed',
@@ -445,9 +453,75 @@ export function createToolRegistry(options: ToolRegistryOptions) {
   return { registerAll };
 }
 
+async function runExtractWithByok(
+  apiUrl: string,
+  apiKey: string,
+  llmApiKey: string,
+  payload: ExtractOptions,
+): Promise<ExtractResult> {
+  const response = await fetch(`${apiUrl}/v1/extract`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${apiKey}`,
+      'content-type': 'application/json',
+      'x-llm-api-key': llmApiKey,
+      accept: 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const text = await response.text();
+  const parsed = text ? safeJsonParse(text) : {};
+
+  if (!response.ok) {
+    const message =
+      typeof parsed === 'object' &&
+      parsed !== null &&
+      'error' in parsed &&
+      typeof (parsed as { error?: unknown }).error === 'string'
+        ? (parsed as { error: string }).error
+        : `Extract request failed: HTTP ${response.status}`;
+    throw new Error(message);
+  }
+
+  if (typeof parsed !== 'object' || parsed === null) {
+    throw new Error('Extract response must be an object');
+  }
+
+  const extractionId = requireString((parsed as Record<string, unknown>).extractionId, 'extractionId');
+  const modelUsed = requireString((parsed as Record<string, unknown>).modelUsed, 'modelUsed');
+  const tokensUsed = requireNumber((parsed as Record<string, unknown>).tokensUsed, 'tokensUsed');
+  const durationMs = requireNumber((parsed as Record<string, unknown>).durationMs, 'durationMs');
+  const screenshotPath = optionalString((parsed as Record<string, unknown>).screenshotPath, 'screenshotPath');
+
+  return {
+    extractionId,
+    data: (parsed as Record<string, unknown>).data,
+    modelUsed,
+    tokensUsed,
+    durationMs,
+    ...(screenshotPath ? { screenshotPath } : {}),
+  };
+}
+
+function safeJsonParse(value: string): unknown {
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return {};
+  }
+}
+
 function requireString(value: unknown, key: string): string {
   if (typeof value !== 'string' || value.length === 0) {
     throw new Error(`${key} is required`);
+  }
+  return value;
+}
+
+function requireNumber(value: unknown, key: string): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new Error(`${key} must be a number`);
   }
   return value;
 }
@@ -475,6 +549,16 @@ function optionalBoolean(value: unknown, key: string): boolean | undefined {
   }
   if (typeof value !== 'boolean') {
     throw new Error(`${key} must be a boolean`);
+  }
+  return value;
+}
+
+function optionalString(value: unknown, key: string): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new Error(`${key} must be a non-empty string`);
   }
   return value;
 }

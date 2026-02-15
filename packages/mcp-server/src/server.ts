@@ -5,9 +5,12 @@ import { ScreenForge } from '@screenforge/sdk';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { z } from 'zod';
 
 import type { McpServerConfig } from './config.js';
 import { createToolRegistry, type ToolRegistrar } from './tools.js';
+
+const MCP_TOOL_ARGS_SCHEMA = z.object({}).passthrough();
 
 export function createScreenforgeMcpServer(config: McpServerConfig): McpServer {
   const client = new ScreenForge({
@@ -22,9 +25,11 @@ export function createScreenforgeMcpServer(config: McpServerConfig): McpServer {
 
   const registry = createToolRegistry({
     client,
+    apiUrl: config.apiUrl,
     inlineDataLimitBytes: config.inlineDataLimitBytes,
     artifactDir: config.artifactDir,
     apiKey: config.apiKey,
+    extractLlmApiKey: config.extractLlmApiKey,
   });
 
   const registrar: ToolRegistrar = {
@@ -34,10 +39,14 @@ export function createScreenforgeMcpServer(config: McpServerConfig): McpServer {
         {
           title: name,
           description,
-          inputSchema: inputSchema as never,
+          inputSchema: MCP_TOOL_ARGS_SCHEMA,
+          _meta: {
+            screenforgeInputSchema: inputSchema,
+          },
         },
         async (args: unknown) => {
-          const result = await handler((args ?? {}) as Record<string, unknown>);
+          const normalizedArgs = normalizeToolArguments(args);
+          const result = await handler(normalizedArgs);
           return {
             content: [
               {
@@ -54,6 +63,18 @@ export function createScreenforgeMcpServer(config: McpServerConfig): McpServer {
 
   registry.registerAll(registrar);
   return server;
+}
+
+function normalizeToolArguments(args: unknown): Record<string, unknown> {
+  if (args === undefined || args === null) {
+    return {};
+  }
+
+  if (typeof args !== 'object' || Array.isArray(args)) {
+    throw new Error('Tool arguments must be an object');
+  }
+
+  return args as Record<string, unknown>;
 }
 
 export async function startStdioServer(config: McpServerConfig): Promise<void> {

@@ -68,7 +68,7 @@ describe('createToolRegistry', () => {
 
   it('registers all required tools', () => {
     const registrar = new FakeRegistrar();
-    const registry = createToolRegistry({ client: client as any, inlineDataLimitBytes: 16_384, artifactDir: tempDir, apiKey: 'k' });
+    const registry = createToolRegistry({ client: client as any, apiUrl: 'http://localhost:3100', inlineDataLimitBytes: 16_384, artifactDir: tempDir, apiKey: 'k' });
 
     registry.registerAll(registrar);
 
@@ -93,7 +93,7 @@ describe('createToolRegistry', () => {
     client.screenshot.mockResolvedValue(Buffer.from('abc'));
 
     const registrar = new FakeRegistrar();
-    const registry = createToolRegistry({ client: client as any, inlineDataLimitBytes: 10, artifactDir: tempDir, apiKey: 'k' });
+    const registry = createToolRegistry({ client: client as any, apiUrl: 'http://localhost:3100', inlineDataLimitBytes: 10, artifactDir: tempDir, apiKey: 'k' });
     registry.registerAll(registrar);
 
     const result = await registrar.tools.get('screenshot')!.handler({
@@ -116,7 +116,7 @@ describe('createToolRegistry', () => {
     client.pdf.mockResolvedValue(Buffer.alloc(64, 1));
 
     const registrar = new FakeRegistrar();
-    const registry = createToolRegistry({ client: client as any, inlineDataLimitBytes: 8, artifactDir: tempDir, apiKey: 'k' });
+    const registry = createToolRegistry({ client: client as any, apiUrl: 'http://localhost:3100', inlineDataLimitBytes: 8, artifactDir: tempDir, apiKey: 'k' });
     registry.registerAll(registrar);
 
     const result = await registrar.tools.get('pdf')!.handler({
@@ -138,7 +138,7 @@ describe('createToolRegistry', () => {
     client.deleteSchedule.mockResolvedValue(undefined);
 
     const registrar = new FakeRegistrar();
-    const registry = createToolRegistry({ client: client as any, inlineDataLimitBytes: 8, artifactDir: tempDir, apiKey: 'k' });
+    const registry = createToolRegistry({ client: client as any, apiUrl: 'http://localhost:3100', inlineDataLimitBytes: 8, artifactDir: tempDir, apiKey: 'k' });
     registry.registerAll(registrar);
 
     const createResult = await registrar.tools.get('create_schedule')!.handler({
@@ -186,7 +186,7 @@ describe('createToolRegistry', () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(Buffer.from('img')));
 
     const registrar = new FakeRegistrar();
-    const registry = createToolRegistry({ client: client as any, inlineDataLimitBytes: 1024, artifactDir: tempDir, apiKey: 'abc123' });
+    const registry = createToolRegistry({ client: client as any, apiUrl: 'http://localhost:3100', inlineDataLimitBytes: 1024, artifactDir: tempDir, apiKey: 'abc123' });
     registry.registerAll(registrar);
 
     const result = await registrar.tools.get('poll_job')!.handler({ id: 'job_1' }) as Record<string, unknown>;
@@ -206,7 +206,7 @@ describe('createToolRegistry', () => {
     client.og.mockRejectedValue(new Error('boom'));
 
     const registrar = new FakeRegistrar();
-    const registry = createToolRegistry({ client: client as any, inlineDataLimitBytes: 1024, artifactDir: tempDir, apiKey: 'k' });
+    const registry = createToolRegistry({ client: client as any, apiUrl: 'http://localhost:3100', inlineDataLimitBytes: 1024, artifactDir: tempDir, apiKey: 'k' });
     registry.registerAll(registrar);
 
     const result = await registrar.tools.get('og')!.handler({
@@ -229,7 +229,7 @@ describe('createToolRegistry', () => {
     });
 
     const registrar = new FakeRegistrar();
-    const registry = createToolRegistry({ client: client as any, inlineDataLimitBytes: 1024, artifactDir: tempDir, apiKey: 'k' });
+    const registry = createToolRegistry({ client: client as any, apiUrl: 'http://localhost:3100', inlineDataLimitBytes: 1024, artifactDir: tempDir, apiKey: 'k' });
     registry.registerAll(registrar);
 
     const missingPrompt = await registrar.tools.get('extract')!.handler({
@@ -263,6 +263,61 @@ describe('createToolRegistry', () => {
     });
   });
 
+  it('extract supports explicit BYOK via llm_api_key header path', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          extractionId: 'ext_byok',
+          data: { ok: true },
+          modelUsed: 'claude-3-5-sonnet',
+          tokensUsed: 42,
+          durationMs: 123,
+          screenshotPath: 'https://cdn.example.com/byok.png',
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    );
+
+    const registrar = new FakeRegistrar();
+    const registry = createToolRegistry({
+      client: client as any,
+      apiUrl: 'http://localhost:3100',
+      inlineDataLimitBytes: 1024,
+      artifactDir: tempDir,
+      apiKey: 'sf-api-key',
+    });
+    registry.registerAll(registrar);
+
+    const result = await registrar.tools.get('extract')!.handler({
+      url: 'https://example.com',
+      prompt: 'Extract summary',
+      llm_api_key: 'anthropic-user-key',
+    }) as Record<string, unknown>;
+
+    expect(client.extract).not.toHaveBeenCalled();
+    expect(fetchSpy).toHaveBeenCalledWith('http://localhost:3100/v1/extract', {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer sf-api-key',
+        'content-type': 'application/json',
+        'x-llm-api-key': 'anthropic-user-key',
+        accept: 'application/json',
+      },
+      body: JSON.stringify({
+        url: 'https://example.com',
+        prompt: 'Extract summary',
+      }),
+    });
+    expect(result).toMatchObject({
+      status: 'completed',
+      extractionId: 'ext_byok',
+      data: { ok: true },
+      modelUsed: 'claude-3-5-sonnet',
+      tokensUsed: 42,
+      screenshotUrl: 'https://cdn.example.com/byok.png',
+    });
+  });
+
   it('accessibility defaults standard, validates args, and maps SDK response', async () => {
     client.accessibility.mockResolvedValue({
       auditId: 'audit_123',
@@ -278,7 +333,7 @@ describe('createToolRegistry', () => {
     });
 
     const registrar = new FakeRegistrar();
-    const registry = createToolRegistry({ client: client as any, inlineDataLimitBytes: 1024, artifactDir: tempDir, apiKey: 'k' });
+    const registry = createToolRegistry({ client: client as any, apiUrl: 'http://localhost:3100', inlineDataLimitBytes: 1024, artifactDir: tempDir, apiKey: 'k' });
     registry.registerAll(registrar);
 
     const missingUrl = await registrar.tools.get('accessibility')!.handler({}) as Record<string, unknown>;
@@ -309,7 +364,7 @@ describe('createToolRegistry', () => {
     client.accessibility.mockRejectedValue(new Error('a11y failed'));
 
     const registrar = new FakeRegistrar();
-    const registry = createToolRegistry({ client: client as any, inlineDataLimitBytes: 1024, artifactDir: tempDir, apiKey: 'k' });
+    const registry = createToolRegistry({ client: client as any, apiUrl: 'http://localhost:3100', inlineDataLimitBytes: 1024, artifactDir: tempDir, apiKey: 'k' });
     registry.registerAll(registrar);
 
     const result = await registrar.tools.get('accessibility')!.handler({

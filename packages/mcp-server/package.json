@@ -39,7 +39,8 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",
-    "@screenforge/sdk": "file:../../sdk/js"
+    "@screenforge/sdk": "file:../../sdk/js",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",

@@ -51,8 +51,11 @@ class MockSSETransport {
 
 class MockMcpServer {
   static connectCalls = 0;
+  static toolHandlers = new Map<string, (args: unknown) => Promise<unknown>>();
 
-  registerTool(): void {}
+  registerTool(name: string, _config: Record<string, unknown>, cb: (args: unknown) => Promise<unknown>): void {
+    MockMcpServer.toolHandlers.set(name, cb);
+  }
   async connect(transport: { start: () => Promise<void> }): Promise<void> {
     MockMcpServer.connectCalls += 1;
     await transport.start();
@@ -140,7 +143,21 @@ describe('startSseServer', () => {
     MockSSETransport.instances = [];
     MockSSETransport.startCalls = 0;
     MockMcpServer.connectCalls = 0;
+    MockMcpServer.toolHandlers = new Map();
     vi.resetModules();
+  });
+
+  it('rejects non-object tool arguments at runtime', async () => {
+    const { createScreenforgeMcpServer } = await import('../src/server');
+    createScreenforgeMcpServer({
+      apiKey: 'sk_test',
+      apiUrl: 'http://localhost:3100',
+      inlineDataLimitBytes: 1024,
+    });
+
+    const screenshotHandler = MockMcpServer.toolHandlers.get('screenshot');
+    expect(screenshotHandler).toBeTruthy();
+    await expect(screenshotHandler!([])).rejects.toThrow('Tool arguments must be an object');
   });
 
   it('keeps SSE session alive for POST routing and validates sessionId', async () => {

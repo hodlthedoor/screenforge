@@ -3,6 +3,7 @@ export interface McpServerConfig {
   apiKey: string;
   inlineDataLimitBytes: number;
   artifactDir?: string;
+  extractLlmApiKey?: string;
 }
 
 const DEFAULT_API_URL = 'http://localhost:3100';
@@ -25,11 +26,13 @@ export function loadConfigFromEnv(env: NodeJS.ProcessEnv = process.env): McpServ
     : DEFAULT_INLINE_DATA_LIMIT_BYTES;
 
   const artifactDir = env.SCREENFORGE_MCP_ARTIFACT_DIR?.trim() || undefined;
+  const extractLlmApiKey = env.SCREENFORGE_MCP_EXTRACT_LLM_API_KEY?.trim() || undefined;
 
   return {
     apiUrl,
     apiKey,
     inlineDataLimitBytes,
     artifactDir,
+    extractLlmApiKey,
   };
 }
