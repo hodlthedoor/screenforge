@@ -131,6 +131,20 @@ export function initMetrics(): void {
     registers: [register],
   });
 
+  new Counter({
+    name: 'screenforge_retry_total',
+    help: 'Total number of job retries by error category and tier',
+    labelNames: ['category', 'tier'],
+    registers: [register],
+  });
+
+  new Counter({
+    name: 'screenforge_permanent_failure_total',
+    help: 'Total number of permanent failures by reason',
+    labelNames: ['reason'],
+    registers: [register],
+  });
+
   metricsInitialized = true;
 }
 
@@ -244,5 +258,19 @@ export function incrementDedupMisses(): void {
   const counter = register.getSingleMetric('screenforge_dedup_misses_total') as Counter<string>;
   if (counter) {
     counter.inc();
+  }
+}
+
+export function incrementRetryCounter(category: string, tier: string): void {
+  const counter = register.getSingleMetric('screenforge_retry_total') as Counter<string>;
+  if (counter) {
+    counter.inc({ category, tier });
+  }
+}
+
+export function incrementPermanentFailure(reason: string): void {
+  const counter = register.getSingleMetric('screenforge_permanent_failure_total') as Counter<string>;
+  if (counter) {
+    counter.inc({ reason });
   }
 }

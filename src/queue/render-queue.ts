@@ -3,10 +3,11 @@ import { Redis } from 'ioredis';
 import { getPool } from '../db/index.js';
 import { enqueueWebhook } from '../webhooks/delivery.js';
 import { getWebhookConfig } from '../db/api-keys.js';
-import { incrementRenderCounter, observeRenderDuration } from '../metrics/index.js';
+import { incrementRenderCounter, observeRenderDuration, incrementRetryCounter, incrementPermanentFailure } from '../metrics/index.js';
 import { getConfig } from '../config/index.js';
 import { getFormatFromContentType } from '../utils/format.js';
 import { clearDedup } from './dedup.js';
+import { classifyError, shouldRetry, type RetryDecision, ErrorCategory } from './retry-policy.js';
 
 const TIER_PRIORITY: Record<string, number> = {
   business: 10,
@@ -156,35 +157,107 @@ export function createWorker(
     if (!job?.data.jobId) return;
     const pool = getPool();
 
-    await pool.query(
-      `UPDATE render_jobs SET status = 'failed', error = $1, completed_at = NOW() WHERE id = $2`,
-      [error.message, job.data.jobId],
-    );
+    // Classify the error and decide whether to retry
+    const category = classifyError(error);
 
-    // Record metrics for failed jobs
-    // For failed jobs we don't have result.contentType, so best effort based on type only
-    const format = job.data.type === 'pdf' ? 'pdf' : 'png';
-    incrementRenderCounter(job.data.type, format, 'failed', false);
-
-    // Clear dedup key if deduplication is enabled and fingerprint was stored
-    if (config.DEDUP_ENABLED && job.data.dedupFingerprint) {
+    // Look up tier for retry limit determination
+    let tier = 'free';
+    if (job.data.apiKeyId) {
       try {
-        await clearDedup(getDedupRedis(config.REDIS_URL), job.data.dedupFingerprint);
+        const tierResult = await pool.query(
+          'SELECT tier FROM api_keys WHERE id = $1',
+          [job.data.apiKeyId],
+        );
+        if (tierResult.rows.length > 0) {
+          tier = tierResult.rows[0].tier;
+        }
       } catch {
-        // Non-critical - log but don't fail the job
+        // If tier lookup fails, use free tier defaults
       }
     }
 
-    if (job.data.batchId) {
-      await pool.query(
-        `UPDATE batch_jobs SET failed = failed + 1 WHERE id = $1`,
-        [job.data.batchId],
-      );
-      await checkBatchCompletion(job.data.batchId);
-    }
+    // Get current retry count from the DB
+    const retryRow = await pool.query(
+      'SELECT retry_count FROM render_jobs WHERE id = $1',
+      [job.data.jobId],
+    );
+    const currentRetryCount = retryRow.rows[0]?.retry_count ?? 0;
 
-    if (job.data.callbackUrl && job.data.apiKeyId) {
-      sendWebhook(job.data.apiKeyId, job.data.jobId, job.data.callbackUrl, 'failed', { error: error.message }).catch(() => {});
+    const decision: RetryDecision = shouldRetry(category, currentRetryCount, tier);
+
+    // Build retry history entry
+    const historyEntry = {
+      attempt: currentRetryCount + 1,
+      category,
+      error: error.message,
+      timestamp: new Date().toISOString(),
+      retried: decision.retry,
+    };
+
+    if (decision.retry) {
+      // Update retry tracking in DB (keep status as 'pending' for retry)
+      await pool.query(
+        `UPDATE render_jobs SET
+          retry_count = retry_count + 1,
+          last_error_category = $1,
+          retry_history = retry_history || $2::jsonb,
+          status = 'pending',
+          error = $3
+        WHERE id = $4`,
+        [category, JSON.stringify(historyEntry), error.message, job.data.jobId],
+      );
+
+      // Re-enqueue with delay
+      const q = getQueue(config.REDIS_URL);
+      await q.add(`render-${job.data.jobId}`, job.data, {
+        delay: decision.delayMs,
+        priority: job.opts.priority,
+      });
+
+      incrementRetryCounter(category, tier);
+    } else {
+      // Final failure — no more retries
+      await pool.query(
+        `UPDATE render_jobs SET
+          status = 'failed',
+          error = $1,
+          last_error_category = $2,
+          retry_history = retry_history || $3::jsonb,
+          completed_at = NOW()
+        WHERE id = $4`,
+        [error.message, category, JSON.stringify(historyEntry), job.data.jobId],
+      );
+
+      // Record metrics for failed jobs
+      const format = job.data.type === 'pdf' ? 'pdf' : 'png';
+      incrementRenderCounter(job.data.type, format, 'failed', false);
+
+      if (category === ErrorCategory.PERMANENT) {
+        // Extract a short reason from the error message for the metric label
+        const reason = error.message.slice(0, 50).replace(/[^a-zA-Z0-9_\- ]/g, '').trim();
+        incrementPermanentFailure(reason);
+      }
+
+      // Clear dedup key if deduplication is enabled and fingerprint was stored
+      if (config.DEDUP_ENABLED && job.data.dedupFingerprint) {
+        try {
+          await clearDedup(getDedupRedis(config.REDIS_URL), job.data.dedupFingerprint);
+        } catch {
+          // Non-critical
+        }
+      }
+
+      if (job.data.batchId) {
+        await pool.query(
+          `UPDATE batch_jobs SET failed = failed + 1 WHERE id = $1`,
+          [job.data.batchId],
+        );
+        await checkBatchCompletion(job.data.batchId);
+      }
+
+      if (job.data.callbackUrl && job.data.apiKeyId) {
+        sendWebhook(job.data.apiKeyId, job.data.jobId, job.data.callbackUrl, 'failed', { error: error.message }).catch(() => {});
+      }
     }
   });
 
