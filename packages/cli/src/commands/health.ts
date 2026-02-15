@@ -17,10 +17,21 @@ export function registerHealth(program: Command, getConfig: () => Promise<CliCon
         const response = await fetch(`${config.server}/v1/health`, {
           headers: config.apiKey ? { authorization: `Bearer ${config.apiKey}` } : {},
           signal: AbortSignal.timeout(10_000),
+          redirect: 'manual',
         });
+
+        if (response.status >= 300 && response.status < 400) {
+          const location = response.headers.get('location') ?? 'unknown';
+          throw new Error(`Server redirected to ${location} — is the URL correct?`);
+        }
 
         if (!response.ok) {
           throw new Error(`Server returned ${response.status} ${response.statusText}`);
+        }
+
+        const contentType = response.headers.get('content-type') ?? '';
+        if (!contentType.includes('application/json')) {
+          throw new Error(`Expected JSON response but got ${contentType || 'no content-type'}`);
         }
 
         const data = await response.json();

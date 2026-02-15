@@ -1,5 +1,5 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { resolve, join, dirname } from 'node:path';
+import { resolve, join } from 'node:path';
 import { ScreenForge } from '@screenforge/sdk';
 import type { BatchItem } from '@screenforge/sdk';
 import type { Command } from 'commander';

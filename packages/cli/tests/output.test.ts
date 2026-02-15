@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatSuccess, formatError, formatInfo, formatData } from '../src/output.js';
+import { formatSuccess, formatError, formatInfo, formatData, parsePositiveInt } from '../src/output.js';
 
 const jsonOpts = { json: true, verbose: false };
 const textOpts = { json: false, verbose: false };
@@ -50,6 +50,34 @@ describe('formatInfo', () => {
   it('returns colored text in text mode', () => {
     const result = formatInfo('Note', textOpts);
     expect(result).toContain('ℹ');
+  });
+});
+
+describe('parsePositiveInt', () => {
+  it('parses valid positive integers', () => {
+    expect(parsePositiveInt('42')).toBe(42);
+    expect(parsePositiveInt('1')).toBe(1);
+    expect(parsePositiveInt('1920')).toBe(1920);
+  });
+
+  it('rejects non-numeric strings', () => {
+    expect(() => parsePositiveInt('abc')).toThrow('positive integer');
+  });
+
+  it('rejects zero', () => {
+    expect(() => parsePositiveInt('0')).toThrow('positive integer');
+  });
+
+  it('rejects negative numbers', () => {
+    expect(() => parsePositiveInt('-5')).toThrow('positive integer');
+  });
+
+  it('rejects floats', () => {
+    expect(() => parsePositiveInt('12.5')).toThrow('positive integer');
+  });
+
+  it('rejects Infinity', () => {
+    expect(() => parsePositiveInt('Infinity')).toThrow('positive integer');
   });
 });
 

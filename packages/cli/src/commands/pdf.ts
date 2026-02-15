@@ -4,19 +4,19 @@ import { ScreenForge } from '@screenforge/sdk';
 import type { Command } from 'commander';
 import ora from 'ora';
 import type { CliConfig } from '../config.js';
-import { formatError, type OutputOptions } from '../output.js';
+import { formatError, parsePositiveInt, type OutputOptions } from '../output.js';
 
 export function registerPdf(program: Command, getConfig: () => Promise<CliConfig>, getOutput: () => OutputOptions): void {
   program
     .command('pdf <url>')
     .description('Generate a PDF from a URL')
     .option('-o, --output <path>', 'Output file path', './output.pdf')
-    .option('-W, --width <number>', 'Viewport width', '1280')
-    .option('-H, --height <number>', 'Viewport height', '800')
+    .option('-W, --width <number>', 'Viewport width', parsePositiveInt, 1280)
+    .option('-H, --height <number>', 'Viewport height', parsePositiveInt, 800)
     .option('-f, --format <format>', 'Page format (a4, letter, legal)', 'a4')
     .option('--landscape', 'Landscape orientation')
     .option('--dark-mode', 'Use dark color scheme')
-    .option('--delay <ms>', 'Wait before capture (ms)')
+    .option('--delay <ms>', 'Wait before capture (ms)', parsePositiveInt)
     .action(async (url: string, opts: Record<string, string | boolean | undefined>) => {
       const config = await getConfig();
       const output = getOutput();
