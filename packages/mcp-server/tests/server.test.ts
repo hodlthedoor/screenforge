@@ -182,9 +182,66 @@ describe('startSseServer', () => {
     expect(typeof screenshotSchema.safeParse).toBe('function');
     expect(typeof extractSchema.safeParse).toBe('function');
     expect(screenshotSchema.safeParse({}).success).toBe(false);
+    expect(screenshotSchema.safeParse({ url: 'not-a-uri' }).success).toBe(false);
     expect(screenshotSchema.safeParse({ url: 'https://example.com' }).success).toBe(true);
     expect(extractSchema.safeParse({ url: 'https://example.com' }).success).toBe(false);
     expect(extractSchema.safeParse({ url: 'https://example.com', prompt: 'Extract title' }).success).toBe(true);
+  });
+
+  it('preserves array items and string format constraints when converting JSON schema to Zod', async () => {
+    vi.doMock('../src/tools.js', () => ({
+      createToolRegistry: () => ({
+        registerAll(registrar: {
+          registerTool: (
+            name: string,
+            description: string,
+            inputSchema: Record<string, unknown>,
+            handler: (args: Record<string, unknown>) => Promise<unknown>,
+          ) => void;
+        }) {
+          registrar.registerTool(
+            'schema_probe',
+            'Probe schema conversion fidelity',
+            {
+              type: 'object',
+              required: ['emails', 'homepage'],
+              properties: {
+                emails: {
+                  type: 'array',
+                  items: {
+                    type: 'string',
+                    format: 'email',
+                  },
+                },
+                homepage: {
+                  type: 'string',
+                  format: 'uri',
+                },
+              },
+            },
+            async () => ({ ok: true }),
+          );
+        },
+      }),
+    }));
+
+    const { createScreenforgeMcpServer } = await import('../src/server');
+    createScreenforgeMcpServer({
+      apiKey: 'sk_test',
+      apiUrl: 'http://localhost:3100',
+      inlineDataLimitBytes: 1024,
+    });
+
+    const probeConfig = MockMcpServer.toolConfigs.get('schema_probe');
+    expect(probeConfig).toBeTruthy();
+
+    const schema = probeConfig?.inputSchema as { safeParse: (data: unknown) => { success: boolean } };
+    expect(schema.safeParse({ emails: ['ops@example.com'], homepage: 'https://example.com' }).success).toBe(true);
+    expect(schema.safeParse({ emails: ['not-an-email'], homepage: 'https://example.com' }).success).toBe(false);
+    expect(schema.safeParse({ emails: 'ops@example.com', homepage: 'https://example.com' }).success).toBe(false);
+    expect(schema.safeParse({ emails: ['ops@example.com'], homepage: 'not-a-uri' }).success).toBe(false);
+
+    vi.doUnmock('../src/tools.js');
   });
 
   it('keeps SSE session alive for POST routing and validates sessionId', async () => {
