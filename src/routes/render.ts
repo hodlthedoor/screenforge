@@ -432,6 +432,25 @@ export async function renderRoutes(
               quality: { type: 'integer', minimum: 0, maximum: 100, default: 80, description: 'Compression quality (jpeg/webp)' },
             },
           },
+          fonts: {
+            type: 'array',
+            maxItems: 5,
+            description: 'Custom fonts to load before rendering. Max 5 fonts. Supports Google Fonts shorthand or direct CSS URLs from allowed CDNs (fonts.googleapis.com, fonts.gstatic.com, cdn.jsdelivr.net, unpkg.com).',
+            items: {
+              type: 'object',
+              description: 'Font specification — provide either family (Google Fonts) or url (direct CSS)',
+              properties: {
+                family: { type: 'string', maxLength: 100, description: 'Google Fonts family name (e.g., "Roboto", "Open Sans"). Mutually exclusive with url.' },
+                weights: {
+                  type: 'array',
+                  maxItems: 10,
+                  items: { type: 'integer', minimum: 1, maximum: 1000 },
+                  description: 'Font weights to load (e.g., [400, 700]). Only used with family. Optional — defaults to regular weight.',
+                },
+                url: { type: 'string', description: 'Direct font CSS URL from allowed CDN. Mutually exclusive with family.' },
+              },
+            },
+          },
         },
       },
     },
@@ -760,6 +779,25 @@ export async function renderRoutes(
             type: 'boolean',
             default: false,
             description: 'Extract enhanced metadata (Open Graph tags, Twitter Cards, favicon, canonical URL, language/locale) from the page. Only populated when metadata=true query parameter is also used.',
+          },
+          fonts: {
+            type: 'array',
+            maxItems: 5,
+            description: 'Custom fonts to load before rendering. Max 5 fonts. Supports Google Fonts shorthand or direct CSS URLs from allowed CDNs (fonts.googleapis.com, fonts.gstatic.com, cdn.jsdelivr.net, unpkg.com).',
+            items: {
+              type: 'object',
+              description: 'Font specification — provide either family (Google Fonts) or url (direct CSS)',
+              properties: {
+                family: { type: 'string', maxLength: 100, description: 'Google Fonts family name (e.g., "Roboto", "Open Sans"). Mutually exclusive with url.' },
+                weights: {
+                  type: 'array',
+                  maxItems: 10,
+                  items: { type: 'integer', minimum: 1, maximum: 1000 },
+                  description: 'Font weights to load (e.g., [400, 700]). Only used with family. Optional — defaults to regular weight.',
+                },
+                url: { type: 'string', description: 'Direct font CSS URL from allowed CDN. Mutually exclusive with family.' },
+              },
+            },
           },
         },
       },

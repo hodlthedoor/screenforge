@@ -35,6 +35,22 @@ class Action(_ActionRequired, total=False):
     y: int
 
 
+class GoogleFont(TypedDict, total=False):
+    """Google Fonts shorthand configuration."""
+
+    family: str  # Required
+    weights: List[int]
+
+
+class DirectFontUrl(TypedDict):
+    """Direct font CSS URL configuration."""
+
+    url: str
+
+
+Font = Union[GoogleFont, DirectFontUrl]
+
+
 class ScreenshotOptions(TypedDict, total=False):
     """Options for screenshot rendering."""
 
@@ -59,6 +75,7 @@ class ScreenshotOptions(TypedDict, total=False):
     fail_if_contains: str
     fail_if_missing: str
     block_ads: bool
+    fonts: List[Font]
 
 
 class PdfMargins(TypedDict, total=False):
@@ -93,6 +110,7 @@ class PdfOptions(TypedDict, total=False):
     fail_if_contains: str
     fail_if_missing: str
     block_ads: bool
+    fonts: List[Font]
 
 
 class OgOptions(TypedDict, total=False):
@@ -107,6 +125,7 @@ class OgOptions(TypedDict, total=False):
     template: Literal["default", "article", "product"]
     headers: Dict[str, str]
     cookies: List[Cookie]
+    fonts: List[Font]
 
 
 class BatchItem(TypedDict, total=False):

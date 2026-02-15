@@ -18,6 +18,17 @@ export interface Action {
   y?: number;
 }
 
+export interface GoogleFont {
+  family: string;
+  weights?: number[];
+}
+
+export interface DirectFontUrl {
+  url: string;
+}
+
+export type Font = GoogleFont | DirectFontUrl;
+
 export interface ScreenshotOptions {
   url?: string;
   html?: string;
@@ -40,6 +51,7 @@ export interface ScreenshotOptions {
   fail_if_contains?: string;
   fail_if_missing?: string;
   block_ads?: boolean;
+  fonts?: Font[];
 }
 
 export interface PdfMargins {
@@ -70,6 +82,7 @@ export interface PdfOptions {
   fail_if_contains?: string;
   fail_if_missing?: string;
   block_ads?: boolean;
+  fonts?: Font[];
 }
 
 export interface OgOptions {
@@ -82,6 +95,7 @@ export interface OgOptions {
   template?: 'default' | 'article' | 'product';
   headers?: Record<string, string>;
   cookies?: Cookie[];
+  fonts?: Font[];
 }
 
 export interface BatchItem {

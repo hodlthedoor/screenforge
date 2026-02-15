@@ -4,10 +4,11 @@ import { authMiddleware } from '../auth/middleware.js';
 import type { BrowserPool } from '../renderer/browser-pool.js';
 import { RenderCache } from '../cache/index.js';
 import { getConfig } from '../config/index.js';
-import { isPrivateUrl, cookieSchema, geolocationSchema, timezoneSchema, localeSchema, waitStrategySchema } from '../renderer/schemas.js';
+import { isPrivateUrl, cookieSchema, geolocationSchema, timezoneSchema, localeSchema, waitStrategySchema, fontsSchema } from '../renderer/schemas.js';
 import { applyWaitStrategy } from '../renderer/wait.js';
 import { sendError } from '../security/errors.js';
 import { sanitizeHeaders, sanitizeCookies, toPlaywrightCookies, SanitizeError } from '../security/sanitize.js';
+import { loadFonts } from '../renderer/fonts.js';
 const ogRequestSchema = z.object({
   url: z.string().url().optional(),
   title: z.string().max(200).optional(),
@@ -23,6 +24,7 @@ const ogRequestSchema = z.object({
   locale: localeSchema.optional(),
   waitFor: z.string().optional(),
   wait: waitStrategySchema.optional(),
+  fonts: fontsSchema,
 }).refine((data) => !(data.waitFor && data.wait), {
   message: 'waitFor and wait are mutually exclusive — use wait for new features, waitFor for backwards compatibility',
 });
@@ -237,6 +239,25 @@ export async function ogRoutes(app: FastifyInstance, pool: BrowserPool, cache: R
               },
             ],
           },
+          fonts: {
+            type: 'array',
+            maxItems: 5,
+            description: 'Custom fonts to load before rendering. Max 5 fonts. Supports Google Fonts shorthand or direct CSS URLs from allowed CDNs (fonts.googleapis.com, fonts.gstatic.com, cdn.jsdelivr.net, unpkg.com).',
+            items: {
+              type: 'object',
+              description: 'Font specification — provide either family (Google Fonts) or url (direct CSS)',
+              properties: {
+                family: { type: 'string', maxLength: 100, description: 'Google Fonts family name (e.g., "Roboto", "Open Sans"). Mutually exclusive with url.' },
+                weights: {
+                  type: 'array',
+                  maxItems: 10,
+                  items: { type: 'integer', minimum: 1, maximum: 1000 },
+                  description: 'Font weights to load (e.g., [400, 700]). Only used with family. Optional — defaults to regular weight.',
+                },
+                url: { type: 'string', description: 'Direct font CSS URL from allowed CDN. Mutually exclusive with family.' },
+              },
+            },
+          },
         },
       },
     },
@@ -310,6 +331,7 @@ export async function ogRoutes(app: FastifyInstance, pool: BrowserPool, cache: R
     });
     try {
       const page = await context.newPage();
+      await loadFonts(page, data.fonts);
       await page.setContent(html, { waitUntil: 'networkidle' });
       await applyWaitStrategy(page, data.wait, data.waitFor, config.NAVIGATION_TIMEOUT_MS);
       const buffer = Buffer.from(await page.screenshot({ type: 'png' }));

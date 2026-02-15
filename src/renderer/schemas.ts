@@ -141,6 +141,32 @@ export const thumbnailSchema = z.object({
 
 export type ThumbnailOptions = z.infer<typeof thumbnailSchema>;
 
+// Font loading schema — supports Google Fonts shorthand and direct CSS URLs
+export const fontSchema = z.object({
+  family: z.string().min(1).max(100).optional(),
+  weights: z.array(z.number().int().min(1).max(1000)).max(10).optional(),
+  url: z.string().url().optional(),
+}).refine(
+  (data) => {
+    // Ensure exactly one of 'family' or 'url' is provided (not both, not neither)
+    const hasFamily = data.family !== undefined;
+    const hasUrl = data.url !== undefined;
+    return (hasFamily && !hasUrl) || (!hasFamily && hasUrl);
+  },
+  { message: 'Font must have exactly one of: family (for Google Fonts) or url (for direct CSS)' }
+).transform((data) => {
+  // Add type discriminator for easier handling
+  if (data.url) {
+    return { type: 'url' as const, url: data.url };
+  } else {
+    return { type: 'google' as const, family: data.family!, weights: data.weights };
+  }
+});
+
+export const fontsSchema = z.array(fontSchema).max(5).optional();
+
+export type FontSpec = z.infer<typeof fontSchema>;
+
 const screenshotBaseOptionsSchema = z.object({
   viewport: viewportSchema.default({ width: 1920, height: 1080 }),
   format: z.enum(['png', 'jpeg', 'webp', 'avif']).default('png'),
@@ -163,6 +189,7 @@ const screenshotBaseOptionsSchema = z.object({
   fail_if_missing: z.string().max(500).optional(),
   extract_metadata: z.boolean().default(false),
   thumbnail: thumbnailSchema,
+  fonts: fontsSchema,
 });
 
 export const screenshotOptionsSchema = z.object({
@@ -236,6 +263,7 @@ const pdfBaseOptionsSchema = z.object({
   fail_if_contains: z.string().max(500).optional(),
   fail_if_missing: z.string().max(500).optional(),
   extract_metadata: z.boolean().default(false),
+  fonts: fontsSchema,
 });
 
 export const pdfOptionsSchema = z.object({

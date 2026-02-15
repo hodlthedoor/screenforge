@@ -7,6 +7,7 @@ import { validateContent } from './content-validation.js';
 import { toPlaywrightCookies } from '../security/sanitize.js';
 import { getConfig } from '../config/index.js';
 import { extractMetadataFromPage } from './metadata.js';
+import { loadFonts } from './fonts.js';
 
 const FORMAT_SIZE: Record<string, { width: string; height: string }> = {
   a4: { width: '210mm', height: '297mm' },
@@ -57,6 +58,9 @@ export async function renderPdf(pool: BrowserPool, options: PdfOptions, timeoutM
     }
 
     await applyPreNavigationFilters(page, options);
+
+    // Load custom fonts before navigation
+    await loadFonts(page, options.fonts);
 
     let response;
     if ('html' in options && options.html) {

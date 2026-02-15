@@ -10,6 +10,7 @@ import { getConfig } from '../config/index.js';
 import sharp from 'sharp';
 import { extractMetadataFromPage } from './metadata.js';
 import { FORMAT_CONTENT_TYPE } from '../utils/format.js';
+import { loadFonts } from './fonts.js';
 
 export async function takeScreenshot(pool: BrowserPool, options: ScreenshotOptions, timeoutMs = 30_000): Promise<RenderResult> {
   const start = performance.now();
@@ -57,6 +58,9 @@ export async function takeScreenshot(pool: BrowserPool, options: ScreenshotOptio
     }
 
     await applyPreNavigationFilters(page, options);
+
+    // Load custom fonts before navigation
+    await loadFonts(page, options.fonts);
 
     let response;
     if ('html' in options && options.html) {
