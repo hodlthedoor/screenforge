@@ -492,7 +492,8 @@ async function runExtractWithByok(
   const modelUsed = requireString((parsed as Record<string, unknown>).modelUsed, 'modelUsed');
   const tokensUsed = requireNumber((parsed as Record<string, unknown>).tokensUsed, 'tokensUsed');
   const durationMs = requireNumber((parsed as Record<string, unknown>).durationMs, 'durationMs');
-  const screenshotPath = optionalString((parsed as Record<string, unknown>).screenshotPath, 'screenshotPath');
+  const rawScreenshotPath = (parsed as Record<string, unknown>).screenshotPath;
+  const screenshotPath = rawScreenshotPath === null ? undefined : optionalString(rawScreenshotPath, 'screenshotPath');
 
   return {
     extractionId,

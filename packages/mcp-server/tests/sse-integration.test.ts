@@ -61,6 +61,52 @@ async function startMockApiServer(): Promise<MockApiHandle> {
       return;
     }
 
+    if (req.method === 'POST' && req.url === '/v1/extract') {
+      const prompt = typeof parsedBody?.prompt === 'string' ? parsedBody.prompt : '';
+
+      if (prompt === 'null screenshot') {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(
+          JSON.stringify({
+            extractionId: 'ext_null',
+            data: { mode: 'byok-null' },
+            modelUsed: 'claude-3-5-sonnet',
+            tokensUsed: 57,
+            durationMs: 210,
+            screenshotPath: null,
+          }),
+        );
+        return;
+      }
+
+      if (prompt === 'omitted screenshot') {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(
+          JSON.stringify({
+            extractionId: 'ext_omitted',
+            data: { mode: 'byok-omitted' },
+            modelUsed: 'claude-3-5-sonnet',
+            tokensUsed: 61,
+            durationMs: 199,
+          }),
+        );
+        return;
+      }
+
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          extractionId: 'ext_default',
+          data: { title: 'Example page' },
+          modelUsed: 'sonnet',
+          tokensUsed: 33,
+          durationMs: 143,
+          screenshotPath: 'https://cdn.example.com/extract.png',
+        }),
+      );
+      return;
+    }
+
     res.writeHead(404, { 'content-type': 'application/json' });
     res.end(JSON.stringify({ error: 'Not found' }));
   });
@@ -346,6 +392,175 @@ describe('SSE transport integration', () => {
         url: 'https://example.com',
         include_screenshot: true,
         standard: 'WCAG2AA',
+      });
+    } finally {
+      await client.close();
+    }
+  });
+
+  it('invokes extract via callTool with default API key path', async () => {
+    const apiServer = await startMockApiServer();
+    openApiServers.push(apiServer);
+
+    const server = await startSseServer(
+      {
+        apiKey: 'sk_test',
+        apiUrl: `http://127.0.0.1:${apiServer.port}`,
+        inlineDataLimitBytes: 1024,
+      },
+      {
+        port: 0,
+        host: '127.0.0.1',
+        ssePath: '/sse',
+        messagesPath: '/messages',
+      },
+    );
+
+    openServers.push(server);
+
+    const transport = new SSEClientTransport(new URL(`http://127.0.0.1:${server.port}/sse`));
+    const client = new Client({ name: 'mcp-integration-test-calltool-extract-default', version: '0.0.0' });
+    await client.connect(transport);
+
+    try {
+      const result = await client.callTool({
+        name: 'extract',
+        arguments: {
+          url: 'https://example.com',
+          prompt: 'Extract key metadata',
+          model: 'sonnet',
+        },
+      });
+
+      const structured = parseStructuredToolContent(result);
+      assertToolCompleted(structured);
+      expect(structured.status).toBe('completed');
+      expect(structured.extractionId).toBe('ext_default');
+      expect(structured.modelUsed).toBe('sonnet');
+      expect(structured.tokensUsed).toBe(33);
+      expect(structured.data).toEqual({ title: 'Example page' });
+      expect(structured.screenshotUrl).toBe('https://cdn.example.com/extract.png');
+
+      const extractCall = apiServer.requests.find((request) => request.path === '/v1/extract');
+      expect(extractCall).toBeTruthy();
+      expect(extractCall?.headers.authorization).toBe('Bearer sk_test');
+      expect(extractCall?.headers['x-llm-api-key']).toBeUndefined();
+      expect(extractCall?.body).toMatchObject({
+        url: 'https://example.com',
+        prompt: 'Extract key metadata',
+        model: 'sonnet',
+      });
+    } finally {
+      await client.close();
+    }
+  });
+
+  it('invokes extract via callTool with BYOK and tolerates screenshotPath:null', async () => {
+    const apiServer = await startMockApiServer();
+    openApiServers.push(apiServer);
+
+    const server = await startSseServer(
+      {
+        apiKey: 'sk_test',
+        apiUrl: `http://127.0.0.1:${apiServer.port}`,
+        inlineDataLimitBytes: 1024,
+      },
+      {
+        port: 0,
+        host: '127.0.0.1',
+        ssePath: '/sse',
+        messagesPath: '/messages',
+      },
+    );
+
+    openServers.push(server);
+
+    const transport = new SSEClientTransport(new URL(`http://127.0.0.1:${server.port}/sse`));
+    const client = new Client({ name: 'mcp-integration-test-calltool-extract-byok-null', version: '0.0.0' });
+    await client.connect(transport);
+
+    try {
+      const result = await client.callTool({
+        name: 'extract',
+        arguments: {
+          url: 'https://example.com',
+          prompt: 'null screenshot',
+          llm_api_key: 'anthropic-user-key',
+        },
+      });
+
+      const structured = parseStructuredToolContent(result);
+      assertToolCompleted(structured);
+      expect(structured.status).toBe('completed');
+      expect(structured.extractionId).toBe('ext_null');
+      expect(structured.data).toEqual({ mode: 'byok-null' });
+      expect(structured.modelUsed).toBe('claude-3-5-sonnet');
+      expect(structured.tokensUsed).toBe(57);
+      expect(structured).not.toHaveProperty('screenshotUrl');
+
+      const extractCall = apiServer.requests.find((request) => request.path === '/v1/extract');
+      expect(extractCall).toBeTruthy();
+      expect(extractCall?.headers.authorization).toBe('Bearer sk_test');
+      expect(extractCall?.headers['x-llm-api-key']).toBe('anthropic-user-key');
+      expect(extractCall?.body).toMatchObject({
+        url: 'https://example.com',
+        prompt: 'null screenshot',
+      });
+    } finally {
+      await client.close();
+    }
+  });
+
+  it('invokes extract via callTool with BYOK and tolerates omitted screenshotPath', async () => {
+    const apiServer = await startMockApiServer();
+    openApiServers.push(apiServer);
+
+    const server = await startSseServer(
+      {
+        apiKey: 'sk_test',
+        apiUrl: `http://127.0.0.1:${apiServer.port}`,
+        inlineDataLimitBytes: 1024,
+      },
+      {
+        port: 0,
+        host: '127.0.0.1',
+        ssePath: '/sse',
+        messagesPath: '/messages',
+      },
+    );
+
+    openServers.push(server);
+
+    const transport = new SSEClientTransport(new URL(`http://127.0.0.1:${server.port}/sse`));
+    const client = new Client({ name: 'mcp-integration-test-calltool-extract-byok-omitted', version: '0.0.0' });
+    await client.connect(transport);
+
+    try {
+      const result = await client.callTool({
+        name: 'extract',
+        arguments: {
+          url: 'https://example.com',
+          prompt: 'omitted screenshot',
+          llm_api_key: 'anthropic-user-key',
+        },
+      });
+
+      const structured = parseStructuredToolContent(result);
+      assertToolCompleted(structured);
+      expect(structured.status).toBe('completed');
+      expect(structured.extractionId).toBe('ext_omitted');
+      expect(structured.data).toEqual({ mode: 'byok-omitted' });
+      expect(structured.modelUsed).toBe('claude-3-5-sonnet');
+      expect(structured.tokensUsed).toBe(61);
+      expect(structured).not.toHaveProperty('screenshotUrl');
+
+      const extractCall = apiServer.requests.find((request) => request.path === '/v1/extract');
+      expect(extractCall).toBeTruthy();
+      expect(extractCall?.headers.authorization).toBe('Bearer sk_test');
+      expect(extractCall?.headers['x-llm-api-key']).toBe('anthropic-user-key');
+      expect(extractCall?.body).toMatchObject({
+        url: 'https://example.com',
+        prompt: 'omitted screenshot',
       });
     } finally {
       await client.close();

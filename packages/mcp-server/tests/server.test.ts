@@ -52,8 +52,10 @@ class MockSSETransport {
 class MockMcpServer {
   static connectCalls = 0;
   static toolHandlers = new Map<string, (args: unknown) => Promise<unknown>>();
+  static toolConfigs = new Map<string, Record<string, unknown>>();
 
-  registerTool(name: string, _config: Record<string, unknown>, cb: (args: unknown) => Promise<unknown>): void {
+  registerTool(name: string, config: Record<string, unknown>, cb: (args: unknown) => Promise<unknown>): void {
+    MockMcpServer.toolConfigs.set(name, config);
     MockMcpServer.toolHandlers.set(name, cb);
   }
   async connect(transport: { start: () => Promise<void> }): Promise<void> {
@@ -144,6 +146,7 @@ describe('startSseServer', () => {
     MockSSETransport.startCalls = 0;
     MockMcpServer.connectCalls = 0;
     MockMcpServer.toolHandlers = new Map();
+    MockMcpServer.toolConfigs = new Map();
     vi.resetModules();
   });
 
@@ -158,6 +161,30 @@ describe('startSseServer', () => {
     const screenshotHandler = MockMcpServer.toolHandlers.get('screenshot');
     expect(screenshotHandler).toBeTruthy();
     await expect(screenshotHandler!([])).rejects.toThrow('Tool arguments must be an object');
+  });
+
+  it('registers standard per-tool inputSchema for MCP discovery', async () => {
+    const { createScreenforgeMcpServer } = await import('../src/server');
+    createScreenforgeMcpServer({
+      apiKey: 'sk_test',
+      apiUrl: 'http://localhost:3100',
+      inlineDataLimitBytes: 1024,
+    });
+
+    const screenshotConfig = MockMcpServer.toolConfigs.get('screenshot');
+    const extractConfig = MockMcpServer.toolConfigs.get('extract');
+    expect(screenshotConfig).toBeTruthy();
+    expect(extractConfig).toBeTruthy();
+
+    const screenshotSchema = screenshotConfig?.inputSchema as { safeParse: (data: unknown) => { success: boolean } };
+    const extractSchema = extractConfig?.inputSchema as { safeParse: (data: unknown) => { success: boolean } };
+
+    expect(typeof screenshotSchema.safeParse).toBe('function');
+    expect(typeof extractSchema.safeParse).toBe('function');
+    expect(screenshotSchema.safeParse({}).success).toBe(false);
+    expect(screenshotSchema.safeParse({ url: 'https://example.com' }).success).toBe(true);
+    expect(extractSchema.safeParse({ url: 'https://example.com' }).success).toBe(false);
+    expect(extractSchema.safeParse({ url: 'https://example.com', prompt: 'Extract title' }).success).toBe(true);
   });
 
   it('keeps SSE session alive for POST routing and validates sessionId', async () => {

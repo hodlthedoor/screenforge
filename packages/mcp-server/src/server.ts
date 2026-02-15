@@ -10,8 +10,6 @@ import { z } from 'zod';
 import type { McpServerConfig } from './config.js';
 import { createToolRegistry, type ToolRegistrar } from './tools.js';
 
-const MCP_TOOL_ARGS_SCHEMA = z.object({}).passthrough();
-
 export function createScreenforgeMcpServer(config: McpServerConfig): McpServer {
   const client = new ScreenForge({
     apiKey: config.apiKey,
@@ -39,10 +37,7 @@ export function createScreenforgeMcpServer(config: McpServerConfig): McpServer {
         {
           title: name,
           description,
-          inputSchema: MCP_TOOL_ARGS_SCHEMA,
-          _meta: {
-            screenforgeInputSchema: inputSchema,
-          },
+          inputSchema: jsonSchemaToZodSchema(inputSchema),
         },
         async (args: unknown) => {
           const normalizedArgs = normalizeToolArguments(args);
@@ -75,6 +70,51 @@ function normalizeToolArguments(args: unknown): Record<string, unknown> {
   }
 
   return args as Record<string, unknown>;
+}
+
+type JsonSchemaNode = Record<string, unknown>;
+
+function jsonSchemaToZodSchema(schema: JsonSchemaNode): z.ZodTypeAny {
+  if (Array.isArray(schema.enum) && schema.enum.length > 0 && schema.enum.every((value) => typeof value === 'string')) {
+    return z.enum(schema.enum as [string, ...string[]]);
+  }
+
+  const type = typeof schema.type === 'string' ? schema.type : undefined;
+  if (type === 'string') {
+    return z.string();
+  }
+  if (type === 'number' || type === 'integer') {
+    return z.number();
+  }
+  if (type === 'boolean') {
+    return z.boolean();
+  }
+
+  if (type === 'object' || schema.properties || schema.additionalProperties !== undefined) {
+    const properties =
+      schema.properties && typeof schema.properties === 'object' && !Array.isArray(schema.properties)
+        ? (schema.properties as Record<string, unknown>)
+        : {};
+
+    const required = new Set(
+      Array.isArray(schema.required) ? schema.required.filter((value): value is string => typeof value === 'string') : [],
+    );
+
+    const shape: Record<string, z.ZodTypeAny> = {};
+    for (const [key, propertySchema] of Object.entries(properties)) {
+      if (propertySchema && typeof propertySchema === 'object' && !Array.isArray(propertySchema)) {
+        const zodSchema = jsonSchemaToZodSchema(propertySchema as JsonSchemaNode);
+        shape[key] = required.has(key) ? zodSchema : zodSchema.optional();
+      } else {
+        shape[key] = required.has(key) ? z.any() : z.any().optional();
+      }
+    }
+
+    const objectSchema = z.object(shape);
+    return schema.additionalProperties === true ? objectSchema.passthrough() : objectSchema;
+  }
+
+  return z.any();
 }
 
 export async function startStdioServer(config: McpServerConfig): Promise<void> {
