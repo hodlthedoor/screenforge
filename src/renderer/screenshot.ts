@@ -14,6 +14,7 @@ const FORMAT_CONTENT_TYPE: Record<string, string> = {
   png: 'image/png',
   jpeg: 'image/jpeg',
   webp: 'image/webp',
+  avif: 'image/avif',
 };
 
 export async function takeScreenshot(pool: BrowserPool, options: ScreenshotOptions, timeoutMs = 30_000): Promise<RenderResult> {
@@ -80,8 +81,8 @@ export async function takeScreenshot(pool: BrowserPool, options: ScreenshotOptio
 
     const screenshotTarget = options.selector ? page.locator(options.selector) : page;
 
-    // Playwright doesn't support WebP natively, so capture as PNG first and convert
-    const playwrightFormat = options.format === 'webp' ? 'png' : options.format;
+    // Playwright doesn't support WebP/AVIF natively, so capture as PNG first and convert
+    const playwrightFormat = (options.format === 'webp' || options.format === 'avif') ? 'png' : options.format;
     const playwrightQuality = options.format === 'jpeg' ? options.quality : undefined;
 
     let buffer = Buffer.from(
@@ -103,6 +104,15 @@ export async function takeScreenshot(pool: BrowserPool, options: ScreenshotOptio
       buffer = Buffer.from(webpBuffer);
     }
 
+    // Convert to AVIF if requested
+    if (options.format === 'avif') {
+      const quality = options.quality !== undefined ? Math.max(1, options.quality) : 50;
+      const avifBuffer = await sharp(buffer)
+        .avif({ quality })
+        .toBuffer();
+      buffer = Buffer.from(avifBuffer);
+    }
+
     // Generate thumbnail if requested
     let thumbnailBuffer: Buffer | undefined;
     if (options.thumbnail) {
@@ -110,6 +120,7 @@ export async function takeScreenshot(pool: BrowserPool, options: ScreenshotOptio
       let s = sharp(buffer).resize(width, height, { fit });
       if (format === 'png') s = s.png();
       else if (format === 'jpeg') s = s.jpeg({ quality: Math.max(1, quality) });
+      else if (format === 'avif') s = s.avif({ quality: Math.max(1, quality) });
       else s = s.webp({ quality: Math.max(1, quality) });
       thumbnailBuffer = await s.toBuffer();
     }

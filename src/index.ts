@@ -470,8 +470,8 @@ export async function start() {
     // Handle thumbnail if generated
     let thumbnailPath: string | undefined;
     if (result.thumbnailBuffer && parsed.thumbnail) {
-      const thumbExt = parsed.thumbnail.format === 'png' ? 'png' : parsed.thumbnail.format === 'jpeg' ? 'jpg' : 'webp';
-      const thumbContentType = parsed.thumbnail.format === 'png' ? 'image/png' : parsed.thumbnail.format === 'jpeg' ? 'image/jpeg' : 'image/webp';
+      const thumbExt = parsed.thumbnail.format === 'png' ? 'png' : parsed.thumbnail.format === 'jpeg' ? 'jpg' : parsed.thumbnail.format === 'avif' ? 'avif' : 'webp';
+      const thumbContentType = parsed.thumbnail.format === 'png' ? 'image/png' : parsed.thumbnail.format === 'jpeg' ? 'image/jpeg' : parsed.thumbnail.format === 'avif' ? 'image/avif' : 'image/webp';
       const thumbKey = `${job.data.jobId}-thumb.${thumbExt}`;
       thumbnailPath = await storage.upload(thumbKey, result.thumbnailBuffer, thumbContentType);
     }

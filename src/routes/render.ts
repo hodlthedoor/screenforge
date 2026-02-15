@@ -24,6 +24,7 @@ async function generateThumbnail(buffer: Buffer, opts: NonNullable<ThumbnailOpti
   let s = sharp(buffer).resize(width, height, { fit });
   if (format === 'png') s = s.png();
   else if (format === 'jpeg') s = s.jpeg({ quality: Math.max(1, quality) });
+  else if (format === 'avif') s = s.avif({ quality: Math.max(1, quality) });
   else s = s.webp({ quality: Math.max(1, quality) });
   return s.toBuffer();
 }
@@ -157,7 +158,7 @@ export async function renderRoutes(
     schema: {
       tags: ['render'],
       summary: 'Take a screenshot',
-      description: 'Capture a screenshot of a URL or HTML content. Returns binary image data (PNG, JPEG, or WebP). When using async mode, jobs are prioritized by billing tier (business > pro > starter > free).',
+      description: 'Capture a screenshot of a URL or HTML content. Returns binary image data (PNG, JPEG, WebP, or AVIF). When using async mode, jobs are prioritized by billing tier (business > pro > starter > free).',
       security: [{ apiKey: [] }],
       querystring: {
         type: 'object',
@@ -171,7 +172,7 @@ export async function renderRoutes(
         properties: {
           url: { type: 'string', description: 'URL to screenshot' },
           html: { type: 'string', description: 'HTML content to render' },
-          format: { type: 'string', enum: ['png', 'jpeg', 'webp'], default: 'png' },
+          format: { type: 'string', enum: ['png', 'jpeg', 'webp', 'avif'], default: 'png' },
           viewport: {
             type: 'object',
             properties: {
@@ -367,7 +368,7 @@ export async function renderRoutes(
               width: { type: 'integer', minimum: 1, maximum: 2048, default: 320, description: 'Thumbnail width in pixels' },
               height: { type: 'integer', minimum: 1, maximum: 2048, default: 240, description: 'Thumbnail height in pixels' },
               fit: { type: 'string', enum: ['cover', 'contain', 'fill'], default: 'cover', description: 'Resize fit mode' },
-              format: { type: 'string', enum: ['png', 'jpeg', 'webp'], default: 'webp', description: 'Thumbnail image format' },
+              format: { type: 'string', enum: ['png', 'jpeg', 'webp', 'avif'], default: 'webp', description: 'Thumbnail image format' },
               quality: { type: 'integer', minimum: 0, maximum: 100, default: 80, description: 'Compression quality (jpeg/webp)' },
             },
           },
@@ -383,6 +384,14 @@ export async function renderRoutes(
     }
 
     const options = parsed.data;
+
+    // Content negotiation: if format wasn't explicitly set, prefer based on Accept header
+    const body = req.body as Record<string, unknown> | null;
+    if (!body || !('format' in body)) {
+      const accept = req.headers.accept ?? '';
+      if (accept.includes('image/avif')) options.format = 'avif';
+      else if (accept.includes('image/webp')) options.format = 'webp';
+    }
 
     // Sanitize custom headers and cookies (use sanitized values)
     try {

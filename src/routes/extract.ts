@@ -21,7 +21,7 @@ const extractRequestSchema = z
       .object({
         viewport_width: z.number().int().min(1).max(7680).optional(),
         viewport_height: z.number().int().min(1).max(4320).optional(),
-        format: z.enum(['png', 'jpeg', 'webp']).optional(),
+        format: z.enum(['png', 'jpeg', 'webp', 'avif']).optional(),
         full_page: z.boolean().optional(),
         delay_ms: z.number().int().min(0).max(30000).optional(),
       })
@@ -59,7 +59,7 @@ export async function extractRoutes(app: FastifyInstance) {
               properties: {
                 viewport_width: { type: 'integer', minimum: 1, maximum: 7680 },
                 viewport_height: { type: 'integer', minimum: 1, maximum: 4320 },
-                format: { type: 'string', enum: ['png', 'jpeg', 'webp'] },
+                format: { type: 'string', enum: ['png', 'jpeg', 'webp', 'avif'] },
                 full_page: { type: 'boolean' },
                 delay_ms: { type: 'integer', minimum: 0, maximum: 30000 },
               },
@@ -168,7 +168,7 @@ export async function extractRoutes(app: FastifyInstance) {
       try {
         // Get the screenshot buffer
         let imageBuffer: Buffer;
-        let imageMediaType: 'image/png' | 'image/jpeg' | 'image/webp';
+        let imageMediaType: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/avif';
         let screenshotPath: string | undefined;
 
         if (job_id && sourceJob) {
@@ -202,11 +202,19 @@ export async function extractRoutes(app: FastifyInstance) {
           screenshotPath = await storage.upload(key, result.buffer, result.contentType);
         }
 
+        // Anthropic Vision API doesn't support AVIF — convert to PNG
+        let apiBuffer = imageBuffer;
+        let apiMediaType: 'image/png' | 'image/jpeg' | 'image/webp' = imageMediaType === 'image/avif' ? 'image/png' : imageMediaType;
+        if (imageMediaType === 'image/avif') {
+          const sharp = (await import('sharp')).default;
+          apiBuffer = await sharp(imageBuffer).png().toBuffer();
+        }
+
         // Call Anthropic vision API
-        const imageBase64 = imageBuffer.toString('base64');
+        const imageBase64 = apiBuffer.toString('base64');
         const extractionResult = await extractFromImage({
           imageBase64,
-          imageMediaType,
+          imageMediaType: apiMediaType,
           prompt,
           schema,
           model: model as ModelChoice,
@@ -439,8 +447,9 @@ function formatExtraction(row: Record<string, unknown>) {
 
 function contentTypeToMediaType(
   contentType: string,
-): 'image/png' | 'image/jpeg' | 'image/webp' {
+): 'image/png' | 'image/jpeg' | 'image/webp' | 'image/avif' {
   if (contentType.includes('jpeg') || contentType.includes('jpg')) return 'image/jpeg';
+  if (contentType.includes('avif')) return 'image/avif';
   if (contentType.includes('webp')) return 'image/webp';
   return 'image/png';
 }

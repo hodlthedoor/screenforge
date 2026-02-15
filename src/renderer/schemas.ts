@@ -135,7 +135,7 @@ export const thumbnailSchema = z.object({
   width: z.number().int().min(1).max(2048).default(320),
   height: z.number().int().min(1).max(2048).default(240),
   fit: z.enum(['cover', 'contain', 'fill']).default('cover'),
-  format: z.enum(['png', 'jpeg', 'webp']).default('webp'),
+  format: z.enum(['png', 'jpeg', 'webp', 'avif']).default('webp'),
   quality: z.number().int().min(0).max(100).default(80),
 }).optional();
 
@@ -143,7 +143,7 @@ export type ThumbnailOptions = z.infer<typeof thumbnailSchema>;
 
 const screenshotBaseOptionsSchema = z.object({
   viewport: viewportSchema.default({ width: 1920, height: 1080 }),
-  format: z.enum(['png', 'jpeg', 'webp']).default('png'),
+  format: z.enum(['png', 'jpeg', 'webp', 'avif']).default('png'),
   quality: z.number().int().min(0).max(100).optional(),
   fullPage: z.boolean().default(false),
   selector: z.string().optional(),
@@ -370,7 +370,7 @@ export const diffOptionsSchema = z.object({
   threshold: z.number().min(0).max(1).default(0.1),
   include_diff_image: z.boolean().default(true),
   anti_aliasing_detection: z.boolean().default(false),
-  output_format: z.enum(['png', 'jpeg', 'webp']).default('png'),
+  output_format: z.enum(['png', 'jpeg', 'webp', 'avif']).default('png'),
 }).refine((data) => {
   const hasUrls = data.url_a && data.url_b;
   const hasJobs = data.job_id_a && data.job_id_b;

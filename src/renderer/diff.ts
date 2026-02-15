@@ -5,7 +5,7 @@ export interface CompareOptions {
   threshold?: number;
   include_diff_image?: boolean;
   anti_aliasing_detection?: boolean;
-  output_format?: 'png' | 'jpeg' | 'webp';
+  output_format?: 'png' | 'jpeg' | 'webp' | 'avif';
 }
 
 export interface CompareResult {

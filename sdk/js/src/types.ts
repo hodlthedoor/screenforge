@@ -22,7 +22,7 @@ export interface ScreenshotOptions {
   url?: string;
   html?: string;
   viewport?: Viewport;
-  format?: 'png' | 'jpeg' | 'webp';
+  format?: 'png' | 'jpeg' | 'webp' | 'avif';
   quality?: number;
   fullPage?: boolean;
   selector?: string;
@@ -204,7 +204,7 @@ export interface BatchRenderResponse {
 export interface ExtractScreenshotOptions {
   viewport_width?: number;
   viewport_height?: number;
-  format?: 'png' | 'jpeg' | 'webp';
+  format?: 'png' | 'jpeg' | 'webp' | 'avif';
   full_page?: boolean;
   delay_ms?: number;
 }
@@ -291,7 +291,7 @@ export interface GifOptions {
 export interface DiffScreenshotOptions {
   viewport_width?: number;
   viewport_height?: number;
-  format?: 'png' | 'jpeg' | 'webp';
+  format?: 'png' | 'jpeg' | 'webp' | 'avif';
   full_page?: boolean;
   delay_ms?: number;
 }

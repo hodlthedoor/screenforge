@@ -41,7 +41,7 @@ class ScreenshotOptions(TypedDict, total=False):
     url: str
     html: str
     viewport: Viewport
-    format: Literal["png", "jpeg", "webp"]
+    format: Literal["png", "jpeg", "webp", "avif"]
     quality: int
     fullPage: bool
     selector: str
@@ -199,7 +199,7 @@ class ExtractScreenshotOptions(TypedDict, total=False):
 
     viewport_width: int
     viewport_height: int
-    format: Literal["png", "jpeg", "webp"]
+    format: Literal["png", "jpeg", "webp", "avif"]
     full_page: bool
     delay_ms: int
 
@@ -321,7 +321,7 @@ class DiffScreenshotOptions(TypedDict, total=False):
 
     viewport_width: int
     viewport_height: int
-    format: Literal["png", "jpeg", "webp"]
+    format: Literal["png", "jpeg", "webp", "avif"]
     full_page: bool
     delay_ms: int
 

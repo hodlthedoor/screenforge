@@ -289,8 +289,8 @@ signed_url = resp.json()["signedUrl"]</code></pre></div>
     <tr><td class="param-name">url</td><td class="param-type">string</td><td class="param-req">*</td><td>URL to capture. Required unless <code>html</code> is provided.</td></tr>
     <tr><td class="param-name">html</td><td class="param-type">string</td><td></td><td>Raw HTML to render instead of a URL.</td></tr>
     <tr><td class="param-name">viewport</td><td class="param-type">object</td><td></td><td><code>{ width: 1280, height: 720 }</code> &mdash; viewport dimensions in pixels.</td></tr>
-    <tr><td class="param-name">format</td><td class="param-type">string</td><td></td><td><code>png</code> (default), <code>jpeg</code>, or <code>webp</code>.</td></tr>
-    <tr><td class="param-name">quality</td><td class="param-type">number</td><td></td><td>Quality 1&ndash;100 for JPEG and WebP (default 80). Ignored for PNG.</td></tr>
+    <tr><td class="param-name">format</td><td class="param-type">string</td><td></td><td><code>png</code> (default), <code>jpeg</code>, <code>webp</code>, or <code>avif</code>.</td></tr>
+    <tr><td class="param-name">quality</td><td class="param-type">number</td><td></td><td>Quality 1&ndash;100 for JPEG and WebP (default 80), AVIF (default 50). Ignored for PNG.</td></tr>
     <tr><td class="param-name">fullPage</td><td class="param-type">boolean</td><td></td><td>Capture full scrollable page (default <code>false</code>).</td></tr>
     <tr><td class="param-name">darkMode</td><td class="param-type">boolean</td><td></td><td>Emulate dark color scheme (default <code>false</code>).</td></tr>
     <tr><td class="param-name">css</td><td class="param-type">string</td><td></td><td>Custom CSS to inject before capture.</td></tr>
@@ -844,7 +844,7 @@ diff = resp.json()</code></pre></div>
   <tr><td class="param-name">threshold</td><td>Pixel sensitivity, 0 = exact match, 1 = lenient (default: 0.1)</td></tr>
   <tr><td class="param-name">include_diff_image</td><td>Return a base64-encoded diff image (default: true)</td></tr>
   <tr><td class="param-name">anti_aliasing_detection</td><td>Ignore anti-aliasing differences (default: false)</td></tr>
-  <tr><td class="param-name">output_format</td><td>Diff image format: png, jpeg, webp (default: png)</td></tr>
+  <tr><td class="param-name">output_format</td><td>Diff image format: png, jpeg, webp, avif (default: png)</td></tr>
 </table>
 
 <h4>Response</h4>
@@ -1001,7 +1001,7 @@ schedule = resp.json()["schedule"]</code></pre></div>
   <tbody>
     <tr><td class="param-name">viewport_width</td><td class="param-type">integer</td><td>1280</td><td>Viewport width in pixels (1&ndash;7680).</td></tr>
     <tr><td class="param-name">viewport_height</td><td class="param-type">integer</td><td>800</td><td>Viewport height in pixels (1&ndash;4320).</td></tr>
-    <tr><td class="param-name">format</td><td class="param-type">string</td><td>png</td><td>Image format: <code>png</code>, <code>jpeg</code>, or <code>webp</code>.</td></tr>
+    <tr><td class="param-name">format</td><td class="param-type">string</td><td>png</td><td>Image format: <code>png</code>, <code>jpeg</code>, <code>webp</code>, or <code>avif</code>.</td></tr>
     <tr><td class="param-name">full_page</td><td class="param-type">boolean</td><td>false</td><td>Capture the full scrollable page.</td></tr>
     <tr><td class="param-name">delay_ms</td><td class="param-type">integer</td><td>0</td><td>Wait before capturing (0&ndash;30000 ms).</td></tr>
   </tbody>

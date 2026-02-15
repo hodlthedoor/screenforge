@@ -49,7 +49,7 @@ export async function diffRoutes(
           threshold: { type: 'number', minimum: 0, maximum: 1, default: 0.1, description: 'Pixel sensitivity (0=exact, 1=lenient)' },
           include_diff_image: { type: 'boolean', default: true },
           anti_aliasing_detection: { type: 'boolean', default: false },
-          output_format: { type: 'string', enum: ['png', 'jpeg', 'webp'], default: 'png' },
+          output_format: { type: 'string', enum: ['png', 'jpeg', 'webp', 'avif'], default: 'png' },
         },
       },
     },

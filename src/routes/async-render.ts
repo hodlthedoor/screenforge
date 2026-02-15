@@ -38,7 +38,7 @@ export async function asyncRenderRoutes(app: FastifyInstance) {
 
     // Determine content type from file extension
     const ext = thumbnailPath.split('.').pop()?.toLowerCase();
-    const contentType = ext === 'png' ? 'image/png' : ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : 'image/webp';
+    const contentType = ext === 'png' ? 'image/png' : ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : ext === 'avif' ? 'image/avif' : 'image/webp';
 
     return reply
       .header('Content-Type', contentType)
