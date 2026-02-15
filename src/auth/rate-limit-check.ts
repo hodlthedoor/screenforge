@@ -1,6 +1,6 @@
 import type { SlidingWindowRateLimiter } from './rate-limiter.js';
 import type { TokenBucketRateLimiter } from './token-bucket.js';
-import type { RateLimitResult } from './rate-limiter.js';
+import type { RateLimitResult } from './rate-limit-types.js';
 import { getConfig } from '../config/index.js';
 import { getPlanByTier } from '../billing/plans.js';
 

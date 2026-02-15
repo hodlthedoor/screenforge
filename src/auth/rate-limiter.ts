@@ -1,11 +1,7 @@
 import { Redis } from 'ioredis';
+import type { RateLimitResult } from './rate-limit-types.js';
 
-export interface RateLimitResult {
-  allowed: boolean;
-  remaining: number;
-  limit: number;
-  resetAt: number;
-}
+export type { RateLimitResult } from './rate-limit-types.js';
 
 export class SlidingWindowRateLimiter {
   private redis: Redis;

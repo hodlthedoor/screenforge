@@ -1,11 +1,5 @@
 import { Redis } from 'ioredis';
-
-export interface RateLimitResult {
-  allowed: boolean;
-  remaining: number;
-  limit: number;
-  resetAt: number;
-}
+import type { RateLimitResult } from './rate-limit-types.js';
 
 /**
  * Token bucket rate limiter with Redis backend.
@@ -46,9 +40,12 @@ export class TokenBucketRateLimiter {
     local tokens_to_add = math.floor(elapsed_ms * refill_rate_per_ms)
 
     -- Refill tokens (capped at burst capacity)
+    -- Only advance last_refill_ms by the time consumed by integer tokens,
+    -- preserving fractional progress toward the next token
     if tokens_to_add > 0 then
       current_tokens = math.min(burst_capacity, current_tokens + tokens_to_add)
-      last_refill_ms = now_ms
+      local ms_per_token = 60000 / refill_rate_per_min
+      last_refill_ms = last_refill_ms + tokens_to_add * ms_per_token
     end
 
     -- Check if request can be allowed
