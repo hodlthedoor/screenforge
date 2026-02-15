@@ -37,7 +37,7 @@ export interface FingerprintParams {
  * Compute a SHA256 fingerprint for render parameters.
  * Normalizes the parameters by sorting keys and excluding ephemeral fields.
  */
-export function computeFingerprint(params: FingerprintParams): string {
+export function computeFingerprint(params: FingerprintParams, type?: string): string {
   // Create a normalized copy excluding ephemeral fields
   const normalized: Record<string, unknown> = {};
 
@@ -51,7 +51,12 @@ export function computeFingerprint(params: FingerprintParams): string {
     }
   }
 
-  // Create deterministic JSON string
+  // Include render type to prevent cross-type dedup (screenshot vs pdf)
+  if (type) {
+    normalized['__type'] = type;
+  }
+
+  // Create deterministic JSON string (keys already sorted from the loop above)
   const jsonStr = JSON.stringify(normalized);
 
   // Hash with SHA256
@@ -65,22 +70,6 @@ export function computeFingerprint(params: FingerprintParams): string {
 export async function checkDedup(redis: Redis, fingerprint: string): Promise<string | null> {
   const jobId = await redis.get(`dedup:${fingerprint}`);
   return jobId;
-}
-
-/**
- * Record a deduplication entry for the given fingerprint.
- * Sets a TTL (in milliseconds) after which the entry expires.
- * Returns true if the key was set, false if it already existed (race condition).
- */
-export async function recordDedup(
-  redis: Redis,
-  fingerprint: string,
-  jobId: string,
-  ttlMs: number,
-): Promise<boolean> {
-  // Use SET NX (set if not exists) to handle race conditions atomically
-  const result = await redis.set(`dedup:${fingerprint}`, jobId, 'PX', ttlMs, 'NX');
-  return result === 'OK';
 }
 
 /**

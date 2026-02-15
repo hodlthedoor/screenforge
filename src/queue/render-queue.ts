@@ -65,6 +65,15 @@ export interface RenderJobResult {
 
 let queue: Queue<RenderJobData, RenderJobResult> | undefined;
 let worker: Worker<RenderJobData, RenderJobResult> | undefined;
+let dedupRedis: Redis | undefined;
+
+/** Shared Redis connection for dedup operations (avoids creating new connections per request). */
+export function getDedupRedis(redisUrl: string): Redis {
+  if (!dedupRedis) {
+    dedupRedis = new Redis(redisUrl, { maxRetriesPerRequest: null });
+  }
+  return dedupRedis;
+}
 
 export function getQueue(redisUrl: string): Queue<RenderJobData, RenderJobResult> {
   if (!queue) {
@@ -123,21 +132,9 @@ export function createWorker(
     incrementRenderCounter(job.data.type, format, 'completed', false);
     observeRenderDuration(job.data.type, format, result.durationMs / 1000);
 
-    // Clear dedup key if deduplication is enabled
-    if (config.DEDUP_ENABLED) {
-      const redis = new Redis(config.REDIS_URL);
-      try {
-        const fingerprint = computeFingerprint({
-          url: job.data.url,
-          ...job.data.options,
-        });
-        await clearDedup(redis, fingerprint);
-      } catch {
-        // Non-critical - log but don't fail the job
-      } finally {
-        await redis.quit();
-      }
-    }
+    // Dedup key is NOT cleared on success — it expires naturally via TTL.
+    // This ensures concurrent requests within the dedup window still resolve
+    // to the same job ID instead of creating duplicates.
 
     // Update batch progress
     if (job.data.batchId) {
@@ -170,17 +167,14 @@ export function createWorker(
 
     // Clear dedup key if deduplication is enabled
     if (config.DEDUP_ENABLED) {
-      const redis = new Redis(config.REDIS_URL);
       try {
         const fingerprint = computeFingerprint({
           url: job.data.url,
           ...job.data.options,
-        });
-        await clearDedup(redis, fingerprint);
+        }, job.data.type);
+        await clearDedup(getDedupRedis(config.REDIS_URL), fingerprint);
       } catch {
         // Non-critical - log but don't fail the job
-      } finally {
-        await redis.quit();
       }
     }
 
@@ -269,5 +263,9 @@ export async function closeQueue(): Promise<void> {
   if (queue) {
     await queue.close();
     queue = undefined;
+  }
+  if (dedupRedis) {
+    await dedupRedis.quit();
+    dedupRedis = undefined;
   }
 }

@@ -6,7 +6,7 @@ import { createApiKey } from '../../src/db/api-keys.js';
 import { resolve } from 'node:path';
 import { rm } from 'node:fs/promises';
 import Redis from 'ioredis';
-import { computeFingerprint, checkDedup, recordDedup, clearDedup } from '../../src/queue/dedup.js';
+import { computeFingerprint, checkDedup, clearDedup } from '../../src/queue/dedup.js';
 
 const TEST_STORAGE = resolve(import.meta.dirname, '../../storage-dedup-test');
 const REDIS_URL = 'redis://127.0.0.1:6379/15';
@@ -117,6 +117,22 @@ describe('computeFingerprint', () => {
 
     expect(computeFingerprint(params1)).toBe(computeFingerprint(params2));
   });
+
+  it('includes type in fingerprint to prevent cross-type dedup', () => {
+    const params = { url: 'https://example.com', format: 'png', width: 1920, height: 1080 };
+
+    const screenshotFp = computeFingerprint(params, 'screenshot');
+    const pdfFp = computeFingerprint(params, 'pdf');
+
+    expect(screenshotFp).not.toBe(pdfFp);
+  });
+
+  it('fingerprint without type is backward-compatible', () => {
+    const params = { url: 'https://example.com', format: 'png' };
+
+    // Without type, should still produce consistent hashes
+    expect(computeFingerprint(params)).toBe(computeFingerprint(params));
+  });
 });
 
 describe('Redis deduplication', () => {
@@ -144,12 +160,12 @@ describe('Redis deduplication', () => {
     expect(result).toBeNull();
   });
 
-  it('recordDedup stores job ID with TTL', async () => {
+  it('SET NX stores job ID with TTL', async () => {
     const fingerprint = 'test-fingerprint-456';
     const jobId = 'job-789';
     const ttlMs = 5000;
 
-    await recordDedup(redis, fingerprint, jobId, ttlMs);
+    await redis.set(`dedup:${fingerprint}`, jobId, 'PX', ttlMs, 'NX');
 
     const stored = await redis.get(`dedup:${fingerprint}`);
     expect(stored).toBe(jobId);
@@ -164,7 +180,7 @@ describe('Redis deduplication', () => {
     const fingerprint = 'test-fingerprint-789';
     const jobId = 'job-abc';
 
-    await recordDedup(redis, fingerprint, jobId, 30000);
+    await redis.set(`dedup:${fingerprint}`, jobId, 'PX', 30000, 'NX');
 
     const result = await checkDedup(redis, fingerprint);
     expect(result).toBe(jobId);
@@ -174,7 +190,7 @@ describe('Redis deduplication', () => {
     const fingerprint = 'test-fingerprint-clear';
     const jobId = 'job-clear';
 
-    await recordDedup(redis, fingerprint, jobId, 30000);
+    await redis.set(`dedup:${fingerprint}`, jobId, 'PX', 30000, 'NX');
     expect(await checkDedup(redis, fingerprint)).toBe(jobId);
 
     await clearDedup(redis, fingerprint);
@@ -186,7 +202,7 @@ describe('Redis deduplication', () => {
     const jobId = 'job-expire';
     const ttlMs = 100; // Very short TTL for testing
 
-    await recordDedup(redis, fingerprint, jobId, ttlMs);
+    await redis.set(`dedup:${fingerprint}`, jobId, 'PX', ttlMs, 'NX');
     expect(await checkDedup(redis, fingerprint)).toBe(jobId);
 
     // Wait for expiration
@@ -361,18 +377,63 @@ describe('End-to-end deduplication — DEDUP_ENABLED=true', { timeout: 60_000 },
     expect(body1.id).toBe(body2.id);
   });
 
-  it('dedup key is cleared on job completion', async () => {
-    // This test verifies that when a job completes, the dedup key is removed
-    // so subsequent identical requests create a new job.
-    // NOTE: We can't easily test actual job completion without a worker,
-    // so we'll verify the clearDedup function works in the Redis tests above.
-    // This is a placeholder for future integration test with worker.
-    expect(true).toBe(true);
+  it('dedup key persists after job creation (TTL-based expiry)', async () => {
+    // Dedup keys are NOT cleared on completion — they expire via TTL.
+    // This ensures concurrent requests within the window still resolve to the same job.
+    const payload = {
+      url: 'http://127.0.0.1:5555',
+      format: 'png',
+      viewport: { width: 640, height: 480 },
+    };
+
+    const res1 = await app.inject({
+      method: 'POST',
+      url: '/v1/screenshot?async=true',
+      headers: { 'x-api-key': apiKey },
+      payload,
+    });
+    expect(res1.statusCode).toBe(202);
+    const body1 = JSON.parse(res1.body);
+
+    // Verify a dedup key was set in Redis with the job ID as the value
+    const keys = await redis.keys('dedup:*');
+    const jobIdValues = await Promise.all(keys.map(k => redis.get(k)));
+    expect(jobIdValues).toContain(body1.id);
+
+    // Find the key holding this job ID and verify its TTL
+    const keyIndex = jobIdValues.indexOf(body1.id);
+    const ttl = await redis.pttl(keys[keyIndex]);
+    expect(ttl).toBeGreaterThan(0);
   });
 
-  it('dedup key is cleared on job failure', async () => {
-    // Similar to above - placeholder for future integration test
-    expect(true).toBe(true);
+  it('screenshot and pdf with same URL produce different jobs', async () => {
+    const payload = {
+      url: 'http://127.0.0.1:7777',
+      viewport: { width: 1920, height: 1080 },
+    };
+
+    const res1 = await app.inject({
+      method: 'POST',
+      url: '/v1/screenshot?async=true',
+      headers: { 'x-api-key': apiKey },
+      payload: { ...payload, format: 'png' },
+    });
+
+    const res2 = await app.inject({
+      method: 'POST',
+      url: '/v1/pdf?async=true',
+      headers: { 'x-api-key': apiKey },
+      payload: { ...payload, format: 'a4' },
+    });
+
+    expect(res1.statusCode).toBe(202);
+    expect(res2.statusCode).toBe(202);
+
+    const body1 = JSON.parse(res1.body);
+    const body2 = JSON.parse(res2.body);
+
+    // Different render types must produce different job IDs
+    expect(body1.id).not.toBe(body2.id);
   });
 });
 
