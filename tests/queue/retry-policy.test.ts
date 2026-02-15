@@ -4,6 +4,7 @@ import {
   getMaxRetries,
   calculateBackoff,
   shouldRetry,
+  classifyPermanentReason,
   ErrorCategory,
 } from '../../src/queue/retry-policy.js';
 
@@ -36,6 +37,30 @@ describe('classifyError', () => {
     expect(classifyError(new Error('connect ETIMEDOUT'))).toBe(ErrorCategory.TRANSIENT);
   });
 
+  it('classifies HTTP 408 (Request Timeout) as TRANSIENT', () => {
+    expect(classifyError(new Error('Page returned HTTP 408'))).toBe(ErrorCategory.TRANSIENT);
+  });
+
+  it('classifies HTTP 429 (Too Many Requests) as TRANSIENT', () => {
+    expect(classifyError(new Error('Page returned HTTP 429'))).toBe(ErrorCategory.TRANSIENT);
+  });
+
+  it('classifies HTTP 500 as TRANSIENT', () => {
+    expect(classifyError(new Error('Page returned HTTP 500'))).toBe(ErrorCategory.TRANSIENT);
+  });
+
+  it('classifies HTTP 502 as TRANSIENT', () => {
+    expect(classifyError(new Error('Page returned HTTP 502'))).toBe(ErrorCategory.TRANSIENT);
+  });
+
+  it('classifies HTTP 503 as TRANSIENT', () => {
+    expect(classifyError(new Error('Page returned HTTP 503'))).toBe(ErrorCategory.TRANSIENT);
+  });
+
+  it('classifies HTTP 504 as TRANSIENT', () => {
+    expect(classifyError(new Error('Page returned HTTP 504'))).toBe(ErrorCategory.TRANSIENT);
+  });
+
   it('classifies invalid URL as PERMANENT', () => {
     expect(classifyError(new Error('Invalid URL: not-a-url'))).toBe(ErrorCategory.PERMANENT);
   });
@@ -54,6 +79,18 @@ describe('classifyError', () => {
 
   it('classifies 401 as PERMANENT', () => {
     expect(classifyError(new Error('Page returned HTTP 401'))).toBe(ErrorCategory.PERMANENT);
+  });
+
+  it('classifies 400 as PERMANENT', () => {
+    expect(classifyError(new Error('Page returned HTTP 400'))).toBe(ErrorCategory.PERMANENT);
+  });
+
+  it('classifies 410 as PERMANENT', () => {
+    expect(classifyError(new Error('Page returned HTTP 410'))).toBe(ErrorCategory.PERMANENT);
+  });
+
+  it('classifies 422 as PERMANENT', () => {
+    expect(classifyError(new Error('Page returned HTTP 422'))).toBe(ErrorCategory.PERMANENT);
   });
 
   it('classifies protocol error as PERMANENT', () => {
@@ -133,14 +170,75 @@ describe('calculateBackoff', () => {
     expect(d1).toBeLessThanOrEqual(11000);
   });
 
+  it('caps backoff at 60 seconds plus jitter', () => {
+    // TRANSIENT at attempt 10: 1000 * 2^10 = 1,024,000 → capped to 60,000
+    const d10 = calculateBackoff(ErrorCategory.TRANSIENT, 10);
+    expect(d10).toBeGreaterThanOrEqual(60000);
+    expect(d10).toBeLessThanOrEqual(61000);
+
+    // RESOURCE at attempt 5: 5000 * 2^5 = 160,000 → capped to 60,000
+    const r5 = calculateBackoff(ErrorCategory.RESOURCE, 5);
+    expect(r5).toBeGreaterThanOrEqual(60000);
+    expect(r5).toBeLessThanOrEqual(61000);
+  });
+
+  it('caps high attempts to same max (no unbounded growth)', () => {
+    const d20 = calculateBackoff(ErrorCategory.TRANSIENT, 20);
+    const d30 = calculateBackoff(ErrorCategory.TRANSIENT, 30);
+    // Both should be capped at MAX_BACKOFF_MS (60000) + jitter (0-1000)
+    expect(d20).toBeLessThanOrEqual(61000);
+    expect(d30).toBeLessThanOrEqual(61000);
+  });
+
   it('jitter is within 0-1000ms bounds', () => {
-    // Run multiple times to check jitter is always in bounds
     for (let i = 0; i < 50; i++) {
       const delay = calculateBackoff(ErrorCategory.TRANSIENT, 0);
       // base = 1000, jitter 0-1000
       expect(delay).toBeGreaterThanOrEqual(1000);
       expect(delay).toBeLessThanOrEqual(2000);
     }
+  });
+});
+
+describe('classifyPermanentReason', () => {
+  it('returns invalid_url for Invalid URL errors', () => {
+    expect(classifyPermanentReason(new Error('Invalid URL: not-a-url'))).toBe('invalid_url');
+  });
+
+  it('returns invalid_url for ERR_INVALID_URL errors', () => {
+    expect(classifyPermanentReason(new Error('net::ERR_INVALID_URL'))).toBe('invalid_url');
+  });
+
+  it('returns ssrf_blocked for SSRF errors', () => {
+    expect(classifyPermanentReason(new Error('SSRF: private IP blocked'))).toBe('ssrf_blocked');
+  });
+
+  it('returns http_client_error for HTTP 4xx errors', () => {
+    expect(classifyPermanentReason(new Error('Page returned HTTP 404'))).toBe('http_client_error');
+    expect(classifyPermanentReason(new Error('Page returned HTTP 403'))).toBe('http_client_error');
+    expect(classifyPermanentReason(new Error('Page returned HTTP 401'))).toBe('http_client_error');
+    expect(classifyPermanentReason(new Error('Page returned HTTP 422'))).toBe('http_client_error');
+  });
+
+  it('returns protocol_error for protocol errors', () => {
+    expect(classifyPermanentReason(new Error('Protocol error: invalid URL scheme'))).toBe('protocol_error');
+  });
+
+  it('returns ssl_error for certificate/SSL errors', () => {
+    expect(classifyPermanentReason(new Error('net::ERR_CERT_AUTHORITY_INVALID'))).toBe('ssl_error');
+    expect(classifyPermanentReason(new Error('net::ERR_SSL_PROTOCOL_ERROR'))).toBe('ssl_error');
+  });
+
+  it('returns blocked_by_response for ERR_BLOCKED_BY_RESPONSE', () => {
+    expect(classifyPermanentReason(new Error('net::ERR_BLOCKED_BY_RESPONSE'))).toBe('blocked_by_response');
+  });
+
+  it('returns aborted for ERR_ABORTED', () => {
+    expect(classifyPermanentReason(new Error('net::ERR_ABORTED'))).toBe('aborted');
+  });
+
+  it('returns unknown for unrecognized permanent errors', () => {
+    expect(classifyPermanentReason(new Error('Some unknown permanent error'))).toBe('unknown');
   });
 });
 

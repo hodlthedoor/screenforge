@@ -7,7 +7,7 @@ import { incrementRenderCounter, observeRenderDuration, incrementRetryCounter, i
 import { getConfig } from '../config/index.js';
 import { getFormatFromContentType } from '../utils/format.js';
 import { clearDedup } from './dedup.js';
-import { classifyError, shouldRetry, type RetryDecision, ErrorCategory } from './retry-policy.js';
+import { classifyError, shouldRetry, classifyPermanentReason, type RetryDecision, ErrorCategory } from './retry-policy.js';
 
 const TIER_PRIORITY: Record<string, number> = {
   business: 10,
@@ -233,9 +233,7 @@ export function createWorker(
       incrementRenderCounter(job.data.type, format, 'failed', false);
 
       if (category === ErrorCategory.PERMANENT) {
-        // Extract a short reason from the error message for the metric label
-        const reason = error.message.slice(0, 50).replace(/[^a-zA-Z0-9_\- ]/g, '').trim();
-        incrementPermanentFailure(reason);
+        incrementPermanentFailure(classifyPermanentReason(error));
       }
 
       // Clear dedup key if deduplication is enabled and fingerprint was stored

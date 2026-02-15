@@ -22,17 +22,27 @@ const TRANSIENT_PATTERNS = [
   /ERR_INTERNET_DISCONNECTED/i,
   /net::ERR_FAILED/i,
   /ENOTFOUND/,
+  /HTTP 408\b/i,
+  /HTTP 429\b/i,
+  /HTTP 5\d{2}\b/i,
 ];
 
 const PERMANENT_PATTERNS = [
   /Invalid URL/i,
   /SSRF/i,
   /private IP blocked/i,
-  /HTTP 4(?:0[0-46-9]|1\d|2\d|3\d|4\d|5\d)/i, // 400-459 except 408 (timeout)
-  /HTTP 404/i,
-  /HTTP 403/i,
-  /HTTP 401/i,
-  /HTTP 410/i,
+  /HTTP 400\b/i,
+  /HTTP 401\b/i,
+  /HTTP 403\b/i,
+  /HTTP 404\b/i,
+  /HTTP 405\b/i,
+  /HTTP 406\b/i,
+  /HTTP 409\b/i,
+  /HTTP 410\b/i,
+  /HTTP 411\b/i,
+  /HTTP 413\b/i,
+  /HTTP 415\b/i,
+  /HTTP 422\b/i,
   /Protocol error/i,
   /ERR_INVALID_URL/i,
   /ERR_BLOCKED_BY_RESPONSE/i,
@@ -88,9 +98,12 @@ const BASE_DELAY: Record<ErrorCategory, number> = {
   [ErrorCategory.RESOURCE]: 5000,
 };
 
+/** Maximum backoff delay: 60 seconds */
+const MAX_BACKOFF_MS = 60_000;
+
 export function calculateBackoff(category: ErrorCategory, attempt: number): number {
   const base = BASE_DELAY[category];
-  const exponential = base * Math.pow(2, attempt);
+  const exponential = Math.min(base * Math.pow(2, attempt), MAX_BACKOFF_MS);
   const jitter = Math.floor(Math.random() * 1000);
   return exponential + jitter;
 }
@@ -98,6 +111,35 @@ export function calculateBackoff(category: ErrorCategory, attempt: number): numb
 export interface RetryDecision {
   retry: boolean;
   delayMs?: number;
+}
+
+/** Fixed set of permanent failure reason labels for Prometheus (prevents cardinality explosion) */
+export type PermanentFailureReason =
+  | 'invalid_url'
+  | 'ssrf_blocked'
+  | 'http_client_error'
+  | 'protocol_error'
+  | 'ssl_error'
+  | 'blocked_by_response'
+  | 'aborted'
+  | 'unknown';
+
+const FAILURE_REASON_PATTERNS: Array<{ pattern: RegExp; reason: PermanentFailureReason }> = [
+  { pattern: /Protocol error/i, reason: 'protocol_error' },
+  { pattern: /Invalid URL|ERR_INVALID_URL/i, reason: 'invalid_url' },
+  { pattern: /SSRF|private IP blocked/i, reason: 'ssrf_blocked' },
+  { pattern: /HTTP 4\d{2}/i, reason: 'http_client_error' },
+  { pattern: /ERR_CERT_|ERR_SSL_/i, reason: 'ssl_error' },
+  { pattern: /ERR_BLOCKED_BY_RESPONSE/i, reason: 'blocked_by_response' },
+  { pattern: /ERR_ABORTED/i, reason: 'aborted' },
+];
+
+export function classifyPermanentReason(error: Error): PermanentFailureReason {
+  const msg = error.message;
+  for (const { pattern, reason } of FAILURE_REASON_PATTERNS) {
+    if (pattern.test(msg)) return reason;
+  }
+  return 'unknown';
 }
 
 export function shouldRetry(
