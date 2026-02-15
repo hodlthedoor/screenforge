@@ -45,8 +45,6 @@ vi.mock('node:fs/promises', async (importOriginal) => {
   };
 });
 
-import { ScreenForge } from '@screenforge/sdk';
-
 describe('screenshot command', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -285,6 +283,142 @@ describe('health command', () => {
     const output = JSON.parse(logs[0]);
     expect(output.status).toBe('success');
     expect(output.health.status).toBe('ok');
+  });
+});
+
+describe('screenshot command error handling', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    delete process.env['SCREENFORGE_API_KEY'];
+    delete process.env['SCREENFORGE_SERVER'];
+    process.exitCode = 0;
+  });
+
+  it('sets exitCode 1 when SDK throws', async () => {
+    mockScreenshot.mockRejectedValueOnce(new Error('Connection refused'));
+
+    const program = createProgram();
+    program.exitOverride();
+
+    const errors: string[] = [];
+    const origError = console.error;
+    console.error = (msg: string) => errors.push(msg);
+
+    await program.parseAsync([
+      'node', 'screenforge',
+      '--api-key', 'k',
+      '--json',
+      'screenshot', 'https://example.com',
+    ]);
+
+    console.error = origError;
+
+    expect(errors.some((e) => e.includes('Connection refused'))).toBe(true);
+    expect(process.exitCode).toBe(1);
+    process.exitCode = 0;
+  });
+});
+
+describe('pdf command error handling', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    delete process.env['SCREENFORGE_API_KEY'];
+    delete process.env['SCREENFORGE_SERVER'];
+    process.exitCode = 0;
+  });
+
+  it('sets exitCode 1 when SDK throws', async () => {
+    mockPdf.mockRejectedValueOnce(new Error('Timeout'));
+
+    const program = createProgram();
+    program.exitOverride();
+
+    const errors: string[] = [];
+    const origError = console.error;
+    console.error = (msg: string) => errors.push(msg);
+
+    await program.parseAsync([
+      'node', 'screenforge',
+      '--api-key', 'k',
+      '--json',
+      'pdf', 'https://example.com',
+    ]);
+
+    console.error = origError;
+
+    expect(errors.some((e) => e.includes('Timeout'))).toBe(true);
+    expect(process.exitCode).toBe(1);
+    process.exitCode = 0;
+  });
+});
+
+describe('batch command error handling', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    delete process.env['SCREENFORGE_API_KEY'];
+    delete process.env['SCREENFORGE_SERVER'];
+    process.exitCode = 0;
+  });
+
+  it('rejects empty array batch file', async () => {
+    const fs = await import('node:fs/promises');
+    (fs.readFile as ReturnType<typeof vi.fn>).mockImplementation(
+      async (path: string, encoding?: string) => {
+        if (String(path).endsWith('.screenforge.json')) throw new Error('ENOENT');
+        if (encoding === 'utf-8') return '[]';
+        return Buffer.from('[]');
+      },
+    );
+
+    const program = createProgram();
+    program.exitOverride();
+
+    const errors: string[] = [];
+    const origError = console.error;
+    console.error = (msg: string) => errors.push(msg);
+
+    await program.parseAsync([
+      'node', 'screenforge',
+      '--api-key', 'k',
+      '--json',
+      'batch', 'empty.json',
+    ]);
+
+    console.error = origError;
+
+    expect(errors.some((e) => e.includes('non-empty'))).toBe(true);
+    expect(process.exitCode).toBe(1);
+    process.exitCode = 0;
+  });
+
+  it('rejects invalid JSON batch file', async () => {
+    const fs = await import('node:fs/promises');
+    (fs.readFile as ReturnType<typeof vi.fn>).mockImplementation(
+      async (path: string, encoding?: string) => {
+        if (String(path).endsWith('.screenforge.json')) throw new Error('ENOENT');
+        if (encoding === 'utf-8') return 'not json at all';
+        return Buffer.from('not json');
+      },
+    );
+
+    const program = createProgram();
+    program.exitOverride();
+
+    const errors: string[] = [];
+    const origError = console.error;
+    console.error = (msg: string) => errors.push(msg);
+
+    await program.parseAsync([
+      'node', 'screenforge',
+      '--api-key', 'k',
+      '--json',
+      'batch', 'bad.json',
+    ]);
+
+    console.error = origError;
+
+    expect(process.exitCode).toBe(1);
+    process.exitCode = 0;
   });
 });
 

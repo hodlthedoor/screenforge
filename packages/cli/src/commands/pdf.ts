@@ -17,7 +17,7 @@ export function registerPdf(program: Command, getConfig: () => Promise<CliConfig
     .option('--landscape', 'Landscape orientation')
     .option('--dark-mode', 'Use dark color scheme')
     .option('--delay <ms>', 'Wait before capture (ms)', parsePositiveInt)
-    .action(async (url: string, opts: Record<string, string | boolean | undefined>) => {
+    .action(async (url: string, opts: Record<string, string | number | boolean | undefined>) => {
       const config = await getConfig();
       const output = getOutput();
       const spinner = output.json ? null : ora('Generating PDF…').start();
