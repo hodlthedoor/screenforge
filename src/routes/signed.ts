@@ -148,7 +148,7 @@ export async function signedRoutes(
     }
 
     // Enqueue render job
-    const priority = config.QUEUE_PRIORITY_ENABLED ? tierToPriority(apiKey.tier) : undefined;
+    const priority = config.QUEUE_PRIORITY_ENABLED ? tierToPriority(apiKey.tier) : 40;
 
     const jobResult = await getPool().query(
       `INSERT INTO render_jobs (api_key_id, type, url, options, callback_url, priority) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
@@ -158,7 +158,7 @@ export async function signedRoutes(
         validatedOptions.url ?? validatedOptions.html ?? '',
         JSON.stringify(validatedOptions),
         null,
-        priority ?? 40,
+        priority,
       ],
     );
     const jobId = jobResult.rows[0].id;

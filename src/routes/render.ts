@@ -131,11 +131,11 @@ export async function renderRoutes(
     }
 
     const priority = config.QUEUE_PRIORITY_ENABLED && req.apiKey?.tier
-      ? tierToPriority(req.apiKey.tier) : undefined;
+      ? tierToPriority(req.apiKey.tier) : 40;
 
     const jobResult = await getPool().query(
       `INSERT INTO render_jobs (api_key_id, type, url, options, callback_url, priority) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-      [apiKeyId, type, url, JSON.stringify(options), callbackUrl ?? null, priority ?? 40],
+      [apiKeyId, type, url, JSON.stringify(options), callbackUrl ?? null, priority],
     );
     const jobId = jobResult.rows[0].id;
 

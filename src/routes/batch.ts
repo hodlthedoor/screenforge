@@ -116,7 +116,7 @@ export async function batchRoutes(app: FastifyInstance) {
 
     const q = getQueue(config.REDIS_URL);
     const priority = config.QUEUE_PRIORITY_ENABLED && req.apiKey?.tier
-      ? tierToPriority(req.apiKey.tier) : undefined;
+      ? tierToPriority(req.apiKey.tier) : 40;
     const jobIds: string[] = [];
 
     for (const item of items) {
@@ -130,7 +130,7 @@ export async function batchRoutes(app: FastifyInstance) {
       const jobResult = await pool.query(
         `INSERT INTO render_jobs (api_key_id, type, url, options, status, batch_id, priority)
          VALUES ($1, $2, $3, $4, 'pending', $5, $6) RETURNING id`,
-        [apiKeyId, item.type, urlOrHtml, JSON.stringify(fullOptions), batchId, priority ?? 40],
+        [apiKeyId, item.type, urlOrHtml, JSON.stringify(fullOptions), batchId, priority],
       );
       const jobId = jobResult.rows[0].id;
       jobIds.push(jobId);
