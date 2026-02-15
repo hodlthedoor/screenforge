@@ -400,7 +400,7 @@ export async function adminPanelRoutes(app: FastifyInstance): Promise<void> {
 
     // Get the failed job's data
     const jobResult = await pool.query(
-      'SELECT id, api_key_id, type, url, options, callback_url, batch_id FROM render_jobs WHERE id = $1 AND status = $2',
+      'SELECT id, api_key_id, type, url, options, callback_url, batch_id, priority FROM render_jobs WHERE id = $1 AND status = $2',
       [jobId, 'failed'],
     );
 
@@ -412,7 +412,7 @@ export async function adminPanelRoutes(app: FastifyInstance): Promise<void> {
         [jobId],
       );
 
-      // Re-enqueue to BullMQ
+      // Re-enqueue to BullMQ with original priority
       try {
         const q = getQueue(config.REDIS_URL);
         await q.add('render', {
@@ -423,7 +423,7 @@ export async function adminPanelRoutes(app: FastifyInstance): Promise<void> {
           options: row.options,
           callbackUrl: row.callback_url,
           batchId: row.batch_id,
-        });
+        }, { priority: row.priority ?? undefined });
       } catch { /* queue error - job is still reset in DB */ }
     }
 

@@ -42,6 +42,9 @@ const envSchema = z.object({
   SCHEDULER_ENABLED: z.enum(['true', 'false']).default('true').transform((v) => v === 'true'),
   SCHEDULER_POLL_INTERVAL_MS: z.coerce.number().int().min(5000).default(60_000),
 
+  // Queue priority: when enabled, paid tiers get faster processing
+  QUEUE_PRIORITY_ENABLED: z.enum(['true', 'false']).default('true').transform((v) => v === 'true'),
+
   // Anthropic API key for LLM extraction (optional — users can also bring their own via header)
   ANTHROPIC_API_KEY: z.string().min(1).optional(),
 

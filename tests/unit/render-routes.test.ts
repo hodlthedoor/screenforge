@@ -28,9 +28,13 @@ vi.mock('../../src/renderer/pdf.js', () => ({
   renderPdf: (...args: unknown[]) => mockRenderPdf(...args),
 }));
 
-vi.mock('../../src/queue/render-queue.js', () => ({
-  getQueue: () => ({ add: vi.fn() }),
-}));
+vi.mock('../../src/queue/render-queue.js', async () => {
+  const actual = await vi.importActual<typeof import('../../src/queue/render-queue.js')>('../../src/queue/render-queue.js');
+  return {
+    ...actual,
+    getQueue: () => ({ add: vi.fn() }),
+  };
+});
 
 describe('render routes', () => {
   let app: FastifyInstance;

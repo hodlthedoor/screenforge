@@ -7,6 +7,17 @@ import { incrementRenderCounter, observeRenderDuration } from '../metrics/index.
 import { getConfig } from '../config/index.js';
 import { getFormatFromContentType } from '../utils/format.js';
 
+const TIER_PRIORITY: Record<string, number> = {
+  business: 10,
+  pro: 20,
+  starter: 30,
+  free: 40,
+};
+
+export function tierToPriority(tier: string): number {
+  return TIER_PRIORITY[tier] ?? 40;
+}
+
 export interface RenderJobData {
   jobId: string;
   apiKeyId: string | null;

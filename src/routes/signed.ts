@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { validateSignedUrl } from '../auth/signed-urls.js';
 import { getApiKeyWithSigningSecret, incrementUsage, getUsageStats } from '../db/api-keys.js';
 import { screenshotOptionsSchema, pdfOptionsSchema, isPrivateUrl } from '../renderer/schemas.js';
-import { getQueue, type RenderJobData } from '../queue/render-queue.js';
+import { getQueue, tierToPriority, type RenderJobData } from '../queue/render-queue.js';
 import { getPool } from '../db/index.js';
 import { getConfig } from '../config/index.js';
 import { sendError } from '../security/errors.js';
@@ -148,14 +148,17 @@ export async function signedRoutes(
     }
 
     // Enqueue render job
+    const priority = config.QUEUE_PRIORITY_ENABLED ? tierToPriority(apiKey.tier) : undefined;
+
     const jobResult = await getPool().query(
-      `INSERT INTO render_jobs (api_key_id, type, url, options, callback_url) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+      `INSERT INTO render_jobs (api_key_id, type, url, options, callback_url, priority) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
       [
         apiKey.id,
         type,
         validatedOptions.url ?? validatedOptions.html ?? '',
         JSON.stringify(validatedOptions),
         null,
+        priority ?? 40,
       ],
     );
     const jobId = jobResult.rows[0].id;
@@ -168,7 +171,7 @@ export async function signedRoutes(
       options: validatedOptions as unknown as Record<string, unknown>,
       ...(validatedOptions.url ? { url: validatedOptions.url } : {}),
     };
-    await q.add(`render-${jobId}`, jobData);
+    await q.add(`render-${jobId}`, jobData, { priority });
 
     return reply.status(202).send({
       id: jobId,

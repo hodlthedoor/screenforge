@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { getPool } from '../db/index.js';
-import { getQueue, type RenderJobData } from '../queue/render-queue.js';
+import { getQueue, tierToPriority, type RenderJobData } from '../queue/render-queue.js';
 import { authMiddleware } from '../auth/middleware.js';
 import { getConfig } from '../config/index.js';
 import { screenshotOptionsSchema, pdfOptionsSchema, gifOptionsSchema, isPrivateUrl } from '../renderer/schemas.js';
@@ -115,6 +115,8 @@ export async function batchRoutes(app: FastifyInstance) {
     const batchId = batchResult.rows[0].id;
 
     const q = getQueue(config.REDIS_URL);
+    const priority = config.QUEUE_PRIORITY_ENABLED && req.apiKey?.tier
+      ? tierToPriority(req.apiKey.tier) : undefined;
     const jobIds: string[] = [];
 
     for (const item of items) {
@@ -126,9 +128,9 @@ export async function batchRoutes(app: FastifyInstance) {
 
       // Create job record in DB
       const jobResult = await pool.query(
-        `INSERT INTO render_jobs (api_key_id, type, url, options, status, batch_id)
-         VALUES ($1, $2, $3, $4, 'pending', $5) RETURNING id`,
-        [apiKeyId, item.type, urlOrHtml, JSON.stringify(fullOptions), batchId],
+        `INSERT INTO render_jobs (api_key_id, type, url, options, status, batch_id, priority)
+         VALUES ($1, $2, $3, $4, 'pending', $5, $6) RETURNING id`,
+        [apiKeyId, item.type, urlOrHtml, JSON.stringify(fullOptions), batchId, priority ?? 40],
       );
       const jobId = jobResult.rows[0].id;
       jobIds.push(jobId);
@@ -143,7 +145,7 @@ export async function batchRoutes(app: FastifyInstance) {
         callbackUrl: item.callbackUrl,
         batchId,
       };
-      await q.add(`render-${jobId}`, jobData);
+      await q.add(`render-${jobId}`, jobData, { priority });
     }
 
     return reply.status(202).send({

@@ -7,7 +7,7 @@ import { authMiddleware } from '../auth/middleware.js';
 import { incrementUsage, getUsageStats } from '../db/api-keys.js';
 import type { SlidingWindowRateLimiter } from '../auth/rate-limiter.js';
 import { incrementRenderCounter, observeRenderDuration } from '../metrics/index.js';
-import { getQueue, type RenderJobData } from '../queue/render-queue.js';
+import { getQueue, tierToPriority, type RenderJobData } from '../queue/render-queue.js';
 import { getPool } from '../db/index.js';
 import { sanitizeUrl, sanitizeWaitFor, sanitizeCallbackUrl, sanitizeHeaders, sanitizeCookies, sanitizeSelectorList, SanitizeError } from '../security/sanitize.js';
 import { sendError } from '../security/errors.js';
@@ -23,7 +23,7 @@ export async function gifRoutes(
     schema: {
       tags: ['render'],
       summary: 'Record an animated GIF',
-      description: 'Capture a short animated GIF of a web page by recording sequential frames. Returns binary GIF data.',
+      description: 'Capture a short animated GIF of a web page by recording sequential frames. Returns binary GIF data. When using async mode, jobs are prioritized by billing tier (business > pro > starter > free).',
       security: [{ apiKey: [] }],
       querystring: {
         type: 'object',
@@ -213,10 +213,13 @@ export async function gifRoutes(
       }
 
       const apiKeyId = req.apiKey?.id ?? null;
+      const priority = config.QUEUE_PRIORITY_ENABLED && req.apiKey?.tier
+        ? tierToPriority(req.apiKey.tier) : undefined;
+
       const dbPool = getPool();
       const jobResult = await dbPool.query(
-        `INSERT INTO render_jobs (api_key_id, type, url, options, callback_url) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-        [apiKeyId, 'gif', options.url, JSON.stringify(options), callbackUrl ?? null],
+        `INSERT INTO render_jobs (api_key_id, type, url, options, callback_url, priority) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+        [apiKeyId, 'gif', options.url, JSON.stringify(options), callbackUrl ?? null, priority ?? 40],
       );
       const jobId = jobResult.rows[0].id;
 
@@ -226,7 +229,7 @@ export async function gifRoutes(
         options: options as unknown as Record<string, unknown>,
         callbackUrl,
       };
-      await q.add(`render-${jobId}`, jobData);
+      await q.add(`render-${jobId}`, jobData, { priority });
 
       return reply.status(202).send({
         id: jobId,

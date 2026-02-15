@@ -1,5 +1,5 @@
 import { getPool } from '../db/index.js';
-import { getQueue } from '../queue/render-queue.js';
+import { getQueue, tierToPriority } from '../queue/render-queue.js';
 import { getConfig } from '../config/index.js';
 import { getNextRun } from './cron.js';
 import { randomUUID } from 'node:crypto';
@@ -30,12 +30,13 @@ export async function pollDueSchedules(): Promise<number> {
     await client.query('BEGIN');
 
     // SELECT + lock due schedules using FOR UPDATE SKIP LOCKED for concurrency safety
-    const result = await client.query<ScheduleRow>(
-      `SELECT * FROM schedules
-       WHERE enabled = true AND next_run_at <= NOW()
-       ORDER BY next_run_at ASC
+    const result = await client.query<ScheduleRow & { api_key_tier?: string }>(
+      `SELECT s.*, ak.tier AS api_key_tier FROM schedules s
+       LEFT JOIN api_keys ak ON ak.id = s.api_key_id
+       WHERE s.enabled = true AND s.next_run_at <= NOW()
+       ORDER BY s.next_run_at ASC
        LIMIT 100
-       FOR UPDATE SKIP LOCKED`,
+       FOR UPDATE OF s SKIP LOCKED`,
     );
 
     if (result.rows.length === 0) {
@@ -50,10 +51,14 @@ export async function pollDueSchedules(): Promise<number> {
       const jobId = randomUUID();
       const url = (schedule.render_config as Record<string, unknown>).url as string | undefined;
 
+      // Derive priority from API key tier
+      const priority = config.QUEUE_PRIORITY_ENABLED && schedule.api_key_tier
+        ? tierToPriority(schedule.api_key_tier) : 40;
+
       // Insert a render_jobs row
       await client.query(
-        `INSERT INTO render_jobs (id, api_key_id, type, url, options, status, schedule_id)
-         VALUES ($1, $2, $3, $4, $5, 'pending', $6)`,
+        `INSERT INTO render_jobs (id, api_key_id, type, url, options, status, schedule_id, priority)
+         VALUES ($1, $2, $3, $4, $5, 'pending', $6, $7)`,
         [
           jobId,
           schedule.api_key_id,
@@ -61,6 +66,7 @@ export async function pollDueSchedules(): Promise<number> {
           url ?? '',
           JSON.stringify(schedule.render_config),
           schedule.id,
+          priority,
         ],
       );
 
@@ -72,7 +78,7 @@ export async function pollDueSchedules(): Promise<number> {
         url,
         options: schedule.render_config,
         callbackUrl: (schedule.render_config as Record<string, unknown>).webhook_url as string | undefined,
-      });
+      }, { priority });
 
       // Compute next run and update schedule
       const nextRun = getNextRun(schedule.cron_expression);

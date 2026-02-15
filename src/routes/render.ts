@@ -9,7 +9,7 @@ import { authMiddleware } from '../auth/middleware.js';
 import { incrementUsage, getUsageStats } from '../db/api-keys.js';
 import type { SlidingWindowRateLimiter } from '../auth/rate-limiter.js';
 import { incrementRenderCounter, observeRenderDuration } from '../metrics/index.js';
-import { getQueue, type RenderJobData } from '../queue/render-queue.js';
+import { getQueue, tierToPriority, type RenderJobData } from '../queue/render-queue.js';
 import { getPool } from '../db/index.js';
 import { sanitizeUrl, sanitizeSelector, sanitizeWaitFor, sanitizeTemplate, sanitizeCallbackUrl, sanitizeHeaders, sanitizeCookies, sanitizeSelectorList, SanitizeError } from '../security/sanitize.js';
 import { sendError } from '../security/errors.js';
@@ -130,9 +130,12 @@ export async function renderRoutes(
       throw e;
     }
 
+    const priority = config.QUEUE_PRIORITY_ENABLED && req.apiKey?.tier
+      ? tierToPriority(req.apiKey.tier) : undefined;
+
     const jobResult = await getPool().query(
-      `INSERT INTO render_jobs (api_key_id, type, url, options, callback_url) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-      [apiKeyId, type, url, JSON.stringify(options), callbackUrl ?? null],
+      `INSERT INTO render_jobs (api_key_id, type, url, options, callback_url, priority) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+      [apiKeyId, type, url, JSON.stringify(options), callbackUrl ?? null, priority ?? 40],
     );
     const jobId = jobResult.rows[0].id;
 
@@ -141,7 +144,7 @@ export async function renderRoutes(
       jobId, apiKeyId, type, options, callbackUrl,
       ...(options.html ? {} : { url }),
     };
-    await q.add(`render-${jobId}`, jobData);
+    await q.add(`render-${jobId}`, jobData, { priority });
 
     return reply.status(202).send({
       id: jobId,
@@ -154,7 +157,7 @@ export async function renderRoutes(
     schema: {
       tags: ['render'],
       summary: 'Take a screenshot',
-      description: 'Capture a screenshot of a URL or HTML content. Returns binary image data (PNG, JPEG, or WebP).',
+      description: 'Capture a screenshot of a URL or HTML content. Returns binary image data (PNG, JPEG, or WebP). When using async mode, jobs are prioritized by billing tier (business > pro > starter > free).',
       security: [{ apiKey: [] }],
       querystring: {
         type: 'object',
@@ -495,7 +498,7 @@ export async function renderRoutes(
     schema: {
       tags: ['render'],
       summary: 'Generate a PDF',
-      description: 'Render a URL or HTML content to PDF. Returns binary PDF data.',
+      description: 'Render a URL or HTML content to PDF. Returns binary PDF data. When using async mode, jobs are prioritized by billing tier (business > pro > starter > free).',
       security: [{ apiKey: [] }],
       querystring: {
         type: 'object',
