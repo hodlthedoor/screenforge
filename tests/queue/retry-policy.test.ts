@@ -5,6 +5,7 @@ import {
   calculateBackoff,
   shouldRetry,
   classifyPermanentReason,
+  truncateError,
   ErrorCategory,
 } from '../../src/queue/retry-policy.js';
 
@@ -170,6 +171,11 @@ describe('calculateBackoff', () => {
     expect(d1).toBeLessThanOrEqual(11000);
   });
 
+  it('returns 0 for PERMANENT category (defensive guard)', () => {
+    expect(calculateBackoff(ErrorCategory.PERMANENT, 0)).toBe(0);
+    expect(calculateBackoff(ErrorCategory.PERMANENT, 5)).toBe(0);
+  });
+
   it('caps backoff at 60 seconds plus jitter', () => {
     // TRANSIENT at attempt 10: 1000 * 2^10 = 1,024,000 → capped to 60,000
     const d10 = calculateBackoff(ErrorCategory.TRANSIENT, 10);
@@ -237,8 +243,35 @@ describe('classifyPermanentReason', () => {
     expect(classifyPermanentReason(new Error('net::ERR_ABORTED'))).toBe('aborted');
   });
 
+  it('does NOT classify HTTP 408 as http_client_error (transient)', () => {
+    expect(classifyPermanentReason(new Error('Page returned HTTP 408'))).toBe('unknown');
+  });
+
+  it('does NOT classify HTTP 429 as http_client_error (transient)', () => {
+    expect(classifyPermanentReason(new Error('Page returned HTTP 429'))).toBe('unknown');
+  });
+
   it('returns unknown for unrecognized permanent errors', () => {
     expect(classifyPermanentReason(new Error('Some unknown permanent error'))).toBe('unknown');
+  });
+});
+
+describe('truncateError', () => {
+  it('returns short messages unchanged', () => {
+    expect(truncateError('Short error')).toBe('Short error');
+  });
+
+  it('truncates messages exceeding 512 chars', () => {
+    const long = 'x'.repeat(600);
+    const result = truncateError(long);
+    expect(result.length).toBeLessThan(600);
+    expect(result).toContain('…[truncated]');
+    expect(result.startsWith('x'.repeat(512))).toBe(true);
+  });
+
+  it('preserves messages at exactly 512 chars', () => {
+    const exact = 'a'.repeat(512);
+    expect(truncateError(exact)).toBe(exact);
   });
 });
 

@@ -7,7 +7,7 @@ import { incrementRenderCounter, observeRenderDuration, incrementRetryCounter, i
 import { getConfig } from '../config/index.js';
 import { getFormatFromContentType } from '../utils/format.js';
 import { clearDedup } from './dedup.js';
-import { classifyError, shouldRetry, classifyPermanentReason, type RetryDecision, ErrorCategory } from './retry-policy.js';
+import { classifyError, shouldRetry, classifyPermanentReason, truncateError, type RetryDecision, ErrorCategory } from './retry-policy.js';
 
 const TIER_PRIORITY: Record<string, number> = {
   business: 10,
@@ -189,7 +189,7 @@ export function createWorker(
     const historyEntry = {
       attempt: currentRetryCount + 1,
       category,
-      error: error.message,
+      error: truncateError(error.message),
       timestamp: new Date().toISOString(),
       retried: decision.retry,
     };

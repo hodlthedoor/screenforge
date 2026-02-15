@@ -102,6 +102,7 @@ const BASE_DELAY: Record<ErrorCategory, number> = {
 const MAX_BACKOFF_MS = 60_000;
 
 export function calculateBackoff(category: ErrorCategory, attempt: number): number {
+  if (category === ErrorCategory.PERMANENT) return 0;
   const base = BASE_DELAY[category];
   const exponential = Math.min(base * Math.pow(2, attempt), MAX_BACKOFF_MS);
   const jitter = Math.floor(Math.random() * 1000);
@@ -128,7 +129,7 @@ const FAILURE_REASON_PATTERNS: Array<{ pattern: RegExp; reason: PermanentFailure
   { pattern: /Protocol error/i, reason: 'protocol_error' },
   { pattern: /Invalid URL|ERR_INVALID_URL/i, reason: 'invalid_url' },
   { pattern: /SSRF|private IP blocked/i, reason: 'ssrf_blocked' },
-  { pattern: /HTTP 4\d{2}/i, reason: 'http_client_error' },
+  { pattern: /HTTP 4(?!08|29)\d{2}\b/i, reason: 'http_client_error' },
   { pattern: /ERR_CERT_|ERR_SSL_/i, reason: 'ssl_error' },
   { pattern: /ERR_BLOCKED_BY_RESPONSE/i, reason: 'blocked_by_response' },
   { pattern: /ERR_ABORTED/i, reason: 'aborted' },
@@ -140,6 +141,14 @@ export function classifyPermanentReason(error: Error): PermanentFailureReason {
     if (pattern.test(msg)) return reason;
   }
   return 'unknown';
+}
+
+/** Maximum error message length stored in retry history (bytes) */
+const MAX_ERROR_LENGTH = 512;
+
+export function truncateError(message: string): string {
+  if (message.length <= MAX_ERROR_LENGTH) return message;
+  return message.slice(0, MAX_ERROR_LENGTH) + '…[truncated]';
 }
 
 export function shouldRetry(
