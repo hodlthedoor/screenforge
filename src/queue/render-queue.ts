@@ -6,6 +6,7 @@ import { getWebhookConfig } from '../db/api-keys.js';
 import { incrementRenderCounter, observeRenderDuration } from '../metrics/index.js';
 import { getConfig } from '../config/index.js';
 import { getFormatFromContentType } from '../utils/format.js';
+import { computeFingerprint, clearDedup } from './dedup.js';
 
 const TIER_PRIORITY: Record<string, number> = {
   business: 10,
@@ -122,6 +123,22 @@ export function createWorker(
     incrementRenderCounter(job.data.type, format, 'completed', false);
     observeRenderDuration(job.data.type, format, result.durationMs / 1000);
 
+    // Clear dedup key if deduplication is enabled
+    if (config.DEDUP_ENABLED) {
+      const redis = new Redis(config.REDIS_URL);
+      try {
+        const fingerprint = computeFingerprint({
+          url: job.data.url,
+          ...job.data.options,
+        });
+        await clearDedup(redis, fingerprint);
+      } catch {
+        // Non-critical - log but don't fail the job
+      } finally {
+        await redis.quit();
+      }
+    }
+
     // Update batch progress
     if (job.data.batchId) {
       await pool.query(
@@ -150,6 +167,22 @@ export function createWorker(
     // For failed jobs we don't have result.contentType, so best effort based on type only
     const format = job.data.type === 'pdf' ? 'pdf' : 'png';
     incrementRenderCounter(job.data.type, format, 'failed', false);
+
+    // Clear dedup key if deduplication is enabled
+    if (config.DEDUP_ENABLED) {
+      const redis = new Redis(config.REDIS_URL);
+      try {
+        const fingerprint = computeFingerprint({
+          url: job.data.url,
+          ...job.data.options,
+        });
+        await clearDedup(redis, fingerprint);
+      } catch {
+        // Non-critical - log but don't fail the job
+      } finally {
+        await redis.quit();
+      }
+    }
 
     if (job.data.batchId) {
       await pool.query(

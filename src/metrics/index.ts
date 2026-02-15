@@ -119,6 +119,18 @@ export function initMetrics(): void {
   });
   circuitBreakerGauge.set(0);
 
+  new Counter({
+    name: 'screenforge_dedup_hits_total',
+    help: 'Total number of deduplicated render requests that matched an existing job',
+    registers: [register],
+  });
+
+  new Counter({
+    name: 'screenforge_dedup_misses_total',
+    help: 'Total number of render requests that did not match any existing job',
+    registers: [register],
+  });
+
   metricsInitialized = true;
 }
 
@@ -218,5 +230,19 @@ export function setCircuitBreakerState(state: 0 | 1 | 2): void {
   const gauge = register.getSingleMetric('screenforge_circuit_breaker_state') as Gauge<string>;
   if (gauge) {
     gauge.set(state);
+  }
+}
+
+export function incrementDedupHits(): void {
+  const counter = register.getSingleMetric('screenforge_dedup_hits_total') as Counter<string>;
+  if (counter) {
+    counter.inc();
+  }
+}
+
+export function incrementDedupMisses(): void {
+  const counter = register.getSingleMetric('screenforge_dedup_misses_total') as Counter<string>;
+  if (counter) {
+    counter.inc();
   }
 }

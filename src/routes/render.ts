@@ -8,12 +8,14 @@ import { getConfig } from '../config/index.js';
 import { authMiddleware } from '../auth/middleware.js';
 import { incrementUsage, getUsageStats } from '../db/api-keys.js';
 import type { SlidingWindowRateLimiter } from '../auth/rate-limiter.js';
-import { incrementRenderCounter, observeRenderDuration } from '../metrics/index.js';
+import { incrementRenderCounter, observeRenderDuration, incrementDedupHits, incrementDedupMisses } from '../metrics/index.js';
 import { getQueue, tierToPriority, type RenderJobData } from '../queue/render-queue.js';
 import { getPool } from '../db/index.js';
 import { sanitizeUrl, sanitizeSelector, sanitizeWaitFor, sanitizeTemplate, sanitizeCallbackUrl, sanitizeHeaders, sanitizeCookies, sanitizeSelectorList, SanitizeError } from '../security/sanitize.js';
 import { sendError } from '../security/errors.js';
 import type { RenderMetadata } from '../renderer/schemas.js';
+import { Redis } from 'ioredis';
+import { computeFingerprint, checkDedup } from '../queue/dedup.js';
 
 import { FORMAT_EXT, getFormatFromContentType } from '../utils/format.js';
 import sharp from 'sharp';
@@ -134,18 +136,99 @@ export async function renderRoutes(
     const priority = config.QUEUE_PRIORITY_ENABLED && req.apiKey?.tier
       ? tierToPriority(req.apiKey.tier) : 40;
 
-    const jobResult = await getPool().query(
-      `INSERT INTO render_jobs (api_key_id, type, url, options, callback_url, priority) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-      [apiKeyId, type, url, JSON.stringify(options), callbackUrl ?? null, priority],
-    );
-    const jobId = jobResult.rows[0].id;
+    // Check for deduplication if enabled
+    let jobId: string;
 
-    const q = getQueue(config.REDIS_URL);
-    const jobData: RenderJobData = {
-      jobId, apiKeyId, type, options, callbackUrl,
-      ...(options.html ? {} : { url }),
-    };
-    await q.add(`render-${jobId}`, jobData, { priority });
+    if (config.DEDUP_ENABLED) {
+      const redis = new Redis(config.REDIS_URL);
+      try {
+        // Compute fingerprint from render parameters
+        const fingerprint = computeFingerprint({
+          url,
+          ...options,
+        });
+
+        // Try to acquire lock atomically by setting a placeholder value
+        // This prevents race conditions between check and insert
+        const lockAcquired = await redis.set(
+          `dedup:${fingerprint}`,
+          'PENDING',
+          'PX',
+          config.DEDUP_WINDOW_MS,
+          'NX'
+        );
+
+        if (lockAcquired === 'OK') {
+          // We won the race - create the job
+          incrementDedupMisses();
+
+          const jobResult = await getPool().query(
+            `INSERT INTO render_jobs (api_key_id, type, url, options, callback_url, priority) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+            [apiKeyId, type, url, JSON.stringify(options), callbackUrl ?? null, priority],
+          );
+          jobId = jobResult.rows[0].id;
+
+          // Update the lock with the actual job ID
+          await redis.set(`dedup:${fingerprint}`, jobId, 'PX', config.DEDUP_WINDOW_MS);
+
+          // Enqueue the job
+          const q = getQueue(config.REDIS_URL);
+          const jobData: RenderJobData = {
+            jobId, apiKeyId, type, options, callbackUrl,
+            ...(options.html ? {} : { url }),
+          };
+          await q.add(`render-${jobId}`, jobData, { priority });
+        } else {
+          // Another request is handling this - wait briefly and fetch the job ID
+          incrementDedupHits();
+
+          // Poll for the job ID (the other request might still be setting it)
+          let attempts = 0;
+          let existingJobId: string | null = null;
+
+          while (attempts < 10 && (!existingJobId || existingJobId === 'PENDING')) {
+            await new Promise(resolve => setTimeout(resolve, 10));
+            existingJobId = await checkDedup(redis, fingerprint);
+            attempts++;
+          }
+
+          if (existingJobId && existingJobId !== 'PENDING') {
+            jobId = existingJobId;
+          } else {
+            // Fallback: if we couldn't get the job ID, create a new one
+            // This shouldn't happen but handles edge cases
+            const jobResult = await getPool().query(
+              `INSERT INTO render_jobs (api_key_id, type, url, options, callback_url, priority) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+              [apiKeyId, type, url, JSON.stringify(options), callbackUrl ?? null, priority],
+            );
+            jobId = jobResult.rows[0].id;
+
+            const q = getQueue(config.REDIS_URL);
+            const jobData: RenderJobData = {
+              jobId, apiKeyId, type, options, callbackUrl,
+              ...(options.html ? {} : { url }),
+            };
+            await q.add(`render-${jobId}`, jobData, { priority });
+          }
+        }
+      } finally {
+        await redis.quit();
+      }
+    } else {
+      // Deduplication disabled - create job normally
+      const jobResult = await getPool().query(
+        `INSERT INTO render_jobs (api_key_id, type, url, options, callback_url, priority) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+        [apiKeyId, type, url, JSON.stringify(options), callbackUrl ?? null, priority],
+      );
+      jobId = jobResult.rows[0].id;
+
+      const q = getQueue(config.REDIS_URL);
+      const jobData: RenderJobData = {
+        jobId, apiKeyId, type, options, callbackUrl,
+        ...(options.html ? {} : { url }),
+      };
+      await q.add(`render-${jobId}`, jobData, { priority });
+    }
 
     return reply.status(202).send({
       id: jobId,

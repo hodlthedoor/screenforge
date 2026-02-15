@@ -45,6 +45,7 @@ describe('queue priority — async render jobs', { timeout: 60_000 }, () => {
     process.env.REQUIRE_AUTH = 'true';
     process.env.BASE_URL = 'http://localhost:3000';
     process.env.QUEUE_PRIORITY_ENABLED = 'true';
+    process.env.DEDUP_ENABLED = 'false'; // Disable dedup to test priority in isolation
 
     app = await buildServer({ skipBrowserInit: true });
 
@@ -74,6 +75,7 @@ describe('queue priority — async render jobs', { timeout: 60_000 }, () => {
     delete process.env.REQUIRE_AUTH;
     delete process.env.BASE_URL;
     delete process.env.QUEUE_PRIORITY_ENABLED;
+    delete process.env.DEDUP_ENABLED;
   });
 
   it('stores priority in render_jobs when async job is created', async () => {
@@ -175,6 +177,7 @@ describe('queue priority — QUEUE_PRIORITY_ENABLED=false', { timeout: 60_000 },
     process.env.REQUIRE_AUTH = 'true';
     process.env.BASE_URL = 'http://localhost:3000';
     process.env.QUEUE_PRIORITY_ENABLED = 'false';
+    process.env.DEDUP_ENABLED = 'false'; // Disable dedup to test priority in isolation
 
     app = await buildServer({ skipBrowserInit: true });
 
@@ -201,6 +204,7 @@ describe('queue priority — QUEUE_PRIORITY_ENABLED=false', { timeout: 60_000 },
     delete process.env.REQUIRE_AUTH;
     delete process.env.BASE_URL;
     delete process.env.QUEUE_PRIORITY_ENABLED;
+    delete process.env.DEDUP_ENABLED;
   });
 
   it('all jobs get default priority 40 when priority is disabled', async () => {
