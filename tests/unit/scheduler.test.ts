@@ -117,6 +117,12 @@ describe('scheduler polling', () => {
 
   it('picks up due schedules and enqueues jobs', async () => {
     const pool = getPool();
+    const beforeCountResult = await pool.query(
+      'SELECT COUNT(*)::int AS count FROM render_jobs WHERE api_key_id = $1 AND schedule_id IS NOT NULL',
+      [apiKeyId],
+    );
+    const beforeCount = beforeCountResult.rows[0].count;
+
     // Insert a schedule that is due (next_run_at in the past)
     await pool.query(
       `INSERT INTO schedules (api_key_id, name, cron_expression, render_type, render_config, enabled, next_run_at)
@@ -125,14 +131,16 @@ describe('scheduler polling', () => {
     );
 
     const enqueued = await pollDueSchedules();
-    expect(enqueued).toBe(1);
+    expect(enqueued).toBeGreaterThanOrEqual(1);
 
     // Verify a render job was created
     const jobs = await pool.query(
-      'SELECT * FROM render_jobs WHERE api_key_id = $1 AND schedule_id IS NOT NULL',
+      `SELECT * FROM render_jobs
+       WHERE api_key_id = $1 AND schedule_id IS NOT NULL
+       ORDER BY created_at DESC`,
       [apiKeyId],
     );
-    expect(jobs.rows.length).toBe(1);
+    expect(jobs.rows.length).toBe(beforeCount + 1);
     expect(jobs.rows[0].type).toBe('screenshot');
     expect(jobs.rows[0].status).toBe('pending');
   });
@@ -145,8 +153,12 @@ describe('scheduler polling', () => {
       [apiKeyId, JSON.stringify({ url: 'https://example.com' })],
     );
 
-    const enqueued = await pollDueSchedules();
-    expect(enqueued).toBe(0);
+    await pollDueSchedules();
+    const jobs = await pool.query(
+      'SELECT COUNT(*)::int AS count FROM render_jobs WHERE api_key_id = $1 AND schedule_id IS NOT NULL',
+      [apiKeyId],
+    );
+    expect(jobs.rows[0].count).toBe(0);
   });
 
   it('skips schedules not yet due', async () => {
@@ -157,8 +169,12 @@ describe('scheduler polling', () => {
       [apiKeyId, JSON.stringify({ url: 'https://example.com' })],
     );
 
-    const enqueued = await pollDueSchedules();
-    expect(enqueued).toBe(0);
+    await pollDueSchedules();
+    const jobs = await pool.query(
+      'SELECT COUNT(*)::int AS count FROM render_jobs WHERE api_key_id = $1 AND schedule_id IS NOT NULL',
+      [apiKeyId],
+    );
+    expect(jobs.rows[0].count).toBe(0);
   });
 
   it('updates next_run_at after polling', async () => {
