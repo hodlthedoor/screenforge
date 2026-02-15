@@ -25,6 +25,24 @@ export async function registerDocs(app: FastifyInstance) {
             description: 'Bearer token authentication with API key',
           },
         },
+        headers: {
+          'X-RateLimit-Limit': {
+            description: 'Maximum number of requests allowed in the current rate limit window (burst capacity for token bucket, window limit for sliding window)',
+            schema: { type: 'integer' },
+          },
+          'X-RateLimit-Remaining': {
+            description: 'Number of requests remaining in the current rate limit window (available tokens for token bucket, remaining requests for sliding window)',
+            schema: { type: 'integer' },
+          },
+          'X-RateLimit-Reset': {
+            description: 'Unix epoch timestamp (seconds) when the rate limit window resets (when next token becomes available for token bucket, window end for sliding window)',
+            schema: { type: 'integer' },
+          },
+          'Retry-After': {
+            description: 'Number of seconds to wait before retrying (only present on 429 rate limit responses)',
+            schema: { type: 'integer' },
+          },
+        },
       },
       tags: [
         { name: 'render', description: 'Screenshot, PDF, and GIF rendering' },

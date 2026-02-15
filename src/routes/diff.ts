@@ -8,6 +8,8 @@ import { getConfig } from '../config/index.js';
 import { authMiddleware } from '../auth/middleware.js';
 import { incrementUsage, getUsageStats } from '../db/api-keys.js';
 import type { SlidingWindowRateLimiter } from '../auth/rate-limiter.js';
+import type { TokenBucketRateLimiter } from '../auth/token-bucket.js';
+import { checkRateLimit } from '../auth/rate-limit-check.js';
 import { getPool } from '../db/index.js';
 import { getStorageBackend } from '../storage/index.js';
 import { sanitizeUrl, SanitizeError } from '../security/sanitize.js';
@@ -16,7 +18,7 @@ import { sendError } from '../security/errors.js';
 export async function diffRoutes(
   app: FastifyInstance,
   pool: BrowserPool,
-  rateLimiter?: SlidingWindowRateLimiter,
+  rateLimiter?: SlidingWindowRateLimiter | TokenBucketRateLimiter,
 ) {
   const config = getConfig();
 
@@ -65,14 +67,16 @@ export async function diffRoutes(
 
     // Rate limiting
     if (config.REQUIRE_AUTH && req.apiKey && rateLimiter) {
-      const result = await rateLimiter.check(req.apiKey.id, req.apiKey.rateLimit);
+      const result = await checkRateLimit(rateLimiter, req.apiKey.id, req.apiKey.tier, req.apiKey.rateLimit);
       reply.header('X-RateLimit-Limit', String(result.limit));
       reply.header('X-RateLimit-Remaining', String(result.remaining));
       reply.header('X-RateLimit-Reset', String(Math.ceil(result.resetAt / 1000)));
 
       if (!result.allowed) {
+        const retryAfterSeconds = Math.ceil((result.resetAt - Date.now()) / 1000);
+        reply.header('Retry-After', String(Math.max(0, retryAfterSeconds)));
         sendError(reply, req, 'RATE_LIMITED', {
-          details: { retryAfter: Math.ceil((result.resetAt - Date.now()) / 1000) },
+          details: { retryAfter: Math.max(0, retryAfterSeconds) },
         });
         return;
       }

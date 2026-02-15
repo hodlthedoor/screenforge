@@ -7,6 +7,7 @@ import { loadConfig } from './config/index.js';
 import { BrowserPool } from './renderer/browser-pool.js';
 import { RenderCache } from './cache/index.js';
 import { SlidingWindowRateLimiter } from './auth/rate-limiter.js';
+import { TokenBucketRateLimiter } from './auth/token-bucket.js';
 import { authMiddleware } from './auth/middleware.js';
 import { StorageLifecycleManager } from './storage/lifecycle.js';
 import { renderRoutes } from './routes/render.js';
@@ -165,7 +166,9 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
   }
 
   const cache = new RenderCache(config.REDIS_URL, config.STORAGE_PATH, config.CACHE_TTL_SECONDS);
-  const rateLimiter = new SlidingWindowRateLimiter(config.REDIS_URL);
+  const rateLimiter = config.TOKEN_BUCKET_ENABLED
+    ? new TokenBucketRateLimiter(config.REDIS_URL)
+    : new SlidingWindowRateLimiter(config.REDIS_URL);
 
   const storageLifecycle = new StorageLifecycleManager({
     storagePath: config.STORAGE_PATH,

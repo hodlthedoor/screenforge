@@ -8,6 +8,9 @@ export interface Plan {
   maxSchedules: number;
   maxExtractionsDaily: number;
   maxAccessibilityDaily: number;
+  // Token bucket configuration
+  burstCapacity: number;
+  refillRatePerMin: number;
 }
 
 export const PLANS: Record<string, Plan> = {
@@ -21,6 +24,8 @@ export const PLANS: Record<string, Plan> = {
     maxSchedules: 3,
     maxExtractionsDaily: 10,
     maxAccessibilityDaily: 5,
+    burstCapacity: 10,
+    refillRatePerMin: 5,
   },
   starter: {
     name: 'Starter',
@@ -32,6 +37,8 @@ export const PLANS: Record<string, Plan> = {
     maxSchedules: 10,
     maxExtractionsDaily: 50,
     maxAccessibilityDaily: 25,
+    burstCapacity: 30,
+    refillRatePerMin: 60,
   },
   pro: {
     name: 'Pro',
@@ -43,6 +50,8 @@ export const PLANS: Record<string, Plan> = {
     maxSchedules: 50,
     maxExtractionsDaily: 100,
     maxAccessibilityDaily: 50,
+    burstCapacity: 100,
+    refillRatePerMin: 300,
   },
   business: {
     name: 'Business',
@@ -54,6 +63,8 @@ export const PLANS: Record<string, Plan> = {
     maxSchedules: 999,
     maxExtractionsDaily: 1_000,
     maxAccessibilityDaily: 500,
+    burstCapacity: 500,
+    refillRatePerMin: 1500,
   },
 };
 

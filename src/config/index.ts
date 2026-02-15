@@ -69,6 +69,9 @@ const envSchema = z.object({
   // Job deduplication: share browser execution for identical concurrent render requests
   DEDUP_ENABLED: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
   DEDUP_WINDOW_MS: z.coerce.number().int().min(1000).max(300_000).default(30_000),
+
+  // Token bucket rate limiter: smoother burst handling (default: false, uses sliding window)
+  TOKEN_BUCKET_ENABLED: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
 });
 
 export type Config = z.infer<typeof envSchema>;

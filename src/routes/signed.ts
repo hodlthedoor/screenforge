@@ -8,10 +8,12 @@ import { getConfig } from '../config/index.js';
 import { sendError } from '../security/errors.js';
 import { sanitizeUrl, sanitizeSelector, sanitizeWaitFor, sanitizeSelectorList, SanitizeError } from '../security/sanitize.js';
 import type { SlidingWindowRateLimiter } from '../auth/rate-limiter.js';
+import type { TokenBucketRateLimiter } from '../auth/token-bucket.js';
+import { checkRateLimit } from '../auth/rate-limit-check.js';
 
 export async function signedRoutes(
   app: FastifyInstance,
-  rateLimiter?: SlidingWindowRateLimiter,
+  rateLimiter?: SlidingWindowRateLimiter | TokenBucketRateLimiter,
 ) {
   const config = getConfig();
 
@@ -55,15 +57,17 @@ export async function signedRoutes(
 
     // Check rate limit
     if (config.REQUIRE_AUTH && rateLimiter) {
-      const result = await rateLimiter.check(apiKey.id, apiKey.rateLimit);
+      const result = await checkRateLimit(rateLimiter, apiKey.id, apiKey.tier, apiKey.rateLimit);
       reply.header('X-RateLimit-Limit', String(result.limit));
       reply.header('X-RateLimit-Remaining', String(result.remaining));
       reply.header('X-RateLimit-Reset', String(Math.ceil(result.resetAt / 1000)));
 
       if (!result.allowed) {
+        const retryAfterSeconds = Math.ceil((result.resetAt - Date.now()) / 1000);
+        reply.header('Retry-After', String(Math.max(0, retryAfterSeconds)));
         sendError(reply, req, 'RATE_LIMITED', {
           details: {
-            retryAfter: Math.ceil((result.resetAt - Date.now()) / 1000),
+            retryAfter: Math.max(0, retryAfterSeconds),
           },
         });
         return;
