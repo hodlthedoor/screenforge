@@ -20,7 +20,7 @@ import { diffRoutes } from './routes/diff.js';
 import { signedRoutes } from './routes/signed.js';
 import { devicesRoutes } from './routes/devices.js';
 import { requestIdHook } from './security/request-id.js';
-import { getExtFromFormat, getFormatFromContentType } from './utils/format.js';
+import { getExtFromFormat, getFormatFromContentType, FORMAT_CONTENT_TYPE } from './utils/format.js';
 import { requestTimeoutHook, requestTimeoutCleanupHook } from './renderer/timeout.js';
 import { ActionError } from './renderer/actions.js';
 import { ContentValidationError } from './renderer/content-validation.js';
@@ -470,8 +470,8 @@ export async function start() {
     // Handle thumbnail if generated
     let thumbnailPath: string | undefined;
     if (result.thumbnailBuffer && parsed.thumbnail) {
-      const thumbExt = parsed.thumbnail.format === 'png' ? 'png' : parsed.thumbnail.format === 'jpeg' ? 'jpg' : parsed.thumbnail.format === 'avif' ? 'avif' : 'webp';
-      const thumbContentType = parsed.thumbnail.format === 'png' ? 'image/png' : parsed.thumbnail.format === 'jpeg' ? 'image/jpeg' : parsed.thumbnail.format === 'avif' ? 'image/avif' : 'image/webp';
+      const thumbExt = getExtFromFormat(parsed.thumbnail.format);
+      const thumbContentType = FORMAT_CONTENT_TYPE[parsed.thumbnail.format] ?? 'image/webp';
       const thumbKey = `${job.data.jobId}-thumb.${thumbExt}`;
       thumbnailPath = await storage.upload(thumbKey, result.thumbnailBuffer, thumbContentType);
     }

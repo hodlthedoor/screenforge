@@ -172,7 +172,7 @@ export async function renderRoutes(
         properties: {
           url: { type: 'string', description: 'URL to screenshot' },
           html: { type: 'string', description: 'HTML content to render' },
-          format: { type: 'string', enum: ['png', 'jpeg', 'webp', 'avif'], default: 'png' },
+          format: { type: 'string', enum: ['png', 'jpeg', 'webp', 'avif'] },
           viewport: {
             type: 'object',
             properties: {

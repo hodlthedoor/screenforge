@@ -3,6 +3,7 @@ import { getPool } from '../db/index.js';
 import { getConfig } from '../config/index.js';
 import { sendError } from '../security/errors.js';
 import { getStorageBackend } from '../storage/index.js';
+import { FORMAT_CONTENT_TYPE } from '../utils/format.js';
 
 export async function asyncRenderRoutes(app: FastifyInstance) {
   const config = getConfig();
@@ -38,7 +39,7 @@ export async function asyncRenderRoutes(app: FastifyInstance) {
 
     // Determine content type from file extension
     const ext = thumbnailPath.split('.').pop()?.toLowerCase();
-    const contentType = ext === 'png' ? 'image/png' : ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : ext === 'avif' ? 'image/avif' : 'image/webp';
+    const contentType = FORMAT_CONTENT_TYPE[ext === 'jpg' ? 'jpeg' : (ext ?? 'webp')] ?? 'image/webp';
 
     return reply
       .header('Content-Type', contentType)

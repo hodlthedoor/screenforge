@@ -9,13 +9,7 @@ import { imageSize } from 'image-size';
 import { getConfig } from '../config/index.js';
 import sharp from 'sharp';
 import { extractMetadataFromPage } from './metadata.js';
-
-const FORMAT_CONTENT_TYPE: Record<string, string> = {
-  png: 'image/png',
-  jpeg: 'image/jpeg',
-  webp: 'image/webp',
-  avif: 'image/avif',
-};
+import { FORMAT_CONTENT_TYPE } from '../utils/format.js';
 
 export async function takeScreenshot(pool: BrowserPool, options: ScreenshotOptions, timeoutMs = 30_000): Promise<RenderResult> {
   const start = performance.now();

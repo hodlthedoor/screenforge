@@ -10,6 +10,16 @@ export const FORMAT_EXT: Record<string, string> = {
   'image/gif': 'gif',
 };
 
+/** Maps a user-facing format name to a content-type string. */
+export const FORMAT_CONTENT_TYPE: Record<string, string> = {
+  png: 'image/png',
+  jpeg: 'image/jpeg',
+  webp: 'image/webp',
+  avif: 'image/avif',
+  pdf: 'application/pdf',
+  gif: 'image/gif',
+};
+
 /** Maps a user-facing format name to a file extension. */
 export function getExtFromFormat(format: string): string {
   switch (format) {
