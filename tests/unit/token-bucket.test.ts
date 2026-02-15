@@ -304,6 +304,42 @@ describe('TokenBucketRateLimiter', () => {
     });
   });
 
+  describe('input validation', () => {
+    it('rejects zero burst capacity', async () => {
+      await expect(limiter.check('test-zero-burst', 0, 5)).rejects.toThrow(
+        'burstCapacity must be a positive number'
+      );
+    });
+
+    it('rejects negative burst capacity', async () => {
+      await expect(limiter.check('test-neg-burst', -10, 5)).rejects.toThrow(
+        'burstCapacity must be a positive number'
+      );
+    });
+
+    it('rejects negative refill rate', async () => {
+      await expect(limiter.check('test-neg-refill', 10, -5)).rejects.toThrow(
+        'refillRatePerMin must be non-negative'
+      );
+    });
+
+    it('allows zero refill rate (fixed capacity bucket)', async () => {
+      const burstCapacity = 3;
+      const refillRate = 0;
+
+      // Should allow burst
+      for (let i = 0; i < burstCapacity; i++) {
+        const result = await limiter.check('test-zero-refill', burstCapacity, refillRate);
+        expect(result.allowed).toBe(true);
+      }
+
+      // Should deny with no refill
+      const denied = await limiter.check('test-zero-refill', burstCapacity, refillRate);
+      expect(denied.allowed).toBe(false);
+      expect(denied.remaining).toBe(0);
+    });
+  });
+
   describe('graceful degradation', () => {
     it('allows requests when Redis is down', async () => {
       const brokenLimiter = new TokenBucketRateLimiter('redis://invalid-host:9999');

@@ -1,5 +1,6 @@
 import { Redis } from 'ioredis';
 import type { RateLimitResult } from './rate-limit-types.js';
+import { getLogger } from '../logging/index.js';
 
 /**
  * Token bucket rate limiter with Redis backend.
@@ -36,15 +37,19 @@ export class TokenBucketRateLimiter {
 
     -- Calculate tokens to add based on elapsed time
     local elapsed_ms = now_ms - last_refill_ms
-    local refill_rate_per_ms = refill_rate_per_min / 60000
-    local tokens_to_add = math.floor(elapsed_ms * refill_rate_per_ms)
+    local tokens_to_add = 0
+    local ms_per_token = 0
+
+    if refill_rate_per_min > 0 then
+      ms_per_token = 60000 / refill_rate_per_min
+      tokens_to_add = math.floor(elapsed_ms / ms_per_token)
+    end
 
     -- Refill tokens (capped at burst capacity)
     -- Only advance last_refill_ms by the time consumed by integer tokens,
     -- preserving fractional progress toward the next token
     if tokens_to_add > 0 then
       current_tokens = math.min(burst_capacity, current_tokens + tokens_to_add)
-      local ms_per_token = 60000 / refill_rate_per_min
       last_refill_ms = last_refill_ms + tokens_to_add * ms_per_token
     end
 
@@ -59,8 +64,15 @@ export class TokenBucketRateLimiter {
     end
 
     -- Calculate when next token will be available
-    local ms_per_token = 60000 / refill_rate_per_min
-    local next_token_at_ms = now_ms + ms_per_token
+    local next_token_at_ms
+    if ms_per_token > 0 then
+      -- Time until next integer token based on refill progress
+      local elapsed_since_refill = now_ms - last_refill_ms
+      next_token_at_ms = now_ms + (ms_per_token - elapsed_since_refill)
+    else
+      -- No refill: tokens never replenish
+      next_token_at_ms = now_ms + 60000
+    end
 
     -- Save updated bucket state
     redis.call('HMSET', key, 'tokens', current_tokens, 'last_refill', last_refill_ms)
@@ -86,6 +98,13 @@ export class TokenBucketRateLimiter {
     burstCapacity: number,
     refillRatePerMin: number
   ): Promise<RateLimitResult> {
+    if (burstCapacity <= 0) {
+      throw new Error('burstCapacity must be a positive number');
+    }
+    if (refillRatePerMin < 0) {
+      throw new Error('refillRatePerMin must be non-negative');
+    }
+
     const redisKey = `screenforge:tokenbucket:${keyId}`;
     const now = Date.now();
 
@@ -109,7 +128,11 @@ export class TokenBucketRateLimiter {
       };
     } catch (error) {
       // Graceful degradation: allow request if Redis is down
-      console.error('Token bucket rate limiter error:', error);
+      try {
+        getLogger('auth').error({ err: error }, 'Token bucket rate limiter error');
+      } catch {
+        // Logger not yet registered (e.g., during startup); fall back silently
+      }
       return {
         allowed: true,
         remaining: burstCapacity,
