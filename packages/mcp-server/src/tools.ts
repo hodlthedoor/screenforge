@@ -4,8 +4,12 @@ import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 
 import type {
+  AccessibilityOptions,
+  AccessibilityReport,
   CreateScheduleOptions,
   DiffOptions,
+  ExtractOptions,
+  ExtractResult,
   GifOptions,
   OgOptions,
   PdfOptions,
@@ -20,6 +24,8 @@ export interface ScreenForgeClientLike {
   og(url: string, options?: OgOptions): Promise<Buffer>;
   gif(options: GifOptions): Promise<Buffer>;
   diff(options: DiffOptions): Promise<Buffer>;
+  extract(options: ExtractOptions): Promise<ExtractResult>;
+  accessibility(url: string, options?: Omit<AccessibilityOptions, 'url'>): Promise<AccessibilityReport>;
   createSchedule(options: CreateScheduleOptions): Promise<Schedule>;
   listSchedules(): Promise<Schedule[]>;
   getSchedule(id: string): Promise<Schedule>;
@@ -82,7 +88,7 @@ export function createToolRegistry(options: ToolRegistryOptions) {
   const registerAll = (registrar: ToolRegistrar) => {
     registrar.registerTool(
       'screenshot',
-      'Capture a webpage screenshot.',
+      'Capture a static screenshot of a webpage URL.',
       {
         type: 'object',
         required: ['url'],
@@ -117,7 +123,7 @@ export function createToolRegistry(options: ToolRegistryOptions) {
 
     registrar.registerTool(
       'pdf',
-      'Generate a PDF from a webpage.',
+      'Render a webpage URL as a PDF document.',
       {
         type: 'object',
         required: ['url'],
@@ -148,7 +154,7 @@ export function createToolRegistry(options: ToolRegistryOptions) {
 
     registrar.registerTool(
       'og',
-      'Generate an Open Graph image.',
+      'Generate an Open Graph preview image for a webpage URL.',
       {
         type: 'object',
         required: ['url'],
@@ -168,7 +174,7 @@ export function createToolRegistry(options: ToolRegistryOptions) {
 
     registrar.registerTool(
       'gif',
-      'Record an animated GIF from a webpage.',
+      'Record an animated GIF from a webpage URL.',
       {
         type: 'object',
         required: ['url'],
@@ -202,7 +208,7 @@ export function createToolRegistry(options: ToolRegistryOptions) {
 
     registrar.registerTool(
       'diff',
-      'Generate a visual diff between two URLs.',
+      'Compare two webpage URLs and return a visual diff image.',
       {
         type: 'object',
         required: ['url_a', 'url_b'],
@@ -223,8 +229,92 @@ export function createToolRegistry(options: ToolRegistryOptions) {
     );
 
     registrar.registerTool(
+      'extract',
+      'Extract structured information from a webpage using a prompt, with optional schema constraints.',
+      {
+        type: 'object',
+        required: ['url', 'prompt'],
+        properties: {
+          url: { type: 'string', format: 'uri' },
+          prompt: { type: 'string' },
+          schema: { type: 'object', additionalProperties: true },
+          model: { type: 'string', enum: ['sonnet', 'haiku'] },
+          screenshot_options: {
+            type: 'object',
+            additionalProperties: true,
+            properties: {
+              viewport_width: { type: 'number' },
+              viewport_height: { type: 'number' },
+              format: { type: 'string', enum: ['png', 'jpeg', 'webp'] },
+              full_page: { type: 'boolean' },
+              delay_ms: { type: 'number' },
+            },
+          },
+        },
+      },
+      tool(async (args) => {
+        const url = requireString(args.url, 'url');
+        const prompt = requireString(args.prompt, 'prompt');
+        const schema = optionalObject(args.schema, 'schema');
+        const model = optionalEnum(args.model, ['sonnet', 'haiku'], 'model');
+        const screenshotOptions = optionalObject(args.screenshot_options, 'screenshot_options');
+
+        const result = await options.client.extract({
+          url,
+          prompt,
+          ...(schema ? { schema } : {}),
+          ...(model ? { model } : {}),
+          ...(screenshotOptions ? { screenshot_options: screenshotOptions } : {}),
+        });
+
+        return {
+          status: 'completed',
+          data: result.data,
+          extractionId: result.extractionId,
+          modelUsed: result.modelUsed,
+          tokensUsed: result.tokensUsed,
+          ...(typeof result.screenshotPath === 'string' ? { screenshotUrl: result.screenshotPath } : {}),
+        };
+      }),
+    );
+
+    registrar.registerTool(
+      'accessibility',
+      'Audit a webpage for accessibility violations against WCAG and return actionable issue details.',
+      {
+        type: 'object',
+        required: ['url'],
+        properties: {
+          url: { type: 'string', format: 'uri' },
+          standard: { type: 'string', enum: ['WCAG2A', 'WCAG2AA', 'WCAG2AAA'] },
+          include_screenshot: { type: 'boolean' },
+        },
+      },
+      tool(async (args) => {
+        const url = requireString(args.url, 'url');
+        const standard = optionalEnum(args.standard, ['WCAG2A', 'WCAG2AA', 'WCAG2AAA'], 'standard') ?? 'WCAG2AA';
+        const includeScreenshot = optionalBoolean(args.include_screenshot, 'include_screenshot');
+
+        const report = await options.client.accessibility(url, {
+          standard,
+          ...(includeScreenshot === undefined ? {} : { include_screenshot: includeScreenshot }),
+        });
+
+        return {
+          status: 'completed',
+          url: report.url,
+          standard: report.standard,
+          violations: report.violations,
+          passes: report.passesCount,
+          violationsCount: report.violationsCount,
+          ...(typeof report.screenshotPath === 'string' ? { screenshotUrl: report.screenshotPath } : {}),
+        };
+      }),
+    );
+
+    registrar.registerTool(
       'create_schedule',
-      'Create a recurring schedule for renders.',
+      'Create a recurring schedule that runs ScreenForge renders automatically.',
       {
         type: 'object',
         required: ['opts'],
@@ -241,7 +331,7 @@ export function createToolRegistry(options: ToolRegistryOptions) {
 
     registrar.registerTool(
       'list_schedules',
-      'List schedules for the API key.',
+      'List all render schedules available to this API key.',
       { type: 'object', properties: {} },
       tool(async () => {
         const schedules = await options.client.listSchedules();
@@ -251,7 +341,7 @@ export function createToolRegistry(options: ToolRegistryOptions) {
 
     registrar.registerTool(
       'get_schedule',
-      'Get a schedule by ID.',
+      'Fetch one render schedule by its ID.',
       {
         type: 'object',
         required: ['id'],
@@ -268,7 +358,7 @@ export function createToolRegistry(options: ToolRegistryOptions) {
 
     registrar.registerTool(
       'update_schedule',
-      'Update a schedule by ID.',
+      'Update an existing render schedule by ID.',
       {
         type: 'object',
         required: ['id', 'opts'],
@@ -287,7 +377,7 @@ export function createToolRegistry(options: ToolRegistryOptions) {
 
     registrar.registerTool(
       'delete_schedule',
-      'Delete a schedule by ID.',
+      'Delete a render schedule by ID.',
       {
         type: 'object',
         required: ['id'],
@@ -304,7 +394,7 @@ export function createToolRegistry(options: ToolRegistryOptions) {
 
     registrar.registerTool(
       'poll_job',
-      'Check async render job status.',
+      'Check async render job status and fetch the artifact when it is complete.',
       {
         type: 'object',
         required: ['id'],
@@ -367,6 +457,36 @@ function asObject(value: unknown): Record<string, unknown> {
     return value as Record<string, unknown>;
   }
   return {};
+}
+
+function optionalObject(value: unknown, key: string): Record<string, unknown> | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  throw new Error(`${key} must be an object`);
+}
+
+function optionalBoolean(value: unknown, key: string): boolean | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value !== 'boolean') {
+    throw new Error(`${key} must be a boolean`);
+  }
+  return value;
+}
+
+function optionalEnum<T extends string>(value: unknown, values: readonly T[], key: string): T | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value !== 'string' || !values.includes(value as T)) {
+    throw new Error(`${key} must be one of: ${values.join(', ')}`);
+  }
+  return value as T;
 }
 
 function formatToImageContentType(format: string | undefined): string {

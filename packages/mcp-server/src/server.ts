@@ -17,7 +17,7 @@ export function createScreenforgeMcpServer(config: McpServerConfig): McpServer {
 
   const server = new McpServer({
     name: '@screenforge/mcp-server',
-    version: '0.1.0',
+    version: '0.1.1',
   });
 
   const registry = createToolRegistry({

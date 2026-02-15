@@ -11,6 +11,8 @@ interface MockClient {
   og: ReturnType<typeof vi.fn>;
   gif: ReturnType<typeof vi.fn>;
   diff: ReturnType<typeof vi.fn>;
+  extract: ReturnType<typeof vi.fn>;
+  accessibility: ReturnType<typeof vi.fn>;
   createSchedule: ReturnType<typeof vi.fn>;
   listSchedules: ReturnType<typeof vi.fn>;
   getSchedule: ReturnType<typeof vi.fn>;
@@ -26,6 +28,8 @@ function makeClient(): MockClient {
     og: vi.fn(),
     gif: vi.fn(),
     diff: vi.fn(),
+    extract: vi.fn(),
+    accessibility: vi.fn(),
     createSchedule: vi.fn(),
     listSchedules: vi.fn(),
     getSchedule: vi.fn(),
@@ -69,9 +73,11 @@ describe('createToolRegistry', () => {
     registry.registerAll(registrar);
 
     expect([...registrar.tools.keys()].sort()).toEqual([
+      'accessibility',
       'create_schedule',
       'delete_schedule',
       'diff',
+      'extract',
       'get_schedule',
       'gif',
       'list_schedules',
@@ -210,5 +216,107 @@ describe('createToolRegistry', () => {
 
     expect(result.status).toBe('error');
     expect(result.error).toBe('boom');
+  });
+
+  it('extract validates required args and maps SDK response', async () => {
+    client.extract.mockResolvedValue({
+      extractionId: 'ext_123',
+      data: { title: 'Example' },
+      modelUsed: 'sonnet',
+      tokensUsed: 128,
+      screenshotPath: 'https://cdn.example.com/extract.png',
+      durationMs: 321,
+    });
+
+    const registrar = new FakeRegistrar();
+    const registry = createToolRegistry({ client: client as any, inlineDataLimitBytes: 1024, artifactDir: tempDir, apiKey: 'k' });
+    registry.registerAll(registrar);
+
+    const missingPrompt = await registrar.tools.get('extract')!.handler({
+      url: 'https://example.com',
+    }) as Record<string, unknown>;
+    expect(missingPrompt.status).toBe('error');
+    expect(missingPrompt.error).toBe('prompt is required');
+
+    const result = await registrar.tools.get('extract')!.handler({
+      url: 'https://example.com',
+      prompt: 'Extract key metadata',
+      schema: { type: 'object' },
+      model: 'sonnet',
+      screenshot_options: { viewport_width: 1200, viewport_height: 800, format: 'png' },
+    }) as Record<string, unknown>;
+
+    expect(client.extract).toHaveBeenCalledWith({
+      url: 'https://example.com',
+      prompt: 'Extract key metadata',
+      schema: { type: 'object' },
+      model: 'sonnet',
+      screenshot_options: { viewport_width: 1200, viewport_height: 800, format: 'png' },
+    });
+    expect(result).toMatchObject({
+      status: 'completed',
+      extractionId: 'ext_123',
+      data: { title: 'Example' },
+      modelUsed: 'sonnet',
+      tokensUsed: 128,
+      screenshotUrl: 'https://cdn.example.com/extract.png',
+    });
+  });
+
+  it('accessibility defaults standard, validates args, and maps SDK response', async () => {
+    client.accessibility.mockResolvedValue({
+      auditId: 'audit_123',
+      url: 'https://example.com',
+      standard: 'WCAG2AA',
+      violations: [{ id: 'color-contrast', impact: 'serious' }],
+      passesCount: 17,
+      violationsCount: 1,
+      incompleteCount: 0,
+      durationMs: 222,
+      timestamp: '2026-02-14T00:00:00.000Z',
+      screenshotPath: 'https://cdn.example.com/accessibility.png',
+    });
+
+    const registrar = new FakeRegistrar();
+    const registry = createToolRegistry({ client: client as any, inlineDataLimitBytes: 1024, artifactDir: tempDir, apiKey: 'k' });
+    registry.registerAll(registrar);
+
+    const missingUrl = await registrar.tools.get('accessibility')!.handler({}) as Record<string, unknown>;
+    expect(missingUrl.status).toBe('error');
+    expect(missingUrl.error).toBe('url is required');
+
+    const result = await registrar.tools.get('accessibility')!.handler({
+      url: 'https://example.com',
+      include_screenshot: true,
+    }) as Record<string, unknown>;
+
+    expect(client.accessibility).toHaveBeenCalledWith('https://example.com', {
+      standard: 'WCAG2AA',
+      include_screenshot: true,
+    });
+    expect(result).toMatchObject({
+      status: 'completed',
+      url: 'https://example.com',
+      standard: 'WCAG2AA',
+      violations: [{ id: 'color-contrast', impact: 'serious' }],
+      passes: 17,
+      violationsCount: 1,
+      screenshotUrl: 'https://cdn.example.com/accessibility.png',
+    });
+  });
+
+  it('returns accessibility SDK errors through structured error response', async () => {
+    client.accessibility.mockRejectedValue(new Error('a11y failed'));
+
+    const registrar = new FakeRegistrar();
+    const registry = createToolRegistry({ client: client as any, inlineDataLimitBytes: 1024, artifactDir: tempDir, apiKey: 'k' });
+    registry.registerAll(registrar);
+
+    const result = await registrar.tools.get('accessibility')!.handler({
+      url: 'https://example.com',
+    }) as Record<string, unknown>;
+
+    expect(result.status).toBe('error');
+    expect(result.error).toBe('a11y failed');
   });
 });
