@@ -357,8 +357,8 @@ describe('TokenBucketRateLimiter', () => {
       const burstCapacity = 10;
       const refillRate = 5;
 
-      // Mock Redis eval to fail
-      const redis = (limiter as any).redis;
+      // Mock Redis eval to fail — access private redis for testing
+      const redis = (limiter as unknown as Record<string, Record<string, unknown>>).redis;
       const originalEval = redis.eval;
       redis.eval = vi.fn().mockRejectedValue(new Error('Redis connection lost'));
 

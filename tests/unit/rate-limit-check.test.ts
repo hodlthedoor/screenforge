@@ -3,6 +3,7 @@ import { checkRateLimit } from '../../src/auth/rate-limit-check.js';
 import type { SlidingWindowRateLimiter } from '../../src/auth/rate-limiter.js';
 import type { TokenBucketRateLimiter } from '../../src/auth/token-bucket.js';
 import type { RateLimitResult } from '../../src/auth/rate-limit-types.js';
+import type { Config } from '../../src/config/index.js';
 
 // Mock config module
 vi.mock('../../src/config/index.js', () => ({
@@ -41,7 +42,7 @@ describe('checkRateLimit', () => {
 
   describe('when TOKEN_BUCKET_ENABLED is false (sliding window)', () => {
     beforeEach(() => {
-      mockedGetConfig.mockReturnValue({ TOKEN_BUCKET_ENABLED: false } as any);
+      mockedGetConfig.mockReturnValue({ TOKEN_BUCKET_ENABLED: false } as Config);
     });
 
     it('delegates to sliding window limiter with key and rate limit', async () => {
@@ -51,7 +52,7 @@ describe('checkRateLimit', () => {
       const result = await checkRateLimit(limiter, 'key-123', 'free', 10);
 
       expect(result).toEqual(expected);
-      expect((limiter as any).check).toHaveBeenCalledWith('key-123', 10);
+      expect(vi.mocked(limiter.check)).toHaveBeenCalledWith('key-123', 10);
     });
 
     it('passes through denied results from sliding window', async () => {
@@ -67,7 +68,7 @@ describe('checkRateLimit', () => {
 
   describe('when TOKEN_BUCKET_ENABLED is true', () => {
     beforeEach(() => {
-      mockedGetConfig.mockReturnValue({ TOKEN_BUCKET_ENABLED: true } as any);
+      mockedGetConfig.mockReturnValue({ TOKEN_BUCKET_ENABLED: true } as Config);
     });
 
     it('delegates to token bucket limiter with plan burst/refill params', async () => {
@@ -84,7 +85,7 @@ describe('checkRateLimit', () => {
       const result = await checkRateLimit(limiter, 'key-789', 'starter', 50);
 
       expect(result).toEqual(expected);
-      expect((limiter as any).check).toHaveBeenCalledWith('key-789', 30, 60);
+      expect(vi.mocked(limiter.check)).toHaveBeenCalledWith('key-789', 30, 60);
       expect(mockedGetPlanByTier).toHaveBeenCalledWith('starter');
     });
 

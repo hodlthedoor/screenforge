@@ -1,7 +1,6 @@
 import type { FastifyRequest } from 'fastify';
 
-const AB_VARIANTS = ['A', 'B'] as const;
-export type AbVariant = (typeof AB_VARIANTS)[number];
+export type AbVariant = 'A' | 'B';
 
 /** Parse the ab_variant cookie from a request, returning 'A' | 'B' | undefined */
 export function getAbVariantFromCookie(req: FastifyRequest): AbVariant | undefined {
