@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { buildServer } from '../../src/index.js';
+import { APP_VERSION } from '../../src/utils/version.js';
 import type { FastifyInstance } from 'fastify';
 
 describe('smoke tests', () => {
@@ -34,7 +35,7 @@ describe('smoke tests', () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.status).toBe('ok');
-    expect(body.version).toBe('1.4.0');
+    expect(body.version).toBe(APP_VERSION);
     expect(body.uptime).toBeTypeOf('number');
     expect(body.uptime).toBeGreaterThanOrEqual(0);
     expect(body.browserPool).toMatchObject({

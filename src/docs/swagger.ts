@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
+import { APP_VERSION } from '../utils/version.js';
 
 export async function registerDocs(app: FastifyInstance) {
   await app.register(swagger, {
@@ -8,7 +9,7 @@ export async function registerDocs(app: FastifyInstance) {
       info: {
         title: 'ScreenForge API',
         description: 'Self-hostable screenshot & render API — open-source alternative to ScreenshotOne',
-        version: '1.4.0',
+        version: APP_VERSION,
       },
       servers: [{ url: '/' }],
       components: {

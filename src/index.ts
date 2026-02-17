@@ -22,6 +22,7 @@ import { signedRoutes } from './routes/signed.js';
 import { devicesRoutes } from './routes/devices.js';
 import { requestIdHook } from './security/request-id.js';
 import { getExtFromFormat, getFormatFromContentType, FORMAT_CONTENT_TYPE } from './utils/format.js';
+import { APP_VERSION } from './utils/version.js';
 import { requestTimeoutHook, requestTimeoutCleanupHook } from './renderer/timeout.js';
 import { ActionError } from './renderer/actions.js';
 import { ContentValidationError } from './renderer/content-validation.js';
@@ -206,7 +207,7 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
 
     return {
       status: 'ok',
-      version: '1.4.0',
+      version: APP_VERSION,
       uptime: Math.round((Date.now() - startTime) / 1000),
       browserPool: pool.stats(),
       queue: queueMetrics,

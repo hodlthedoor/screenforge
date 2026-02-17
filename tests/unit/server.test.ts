@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { buildServer } from '../../src/index.js';
+import { APP_VERSION } from '../../src/utils/version.js';
 import type { FastifyInstance } from 'fastify';
 
 describe('server', () => {
@@ -32,7 +33,7 @@ describe('server', () => {
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
     expect(body.status).toBe('ok');
-    expect(body.version).toBe('1.4.0');
+    expect(body.version).toBe(APP_VERSION);
     expect(body.uptime).toBeTypeOf('number');
     expect(body.browserPool).toBeDefined();
     expect(body.browserPool.poolSize).toBe(3);

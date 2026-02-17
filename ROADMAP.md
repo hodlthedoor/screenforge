@@ -86,7 +86,6 @@
 
 ### Later
 - Mobile device emulation (iOS Safari, Android Chrome)
-- Screenshot comparison/diff tools
 - Screenshot annotation API
 - Multi-page PDF generation from URL lists
 - Scheduled renders with cron-like syntax

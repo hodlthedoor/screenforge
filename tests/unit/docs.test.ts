@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { buildServer } from '../../src/index.js';
+import { APP_VERSION } from '../../src/utils/version.js';
 import type { FastifyInstance } from 'fastify';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -30,7 +31,7 @@ describe('API documentation', () => {
     const spec = JSON.parse(res.body);
     expect(spec.openapi).toMatch(/^3\./);
     expect(spec.info.title).toBe('ScreenForge API');
-    expect(spec.info.version).toBe('1.4.0');
+    expect(spec.info.version).toBe(APP_VERSION);
   });
 
   describe('swagger tags', () => {
