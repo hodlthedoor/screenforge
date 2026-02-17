@@ -2,10 +2,10 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { Redis } from 'ioredis';
 import { getConfig } from '../config/index.js';
 import { getPool } from '../db/index.js';
+import { getAbVariantFromCookie, type AbVariant } from '../utils/cookies.js';
 import { escapeHtml } from '../utils/html.js';
-
-const AB_VARIANTS = ['A', 'B'] as const;
-type AbVariant = (typeof AB_VARIANTS)[number];
+import { getLogger } from '../logging/index.js';
+import { APP_VERSION } from '../utils/version.js';
 
 const AB_CTA: Record<AbVariant, { text: string; color: string }> = {
   A: { text: 'Get Started Free', color: 'btn-primary' },
@@ -13,22 +13,15 @@ const AB_CTA: Record<AbVariant, { text: string; color: string }> = {
 };
 
 function getOrAssignVariant(req: FastifyRequest): AbVariant {
-  const cookie = (req.headers.cookie ?? '')
-    .split(';')
-    .map((c) => c.trim())
-    .find((c) => c.startsWith('ab_variant='));
-  const existing = cookie?.split('=')?.[1]?.trim();
-  if (existing === 'A' || existing === 'B') return existing;
-  // Assign randomly 50/50
-  return Math.random() < 0.5 ? 'A' : 'B';
+  return getAbVariantFromCookie(req) ?? (Math.random() < 0.5 ? 'A' : 'B');
 }
 
 export async function trackAbEvent(variant: string, eventType: 'view' | 'signup'): Promise<void> {
   try {
     const pool = getPool();
     await pool.query('INSERT INTO ab_test_events (variant, event_type) VALUES ($1, $2)', [variant, eventType]);
-  } catch {
-    // Non-critical — never block the response
+  } catch (err) {
+    try { getLogger('landing').warn({ err, variant, eventType }, 'Failed to track A/B event'); } catch { /* logger not registered yet */ }
   }
 }
 
@@ -664,7 +657,7 @@ ${faqItems.map((item) => `        <div class="faq-item">
   </main>
   <footer>
     <div class="container footer-wrap">
-      <p>ScreenForge v1.0.0 — Open Source Screenshot &amp; Render API</p>
+      <p>ScreenForge v${escapeHtml(APP_VERSION)} — Open Source Screenshot &amp; Render API</p>
       <div class="footer-links">
         <a href="/terms">Terms</a>
         <a href="/privacy">Privacy</a>

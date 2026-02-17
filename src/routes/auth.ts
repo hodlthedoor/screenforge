@@ -17,6 +17,7 @@ import { getPool } from '../db/index.js';
 import { getConfig } from '../config/index.js';
 import { sendEmail, getSmtpConfig } from '../email/index.js';
 import { trackAbEvent } from './landing.js';
+import { getAbVariantFromCookie } from '../utils/cookies.js';
 import { renderWelcomeEmail, renderEmailVerification, renderPasswordReset } from '../email/templates.js';
 
 interface AuthBody {
@@ -174,12 +175,8 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       void sendEmail({ to: user.email, ...verifyEmail }, smtp);
 
       // Track A/B test conversion if user came from landing page variant
-      const abCookie = (req.headers.cookie ?? '')
-        .split(';')
-        .map((c) => c.trim())
-        .find((c) => c.startsWith('ab_variant='));
-      const abVariant = abCookie?.split('=')?.[1]?.trim();
-      if (abVariant === 'A' || abVariant === 'B') {
+      const abVariant = getAbVariantFromCookie(req);
+      if (abVariant) {
         void trackAbEvent(abVariant, 'signup');
       }
 

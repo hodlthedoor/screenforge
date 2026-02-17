@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { buildServer } from '../../src/index.js';
+import { APP_VERSION } from '../../src/utils/version.js';
 import type { FastifyInstance } from 'fastify';
 
 describe('landing page', () => {
@@ -98,6 +99,11 @@ describe('landing page', () => {
     const body = res.body;
     expect(body).toContain('href="/terms"');
     expect(body).toContain('href="/privacy"');
+  });
+
+  it('footer shows dynamic version from package.json', async () => {
+    const res = await app.inject({ method: 'GET', url: '/' });
+    expect(res.body).toContain(`ScreenForge v${APP_VERSION}`);
   });
 
   it('serves landing page on /pricing alias', async () => {

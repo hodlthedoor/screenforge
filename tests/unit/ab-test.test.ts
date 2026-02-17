@@ -196,5 +196,27 @@ describe('A/B test infrastructure', () => {
         expect(v).toHaveProperty('conversion_rate');
       }
     });
+
+    it('ab-stats supports since/until date filters', async () => {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/v1/admin/ab-stats?since=2020-01-01&until=2099-12-31',
+        headers: { 'x-api-key': ADMIN_KEY },
+      });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.variants).toBeInstanceOf(Array);
+    });
+
+    it('ab-stats returns empty when date range excludes all data', async () => {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/v1/admin/ab-stats?since=1990-01-01&until=1990-01-02',
+        headers: { 'x-api-key': ADMIN_KEY },
+      });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.variants).toEqual([]);
+    });
   });
 });

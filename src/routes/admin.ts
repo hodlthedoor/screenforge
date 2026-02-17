@@ -58,16 +58,36 @@ export async function adminRoutes(app: FastifyInstance) {
     return reply.send({ keys });
   });
 
-  app.get('/v1/admin/ab-stats', {
+  app.get<{ Querystring: { since?: string; until?: string } }>('/v1/admin/ab-stats', {
     schema: {
       tags: ['admin'],
       summary: 'A/B test conversion stats',
-      description: 'Returns view and signup counts per variant with conversion rates.',
+      description: 'Returns view and signup counts per variant with conversion rates. Optional since/until ISO date filters.',
       security: [{ apiKey: [] }],
+      querystring: {
+        type: 'object',
+        properties: {
+          since: { type: 'string', description: 'ISO date lower bound (inclusive)' },
+          until: { type: 'string', description: 'ISO date upper bound (exclusive)' },
+        },
+      },
     },
     preHandler: [adminAuthMiddleware],
-  }, async (_req, reply) => {
+  }, async (req, reply) => {
     const pool = getPool();
+    const conditions: string[] = [];
+    const params: string[] = [];
+
+    if (req.query.since) {
+      params.push(req.query.since);
+      conditions.push(`created_at >= $${params.length}::timestamptz`);
+    }
+    if (req.query.until) {
+      params.push(req.query.until);
+      conditions.push(`created_at < $${params.length}::timestamptz`);
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
     const result = await pool.query<{
       variant: string;
       views: number;
@@ -78,9 +98,10 @@ export async function adminRoutes(app: FastifyInstance) {
         COUNT(*) FILTER (WHERE event_type = 'view')::int AS views,
         COUNT(*) FILTER (WHERE event_type = 'signup')::int AS signups
       FROM ab_test_events
+      ${whereClause}
       GROUP BY variant
       ORDER BY variant
-    `);
+    `, params);
 
     const variants = result.rows.map((row) => ({
       variant: row.variant,
