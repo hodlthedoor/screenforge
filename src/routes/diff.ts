@@ -347,15 +347,19 @@ export async function diffRoutes(
     const storage = getStorageBackend();
     const downloadUrl = storage.getUrl(baseline.storagePath);
 
-    return reply.send({
+    const response: Record<string, unknown> = {
       id: baseline.id,
       name: baseline.name,
       width: baseline.width,
       height: baseline.height,
-      storage_path: baseline.storagePath,
-      download_url: downloadUrl,
       created_at: baseline.createdAt.toISOString(),
-    });
+    };
+
+    if (downloadUrl) {
+      response.download_url = downloadUrl;
+    }
+
+    return reply.send(response);
   });
 
   app.delete('/v1/diff/baseline/:name', {
@@ -446,6 +450,13 @@ export async function diffRoutes(
     const { baseline_name, url, threshold, include_diff_image, anti_aliasing_detection, output_format } = parsed.data;
     const apiKeyId = req.apiKey!.id;
 
+    // Fetch baseline first — avoid charging credits for a 404
+    const baseline = await getBaseline(apiKeyId, baseline_name);
+    if (!baseline) {
+      sendError(reply, req, 'BASELINE_NOT_FOUND');
+      return;
+    }
+
     // Rate limiting — counts as 2 renders
     if (config.REQUIRE_AUTH && req.apiKey && rateLimiter) {
       const result = await checkRateLimit(rateLimiter, req.apiKey.id, req.apiKey.tier, req.apiKey.rateLimit);
@@ -468,13 +479,6 @@ export async function diffRoutes(
 
       // Increment usage by 2 (screenshot + baseline comparison)
       await incrementUsage(req.apiKey.id, 2);
-    }
-
-    // Fetch baseline
-    const baseline = await getBaseline(apiKeyId, baseline_name);
-    if (!baseline) {
-      sendError(reply, req, 'BASELINE_NOT_FOUND');
-      return;
     }
 
     // Validate URL

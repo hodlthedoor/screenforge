@@ -152,7 +152,8 @@ describe('diff baselines', () => {
       const body = JSON.parse(res.body);
       expect(body.name).toBe('get-test');
       expect(body.width).toBe(100);
-      expect(body.storage_path).toContain('baselines/');
+      expect(body.storage_path).toBeUndefined();
+      expect(body.created_at).toBeDefined();
     });
 
     it('returns 404 for non-existent baseline', async () => {
