@@ -39,6 +39,13 @@
 - ✅ Ad blocking (40+ ad/tracker domains)
 - ✅ SDK updates with Phase 2 rendering options
 
+### v1.4.0 (Feb 2026) — Integrations & Extensibility
+- ✅ CLI tool (`screenforge` binary) for terminal-based screenshots, PDFs, and health checks
+- ✅ Custom font loading via CDN URLs (Google Fonts, jsDelivr, unpkg) with local caching
+- ✅ Postman collection and OpenAPI tooling for API exploration and SDK generation
+- ✅ Visual diff API — pixel-by-pixel screenshot comparison with diff image and mismatch stats
+- ✅ Visual diff baselines — store reference screenshots and detect regressions with webhook notifications
+
 ---
 
 ## Future Plans
@@ -59,23 +66,6 @@
   - Multi-instance browser pool coordination
   - Storage backends (S3, R2, GCS)
   - Database read replicas
-
-### v1.4.0 — Integrations & Extensibility
-- **Third-party integrations**
-  - Zapier integration
-  - Make.com connector
-  - n8n nodes
-  - Pipedream actions
-- **Developer tools**
-  - CLI for local testing
-  - Postman collection
-  - OpenAPI SDK generation
-  - Webhook signature validation helpers
-- **API extensions**
-  - Custom fonts support
-  - Video recording (screen capture to MP4)
-  - HTML to Markdown conversion
-  - Accessibility audit reports
 
 ### v1.5.0 — Enterprise & Security
 - **Authentication**

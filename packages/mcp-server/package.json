@@ -1,6 +1,6 @@
 {
   "name": "@screenforge/mcp-server",
-  "version": "0.1.1",
+  "version": "1.4.0",
   "description": "MCP server for ScreenForge API",
   "type": "module",
   "main": "./dist/index.cjs",

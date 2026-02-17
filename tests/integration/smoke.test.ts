@@ -34,7 +34,7 @@ describe('smoke tests', () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.status).toBe('ok');
-    expect(body.version).toBe('1.0.0');
+    expect(body.version).toBe('1.4.0');
     expect(body.uptime).toBeTypeOf('number');
     expect(body.uptime).toBeGreaterThanOrEqual(0);
     expect(body.browserPool).toMatchObject({

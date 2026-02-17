@@ -2,6 +2,22 @@
 
 All notable changes to ScreenForge are documented here.
 
+## [1.4.0] - 2026-02-17
+
+### Added
+
+- **CLI tool** — `screenforge` command-line interface for taking screenshots, generating PDFs, OG cards, and running health checks directly from the terminal (supports all rendering options, output formats, and API key configuration)
+- **Custom font loading** — render pages with custom fonts via `custom_fonts` array; supports Google Fonts, jsDelivr, and unpkg CDNs with URL allowlisting, local disk caching (7-day TTL), and configurable timeout
+- **Postman collection** — ready-to-import `docs/postman-collection.json` with all API endpoints, pre-configured auth, and example request bodies; companion `postman-environment.json` for environment variables
+- **OpenAPI tooling** — `scripts/generate-openapi.ts` and `scripts/generate-postman.ts` scripts to regenerate spec and collection from live server; `scripts/generate-sdk.ts` for SDK type generation
+- **Visual diff API** — `POST /v1/diff` endpoint for pixel-by-pixel screenshot comparison; returns diff image, mismatch percentage, and pixel counts; supports URL pairs, job ID pairs, or direct image upload
+- **Visual diff baselines** — `POST /v1/diff/baseline` to store reference screenshots; `GET /v1/diff/baseline` to list and retrieve; `DELETE /v1/diff/baseline/:id` to remove; automatic regression detection with configurable threshold and webhook notifications
+
+### Changed
+
+- Bumped version to 1.4.0
+- Updated OpenAPI spec to 1.4.0
+
 ## [1.2.0] - 2026-02-14
 
 ### Added
@@ -108,6 +124,7 @@ All notable changes to ScreenForge are documented here.
 - Health check endpoints
 - OpenAPI/Swagger documentation
 
+[1.4.0]: https://github.com/hodlthedoor/screenforge/compare/v1.2.0...v1.4.0
 [1.2.0]: https://github.com/hodlthedoor/screenforge/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/hodlthedoor/screenforge/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/hodlthedoor/screenforge/releases/tag/v1.0.0

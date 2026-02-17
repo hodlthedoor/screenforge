@@ -8,7 +8,7 @@ export async function registerDocs(app: FastifyInstance) {
       info: {
         title: 'ScreenForge API',
         description: 'Self-hostable screenshot & render API — open-source alternative to ScreenshotOne',
-        version: '1.0.0',
+        version: '1.4.0',
       },
       servers: [{ url: '/' }],
       components: {

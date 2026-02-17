@@ -30,7 +30,7 @@ describe('API documentation', () => {
     const spec = JSON.parse(res.body);
     expect(spec.openapi).toMatch(/^3\./);
     expect(spec.info.title).toBe('ScreenForge API');
-    expect(spec.info.version).toBe('1.0.0');
+    expect(spec.info.version).toBe('1.4.0');
   });
 
   describe('swagger tags', () => {

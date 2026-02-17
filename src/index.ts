@@ -206,7 +206,7 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
 
     return {
       status: 'ok',
-      version: '1.0.0',
+      version: '1.4.0',
       uptime: Math.round((Date.now() - startTime) / 1000),
       browserPool: pool.stats(),
       queue: queueMetrics,
