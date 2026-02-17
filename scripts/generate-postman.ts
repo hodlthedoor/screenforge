@@ -100,8 +100,9 @@ async function main() {
         console.log(`Wrote ${envPath}`);
 
         const info = patched.info as Record<string, unknown> | undefined;
-        const itemCount = (patched.item as unknown[])?.length ?? 0;
-        console.log(`Postman collection: "${info?.name}", ${itemCount} top-level folders`);
+        const items = (patched.item as Array<{ item?: unknown[] }>) ?? [];
+        const folderCount = items.filter((i) => Array.isArray(i.item)).length;
+        console.log(`Postman collection: "${info?.name}", ${folderCount} tag folders, ${items.length} top-level items`);
         resolve();
       },
     );

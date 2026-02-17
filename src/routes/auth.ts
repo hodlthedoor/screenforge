@@ -113,19 +113,19 @@ function verifyCsrf(req: FastifyRequest): boolean {
 }
 
 export async function authRoutes(app: FastifyInstance): Promise<void> {
-  app.get('/login', async (req, reply) => {
+  app.get('/login', { schema: { tags: ['auth'] } }, async (req, reply) => {
     const token = ensureCsrfToken(req);
     await req.session.save();
     return reply.type('text/html').send(loginHtml(token));
   });
 
-  app.get('/register', async (req, reply) => {
+  app.get('/register', { schema: { tags: ['auth'] } }, async (req, reply) => {
     const token = ensureCsrfToken(req);
     await req.session.save();
     return reply.type('text/html').send(registerHtml(token));
   });
 
-  app.post('/register', async (req: FastifyRequest<{ Body: AuthBody }>, reply: FastifyReply) => {
+  app.post('/register', { schema: { tags: ['auth'] } }, async (req: FastifyRequest<{ Body: AuthBody }>, reply: FastifyReply) => {
     const { email, password } = req.body ?? {};
 
     if (!verifyCsrf(req)) {
@@ -184,7 +184,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.post('/login', async (req: FastifyRequest<{ Body: AuthBody }>, reply: FastifyReply) => {
+  app.post('/login', { schema: { tags: ['auth'] } }, async (req: FastifyRequest<{ Body: AuthBody }>, reply: FastifyReply) => {
     const { email, password } = req.body ?? {};
 
     if (!verifyCsrf(req)) {
@@ -213,13 +213,13 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     return reply.redirect('/dashboard');
   });
 
-  app.post('/logout', async (req, reply) => {
+  app.post('/logout', { schema: { tags: ['auth'] } }, async (req, reply) => {
     req.session.destroy();
     return reply.redirect('/');
   });
 
   // Change password (authenticated route)
-  app.post('/auth/change-password', async (req: FastifyRequest<{ Body: { currentPassword: string; newPassword: string; _csrf: string } }>, reply: FastifyReply) => {
+  app.post('/auth/change-password', { schema: { tags: ['auth'] } }, async (req: FastifyRequest<{ Body: { currentPassword: string; newPassword: string; _csrf: string } }>, reply: FastifyReply) => {
     const userId = req.session.userId;
     if (!userId) {
       return reply.status(401).send('Not authenticated');
@@ -255,7 +255,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // Forgot password - request reset token
-  app.get('/auth/forgot-password', async (req, reply) => {
+  app.get('/auth/forgot-password', { schema: { tags: ['auth'] } }, async (req, reply) => {
     const token = ensureCsrfToken(req);
     await req.session.save();
 
@@ -291,7 +291,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     return reply.type('text/html').send(html);
   });
 
-  app.post('/auth/forgot-password', async (req: FastifyRequest<{ Body: { email: string; _csrf: string } }>, reply: FastifyReply) => {
+  app.post('/auth/forgot-password', { schema: { tags: ['auth'] } }, async (req: FastifyRequest<{ Body: { email: string; _csrf: string } }>, reply: FastifyReply) => {
     if (!verifyCsrf(req)) {
       return reply.status(403).send('Invalid CSRF token');
     }
@@ -338,7 +338,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // Reset password - validate token and show form
-  app.get('/auth/reset-password/:token', async (req: FastifyRequest<{ Params: { token: string } }>, reply: FastifyReply) => {
+  app.get('/auth/reset-password/:token', { schema: { tags: ['auth'] } }, async (req: FastifyRequest<{ Params: { token: string } }>, reply: FastifyReply) => {
     const { token } = req.params;
     const user = await getUserByResetToken(token);
 
@@ -385,7 +385,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // Reset password - submit new password
-  app.post('/auth/reset-password/:token', async (req: FastifyRequest<{ Params: { token: string }; Body: { newPassword: string; _csrf: string } }>, reply: FastifyReply) => {
+  app.post('/auth/reset-password/:token', { schema: { tags: ['auth'] } }, async (req: FastifyRequest<{ Params: { token: string }; Body: { newPassword: string; _csrf: string } }>, reply: FastifyReply) => {
     const { token } = req.params;
     const { newPassword } = req.body ?? {};
 
@@ -458,6 +458,6 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     return reply.type('text/html').send(html);
   }
 
-  app.get('/auth/verify-email/:token', handleEmailVerification);
-  app.post('/auth/verify-email/:token', handleEmailVerification);
+  app.get('/auth/verify-email/:token', { schema: { tags: ['auth'] } }, handleEmailVerification);
+  app.post('/auth/verify-email/:token', { schema: { tags: ['auth'] } }, handleEmailVerification);
 }
