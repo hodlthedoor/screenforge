@@ -85,8 +85,8 @@ The API is available at `http://localhost:3100`, Swagger docs at `http://localho
 | `GET` | `/v1/analytics` | API key | Render analytics & history |
 | `POST` | `/v1/diff` | API key | Visual diff — compare two screenshots |
 | `POST` | `/v1/diff/baseline` | API key | Store a baseline screenshot |
-| `GET` | `/v1/diff/baseline` | API key | List baselines |
-| `DELETE` | `/v1/diff/baseline/:id` | API key | Delete a baseline |
+| `GET` | `/v1/diff/baselines` | API key | List baselines |
+| `DELETE` | `/v1/diff/baseline/:name` | API key | Delete a baseline |
 | `GET` | `/v1/errors` | None | Error code reference |
 | `GET` | `/health` | None | Simple health check |
 | `GET` | `/docs` | None | Swagger UI |
@@ -219,7 +219,7 @@ curl -X POST http://localhost:3100/v1/diff/baseline \
 # Returns: { "id": "...", "name": "Homepage v1.4.0", "url": "..." }
 
 # List baselines
-curl http://localhost:3100/v1/diff/baseline \
+curl http://localhost:3100/v1/diff/baselines \
   -H "Authorization: Bearer sf_live_..."
 ```
 
