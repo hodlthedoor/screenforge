@@ -1,4 +1,6 @@
 import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
+import sharp from 'sharp';
 import { diffOptionsSchema, screenshotOptionsSchema, isPrivateUrl } from '../renderer/schemas.js';
 import type { ScreenshotOptions } from '../renderer/schemas.js';
 import { compareImages } from '../renderer/diff.js';
@@ -6,7 +8,7 @@ import { takeScreenshot } from '../renderer/screenshot.js';
 import type { BrowserPool } from '../renderer/browser-pool.js';
 import { getConfig } from '../config/index.js';
 import { authMiddleware } from '../auth/middleware.js';
-import { incrementUsage, getUsageStats } from '../db/api-keys.js';
+import { incrementUsage, getUsageStats, getWebhookConfig } from '../db/api-keys.js';
 import type { SlidingWindowRateLimiter } from '../auth/rate-limiter.js';
 import type { TokenBucketRateLimiter } from '../auth/token-bucket.js';
 import { checkRateLimit } from '../auth/rate-limit-check.js';
@@ -14,6 +16,8 @@ import { getPool } from '../db/index.js';
 import { getStorageBackend } from '../storage/index.js';
 import { sanitizeUrl, SanitizeError } from '../security/sanitize.js';
 import { sendError } from '../security/errors.js';
+import { createBaseline, getBaseline, deleteBaseline, listBaselines, BaselineLimitError } from '../db/baselines.js';
+import { enqueueWebhook } from '../webhooks/delivery.js';
 
 export async function diffRoutes(
   app: FastifyInstance,
@@ -202,6 +206,7 @@ export async function diffRoutes(
     }, 'diff completed');
 
     const response: Record<string, unknown> = {
+      match: diffResult.mismatch_percentage === 0,
       mismatch_percentage: diffResult.mismatch_percentage,
       total_pixels: diffResult.total_pixels,
       diff_pixels: diffResult.diff_pixels,
@@ -211,6 +216,343 @@ export async function diffRoutes(
     if (diffResult.diff_image_buffer) {
       response.diff_image = diffResult.diff_image_buffer.toString('base64');
       response.diff_image_content_type = `image/${options.output_format}`;
+    }
+
+    return reply.send(response);
+  });
+
+  // --- Baseline CRUD ---
+
+  const baselineCreateSchema = z.object({
+    name: z.string().min(1).max(100).regex(/^[a-zA-Z0-9_-]+$/, 'Name must be alphanumeric with hyphens/underscores'),
+    url: z.string().url().optional(),
+    image_base64: z.string().optional(),
+  }).refine((d) => (d.url && !d.image_base64) || (!d.url && d.image_base64), {
+    message: 'Provide exactly one of url or image_base64',
+  });
+
+  app.post('/v1/diff/baseline', {
+    schema: {
+      tags: ['diff'],
+      summary: 'Create or update a named baseline',
+      description: 'Store a named screenshot baseline for future regression checks. Accepts a URL (to screenshot) or a base64-encoded image. Max 50 baselines per API key.',
+      security: [{ apiKey: [] }],
+      body: {
+        type: 'object',
+        required: ['name'],
+        properties: {
+          name: { type: 'string', minLength: 1, maxLength: 100, pattern: '^[a-zA-Z0-9_-]+$' },
+          url: { type: 'string', format: 'uri' },
+          image_base64: { type: 'string' },
+        },
+      },
+    },
+    preHandler: [authMiddleware],
+  }, async (req, reply) => {
+    const parsed = baselineCreateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      sendError(reply, req, 'VALIDATION_ERROR', { details: parsed.error.issues });
+      return;
+    }
+
+    const { name, url, image_base64 } = parsed.data;
+    const apiKeyId = req.apiKey!.id;
+    let imageBuffer: Buffer;
+
+    if (url) {
+      try { sanitizeUrl(url); } catch (e) {
+        if (e instanceof SanitizeError) { sendError(reply, req, 'VALIDATION_ERROR', { message: e.message }); return; }
+        throw e;
+      }
+      if (!config.ALLOW_PRIVATE_URLS && isPrivateUrl(url)) {
+        sendError(reply, req, 'SSRF_BLOCKED');
+        return;
+      }
+
+      const ssOpts = screenshotOptionsSchema.safeParse({ url, format: 'png' });
+      if (!ssOpts.success) {
+        sendError(reply, req, 'VALIDATION_ERROR', { details: ssOpts.error.issues });
+        return;
+      }
+
+      app.incrementInflightRenders();
+      try {
+        const result = await takeScreenshot(pool, ssOpts.data, config.NAVIGATION_TIMEOUT_MS);
+        imageBuffer = result.buffer;
+      } finally {
+        app.decrementInflightRenders();
+      }
+    } else {
+      imageBuffer = Buffer.from(image_base64!, 'base64');
+    }
+
+    // Get image dimensions
+    const meta = await sharp(imageBuffer).metadata();
+    const width = meta.width ?? null;
+    const height = meta.height ?? null;
+
+    // Ensure PNG format for storage
+    const pngBuffer = meta.format === 'png' ? imageBuffer : await sharp(imageBuffer).png().toBuffer();
+
+    const storagePath = `baselines/${apiKeyId}/${name}.png`;
+    const storage = getStorageBackend();
+    await storage.upload(storagePath, pngBuffer, 'image/png');
+
+    try {
+      const baseline = await createBaseline(apiKeyId, name, storagePath, width, height);
+      return reply.status(201).send({
+        id: baseline.id,
+        name: baseline.name,
+        width: baseline.width,
+        height: baseline.height,
+        created_at: baseline.createdAt.toISOString(),
+      });
+    } catch (e) {
+      if (e instanceof BaselineLimitError) {
+        sendError(reply, req, 'BASELINE_LIMIT');
+        return;
+      }
+      throw e;
+    }
+  });
+
+  app.get('/v1/diff/baseline/:name', {
+    schema: {
+      tags: ['diff'],
+      summary: 'Get baseline metadata and image URL',
+      security: [{ apiKey: [] }],
+      params: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] },
+    },
+    preHandler: [authMiddleware],
+  }, async (req, reply) => {
+    const { name } = req.params as { name: string };
+    const baseline = await getBaseline(req.apiKey!.id, name);
+    if (!baseline) {
+      sendError(reply, req, 'BASELINE_NOT_FOUND');
+      return;
+    }
+
+    const storage = getStorageBackend();
+    const downloadUrl = storage.getUrl(baseline.storagePath);
+
+    return reply.send({
+      id: baseline.id,
+      name: baseline.name,
+      width: baseline.width,
+      height: baseline.height,
+      storage_path: baseline.storagePath,
+      download_url: downloadUrl,
+      created_at: baseline.createdAt.toISOString(),
+    });
+  });
+
+  app.delete('/v1/diff/baseline/:name', {
+    schema: {
+      tags: ['diff'],
+      summary: 'Delete a baseline',
+      security: [{ apiKey: [] }],
+      params: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] },
+    },
+    preHandler: [authMiddleware],
+  }, async (req, reply) => {
+    const { name } = req.params as { name: string };
+    const apiKeyId = req.apiKey!.id;
+
+    const baseline = await getBaseline(apiKeyId, name);
+    if (!baseline) {
+      sendError(reply, req, 'BASELINE_NOT_FOUND');
+      return;
+    }
+
+    // Delete from storage and DB
+    const storage = getStorageBackend();
+    try { await storage.delete(baseline.storagePath); } catch { /* storage cleanup is best-effort */ }
+    await deleteBaseline(apiKeyId, name);
+
+    return reply.status(204).send();
+  });
+
+  app.get('/v1/diff/baselines', {
+    schema: {
+      tags: ['diff'],
+      summary: 'List all baselines',
+      security: [{ apiKey: [] }],
+    },
+    preHandler: [authMiddleware],
+  }, async (req, reply) => {
+    const baselines = await listBaselines(req.apiKey!.id);
+    return reply.send({
+      baselines: baselines.map((b) => ({
+        id: b.id,
+        name: b.name,
+        width: b.width,
+        height: b.height,
+        created_at: b.createdAt.toISOString(),
+      })),
+      total: baselines.length,
+    });
+  });
+
+  // --- Diff Check (regression check against stored baseline) ---
+
+  const diffCheckSchema = z.object({
+    baseline_name: z.string().min(1).max(100),
+    url: z.string().url(),
+    threshold: z.number().min(0).max(1).default(0.1),
+    include_diff_image: z.boolean().default(true),
+    anti_aliasing_detection: z.boolean().default(false),
+    output_format: z.enum(['png', 'jpeg', 'webp', 'avif']).default('png'),
+  });
+
+  app.post('/v1/diff/check', {
+    schema: {
+      tags: ['diff'],
+      summary: 'Regression check against a stored baseline',
+      description: 'Takes a fresh screenshot of the URL, compares it against the named baseline, and returns diff results. Counts as 2 renders toward quota.',
+      security: [{ apiKey: [] }],
+      body: {
+        type: 'object',
+        required: ['baseline_name', 'url'],
+        properties: {
+          baseline_name: { type: 'string' },
+          url: { type: 'string', format: 'uri' },
+          threshold: { type: 'number', minimum: 0, maximum: 1, default: 0.1 },
+          include_diff_image: { type: 'boolean', default: true },
+          anti_aliasing_detection: { type: 'boolean', default: false },
+          output_format: { type: 'string', enum: ['png', 'jpeg', 'webp', 'avif'], default: 'png' },
+        },
+      },
+    },
+    preHandler: [authMiddleware],
+  }, async (req, reply) => {
+    const parsed = diffCheckSchema.safeParse(req.body);
+    if (!parsed.success) {
+      sendError(reply, req, 'VALIDATION_ERROR', { details: parsed.error.issues });
+      return;
+    }
+
+    const { baseline_name, url, threshold, include_diff_image, anti_aliasing_detection, output_format } = parsed.data;
+    const apiKeyId = req.apiKey!.id;
+
+    // Rate limiting — counts as 2 renders
+    if (config.REQUIRE_AUTH && req.apiKey && rateLimiter) {
+      const result = await checkRateLimit(rateLimiter, req.apiKey.id, req.apiKey.tier, req.apiKey.rateLimit);
+      reply.header('X-RateLimit-Limit', String(result.limit));
+      reply.header('X-RateLimit-Remaining', String(result.remaining));
+      reply.header('X-RateLimit-Reset', String(Math.ceil(result.resetAt / 1000)));
+
+      if (!result.allowed) {
+        const retryAfterSeconds = Math.ceil((result.resetAt - Date.now()) / 1000);
+        reply.header('Retry-After', String(Math.max(0, retryAfterSeconds)));
+        sendError(reply, req, 'RATE_LIMITED', { details: { retryAfter: Math.max(0, retryAfterSeconds) } });
+        return;
+      }
+
+      const usage = await getUsageStats(req.apiKey.id);
+      if (usage.thisMonth + 2 > req.apiKey.monthlyQuota) {
+        sendError(reply, req, 'QUOTA_EXCEEDED');
+        return;
+      }
+
+      // Increment usage by 2
+      await incrementUsage(req.apiKey.id);
+      await incrementUsage(req.apiKey.id);
+    }
+
+    // Fetch baseline
+    const baseline = await getBaseline(apiKeyId, baseline_name);
+    if (!baseline) {
+      sendError(reply, req, 'BASELINE_NOT_FOUND');
+      return;
+    }
+
+    // Validate URL
+    try { sanitizeUrl(url); } catch (e) {
+      if (e instanceof SanitizeError) { sendError(reply, req, 'VALIDATION_ERROR', { message: e.message }); return; }
+      throw e;
+    }
+    if (!config.ALLOW_PRIVATE_URLS && isPrivateUrl(url)) {
+      sendError(reply, req, 'SSRF_BLOCKED');
+      return;
+    }
+
+    // Take fresh screenshot
+    const ssOpts = screenshotOptionsSchema.safeParse({ url, format: 'png' });
+    if (!ssOpts.success) {
+      sendError(reply, req, 'VALIDATION_ERROR', { details: ssOpts.error.issues });
+      return;
+    }
+
+    let freshBuffer: Buffer;
+    app.incrementInflightRenders();
+    try {
+      const result = await takeScreenshot(pool, ssOpts.data, config.NAVIGATION_TIMEOUT_MS);
+      freshBuffer = result.buffer;
+    } finally {
+      app.decrementInflightRenders();
+    }
+
+    // Download baseline image
+    const storage = getStorageBackend();
+    const baselineImage = await storage.download(baseline.storagePath);
+
+    // Compare
+    const start = performance.now();
+    const diffResult = await compareImages(baselineImage, freshBuffer, {
+      threshold,
+      include_diff_image,
+      anti_aliasing_detection,
+      output_format,
+    });
+    const durationMs = Math.round(performance.now() - start);
+
+    req.log.info({
+      baseline_name,
+      mismatch_percentage: diffResult.mismatch_percentage,
+      diff_pixels: diffResult.diff_pixels,
+      total_pixels: diffResult.total_pixels,
+    }, 'diff check completed');
+
+    const response: Record<string, unknown> = {
+      match: diffResult.mismatch_percentage === 0,
+      baseline_name,
+      mismatch_percentage: diffResult.mismatch_percentage,
+      total_pixels: diffResult.total_pixels,
+      diff_pixels: diffResult.diff_pixels,
+      duration_ms: durationMs,
+    };
+
+    if (diffResult.diff_image_buffer) {
+      response.diff_image = diffResult.diff_image_buffer.toString('base64');
+      response.diff_image_content_type = `image/${output_format}`;
+    }
+
+    // Webhook: fire if mismatch exceeds threshold and webhook is configured
+    if (diffResult.mismatch_percentage > 0) {
+      try {
+        const webhookConfig = await getWebhookConfig(apiKeyId);
+        if (webhookConfig.url && webhookConfig.secret) {
+          // Create a dummy render job for webhook delivery tracking
+          const dbPool = getPool();
+          const jobResult = await dbPool.query(
+            `INSERT INTO render_jobs (api_key_id, type, url, options, status)
+             VALUES ($1, 'diff', $2, '{}', 'completed') RETURNING id`,
+            [apiKeyId, url],
+          );
+          await enqueueWebhook(apiKeyId, jobResult.rows[0].id, webhookConfig.url, {
+            type: 'diff_regression',
+            baseline_name,
+            url,
+            mismatch_percentage: diffResult.mismatch_percentage,
+            diff_pixels: diffResult.diff_pixels,
+            total_pixels: diffResult.total_pixels,
+            threshold,
+            timestamp: new Date().toISOString(),
+          }, webhookConfig.secret);
+        }
+      } catch (e) {
+        req.log.warn({ err: e }, 'Failed to fire diff regression webhook');
+      }
     }
 
     return reply.send(response);
