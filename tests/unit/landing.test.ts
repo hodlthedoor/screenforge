@@ -143,7 +143,7 @@ describe('landing page', () => {
   describe('cache headers', () => {
     it('sets Cache-Control on landing page', async () => {
       const res = await app.inject({ method: 'GET', url: '/' });
-      expect(res.headers['cache-control']).toBe('public, max-age=3600');
+      expect(res.headers['cache-control']).toBe('private, max-age=3600');
     });
   });
 

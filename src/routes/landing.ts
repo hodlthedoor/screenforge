@@ -23,7 +23,7 @@ function getOrAssignVariant(req: FastifyRequest): AbVariant {
   return Math.random() < 0.5 ? 'A' : 'B';
 }
 
-async function trackAbEvent(variant: AbVariant, eventType: 'view' | 'signup'): Promise<void> {
+export async function trackAbEvent(variant: string, eventType: 'view' | 'signup'): Promise<void> {
   try {
     const pool = getPool();
     await pool.query('INSERT INTO ab_test_events (variant, event_type) VALUES ($1, $2)', [variant, eventType]);
@@ -161,6 +161,7 @@ function landingHtml(opts: LandingOptions): string {
     .btn{display:inline-block;padding:12px 28px;border-radius:10px;font-weight:600;font-size:1rem;transition:opacity .2s,transform .2s}
     .btn:hover{text-decoration:none;opacity:.95;transform:translateY(-1px)}
     .btn-primary{background:var(--accent);color:#fff}
+    .btn-variant-b{background:linear-gradient(135deg,var(--accent),var(--accent2));box-shadow:0 4px 14px color-mix(in srgb,var(--accent) 30%,transparent)}
     .btn-secondary{background:var(--surface);color:var(--text);border:1px solid var(--border)}
 
     .nav{border-bottom:1px solid var(--border);padding:16px 0;background:color-mix(in srgb,var(--surface) 88%,transparent);backdrop-filter:blur(8px)}
@@ -770,7 +771,7 @@ export async function landingRoutes(app: FastifyInstance): Promise<void> {
 
     return reply
       .type('text/html')
-      .header('Cache-Control', 'public, max-age=3600')
+      .header('Cache-Control', 'private, max-age=3600')
       .send(landingHtml({
         baseUrl: config.BASE_URL,
         analyticsScript: config.ANALYTICS_SCRIPT,

@@ -16,6 +16,7 @@ import { createExpiringToken, isExpired, PASSWORD_RESET_TTL, EMAIL_VERIFICATION_
 import { getPool } from '../db/index.js';
 import { getConfig } from '../config/index.js';
 import { sendEmail, getSmtpConfig } from '../email/index.js';
+import { trackAbEvent } from './landing.js';
 import { renderWelcomeEmail, renderEmailVerification, renderPasswordReset } from '../email/templates.js';
 
 interface AuthBody {
@@ -171,6 +172,16 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         verifyUrl: `${config.BASE_URL}/auth/verify-email/${verifyToken}`,
       });
       void sendEmail({ to: user.email, ...verifyEmail }, smtp);
+
+      // Track A/B test conversion if user came from landing page variant
+      const abCookie = (req.headers.cookie ?? '')
+        .split(';')
+        .map((c) => c.trim())
+        .find((c) => c.startsWith('ab_variant='));
+      const abVariant = abCookie?.split('=')?.[1]?.trim();
+      if (abVariant === 'A' || abVariant === 'B') {
+        void trackAbEvent(abVariant, 'signup');
+      }
 
       return reply.redirect('/dashboard');
     } catch (err: unknown) {

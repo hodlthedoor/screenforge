@@ -96,15 +96,49 @@ describe('A/B test infrastructure', () => {
   });
 
   describe('A/B conversion tracking', () => {
-    it('tracks conversion when user registers with ab_variant cookie', async () => {
-      // Register with an A/B variant cookie to trigger tracking
-      const res = await app.inject({
+    it('records signup event when user registers with ab_variant cookie', async () => {
+      const pool = getPool();
+      // Clear prior signup events for variant A
+      await pool.query("DELETE FROM ab_test_events WHERE variant = 'A' AND event_type = 'signup'");
+
+      // First get a CSRF token via the register GET page
+      const getRes = await app.inject({
         method: 'GET',
         url: '/register',
         headers: { cookie: 'ab_variant=A' },
       });
-      // Registration page should load (tracking happens on server side)
-      expect(res.statusCode).toBe(200);
+      expect(getRes.statusCode).toBe(200);
+
+      // Extract session cookie from GET response
+      const sessionCookie = getRes.headers['set-cookie'];
+      const sessionStr = Array.isArray(sessionCookie) ? sessionCookie.join('; ') : String(sessionCookie ?? '');
+
+      // Extract CSRF token from the form
+      const csrfMatch = getRes.body.match(/name="_csrf"\s+value="([^"]+)"/);
+      const csrfToken = csrfMatch?.[1] ?? '';
+
+      // POST registration with ab_variant cookie and unique email
+      const uniqueEmail = `ab-test-${Date.now()}@example.com`;
+      const postRes = await app.inject({
+        method: 'POST',
+        url: '/register',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          cookie: `ab_variant=A; ${sessionStr}`,
+        },
+        payload: `email=${encodeURIComponent(uniqueEmail)}&password=testpass123&_csrf=${encodeURIComponent(csrfToken)}`,
+      });
+      // Should redirect to dashboard on success
+      expect(postRes.statusCode).toBe(302);
+
+      // Wait briefly for fire-and-forget tracking
+      await new Promise((r) => setTimeout(r, 100));
+
+      // Verify signup event was recorded
+      const { rows } = await pool.query(
+        "SELECT COUNT(*)::int as count FROM ab_test_events WHERE variant = 'A' AND event_type = 'signup'",
+      );
+      expect(rows[0].count).toBeGreaterThanOrEqual(1);
     });
   });
 
