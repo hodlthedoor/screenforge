@@ -18,30 +18,44 @@ export async function createBaseline(
   height: number | null,
 ): Promise<Baseline> {
   const pool = getPool();
+  const client = await pool.connect();
 
-  // Enforce 50-baseline limit per API key
-  const countResult = await pool.query(
-    'SELECT COUNT(*)::int AS count FROM diff_baselines WHERE api_key_id = $1',
-    [apiKeyId],
-  );
-  if (countResult.rows[0].count >= 50) {
-    throw new BaselineLimitError();
+  try {
+    await client.query('BEGIN');
+
+    // Lock existing rows for this API key to prevent concurrent inserts racing past the limit
+    const existingRows = await client.query(
+      'SELECT name FROM diff_baselines WHERE api_key_id = $1 FOR UPDATE',
+      [apiKeyId],
+    );
+
+    const isUpdate = existingRows.rows.some((r) => r.name === name);
+
+    if (!isUpdate && existingRows.rows.length >= 50) {
+      await client.query('ROLLBACK');
+      throw new BaselineLimitError();
+    }
+
+    const result = await client.query(
+      `INSERT INTO diff_baselines (api_key_id, name, storage_path, width, height)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (api_key_id, name) DO UPDATE
+         SET storage_path = EXCLUDED.storage_path,
+             width = EXCLUDED.width,
+             height = EXCLUDED.height,
+             created_at = NOW()
+       RETURNING id, api_key_id, name, storage_path, width, height, created_at`,
+      [apiKeyId, name, storagePath, width, height],
+    );
+
+    await client.query('COMMIT');
+    return mapRow(result.rows[0]);
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
   }
-
-  const result = await pool.query(
-    `INSERT INTO diff_baselines (api_key_id, name, storage_path, width, height)
-     VALUES ($1, $2, $3, $4, $5)
-     ON CONFLICT (api_key_id, name) DO UPDATE
-       SET storage_path = EXCLUDED.storage_path,
-           width = EXCLUDED.width,
-           height = EXCLUDED.height,
-           created_at = NOW()
-     RETURNING id, api_key_id, name, storage_path, width, height, created_at`,
-    [apiKeyId, name, storagePath, width, height],
-  );
-
-  const row = result.rows[0];
-  return mapRow(row);
 }
 
 export async function getBaseline(apiKeyId: string, name: string): Promise<Baseline | null> {

@@ -286,13 +286,25 @@ export async function diffRoutes(
       imageBuffer = Buffer.from(image_base64!, 'base64');
     }
 
-    // Get image dimensions
-    const meta = await sharp(imageBuffer).metadata();
+    // Get image dimensions and validate it's a real image
+    let meta: sharp.Metadata;
+    try {
+      meta = await sharp(imageBuffer).metadata();
+    } catch {
+      sendError(reply, req, 'VALIDATION_ERROR', { message: 'Invalid image: unable to decode the provided image data' });
+      return;
+    }
     const width = meta.width ?? null;
     const height = meta.height ?? null;
 
     // Ensure PNG format for storage
-    const pngBuffer = meta.format === 'png' ? imageBuffer : await sharp(imageBuffer).png().toBuffer();
+    let pngBuffer: Buffer;
+    try {
+      pngBuffer = meta.format === 'png' ? imageBuffer : await sharp(imageBuffer).png().toBuffer();
+    } catch {
+      sendError(reply, req, 'VALIDATION_ERROR', { message: 'Invalid image: unable to process the provided image data' });
+      return;
+    }
 
     const storagePath = `baselines/${apiKeyId}/${name}.png`;
     const storage = getStorageBackend();
@@ -454,9 +466,8 @@ export async function diffRoutes(
         return;
       }
 
-      // Increment usage by 2
-      await incrementUsage(req.apiKey.id);
-      await incrementUsage(req.apiKey.id);
+      // Increment usage by 2 (screenshot + baseline comparison)
+      await incrementUsage(req.apiKey.id, 2);
     }
 
     // Fetch baseline
@@ -528,7 +539,7 @@ export async function diffRoutes(
     }
 
     // Webhook: fire if mismatch exceeds threshold and webhook is configured
-    if (diffResult.mismatch_percentage > 0) {
+    if (diffResult.mismatch_percentage > threshold) {
       try {
         const webhookConfig = await getWebhookConfig(apiKeyId);
         if (webhookConfig.url && webhookConfig.secret) {

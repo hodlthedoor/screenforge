@@ -89,13 +89,13 @@ export async function lookupApiKey(rawKey: string): Promise<ApiKey | null> {
   };
 }
 
-export async function incrementUsage(apiKeyId: string): Promise<number> {
+export async function incrementUsage(apiKeyId: string, amount = 1): Promise<number> {
   const result = await getPool().query(
     `INSERT INTO usage_daily (api_key_id, date, count)
-     VALUES ($1, CURRENT_DATE, 1)
-     ON CONFLICT (api_key_id, date) DO UPDATE SET count = usage_daily.count + 1
+     VALUES ($1, CURRENT_DATE, $2)
+     ON CONFLICT (api_key_id, date) DO UPDATE SET count = usage_daily.count + $2
      RETURNING count`,
-    [apiKeyId],
+    [apiKeyId, amount],
   );
   return result.rows[0].count;
 }
