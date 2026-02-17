@@ -94,7 +94,7 @@ describe('diffOptionsSchema', () => {
   });
 
   it('accepts all output formats', () => {
-    for (const fmt of ['png', 'jpeg', 'webp']) {
+    for (const fmt of ['png', 'jpeg', 'webp', 'avif']) {
       const result = diffOptionsSchema.safeParse({
         url_a: 'https://a.com',
         url_b: 'https://b.com',
@@ -230,6 +230,25 @@ describe('compareImages', () => {
     });
     const meta = await sharp(result.diff_image_buffer!).metadata();
     expect(meta.format).toBe('webp');
+  });
+
+  it('supports avif output format', async () => {
+    const red = await createSolidPng({ r: 255, g: 0, b: 0 });
+    const blue = await createSolidPng({ r: 0, g: 0, b: 255 });
+    const result = await compareImages(red, blue, {
+      threshold: 0.1,
+      include_diff_image: true,
+      output_format: 'avif',
+    });
+    const meta = await sharp(result.diff_image_buffer!).metadata();
+    expect(meta.format).toBe('heif');
+  });
+
+  it('throws for images with missing dimensions', async () => {
+    // A 0-byte buffer is not a valid image
+    const invalid = Buffer.from('not-an-image');
+    const valid = await createSolidPng({ r: 255, g: 0, b: 0 });
+    await expect(compareImages(invalid, valid)).rejects.toThrow();
   });
 });
 

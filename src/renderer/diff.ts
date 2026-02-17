@@ -35,9 +35,13 @@ export async function compareImages(
   const metaA = await sharp(imageA).metadata();
   const metaB = await sharp(imageB).metadata();
 
+  if (!metaA.width || !metaA.height || !metaB.width || !metaB.height) {
+    throw new Error('Invalid image: unable to determine dimensions');
+  }
+
   // Determine target dimensions (use larger of each dimension)
-  const width = Math.max(metaA.width ?? 1, metaB.width ?? 1);
-  const height = Math.max(metaA.height ?? 1, metaB.height ?? 1);
+  const width = Math.max(metaA.width, metaB.width);
+  const height = Math.max(metaA.height, metaB.height);
 
   // Decode to raw RGBA, resizing if needed
   const rawA = await sharp(imageA)
@@ -84,6 +88,8 @@ export async function compareImages(
       diffImageBuffer = await sharpImg.jpeg().toBuffer();
     } else if (output_format === 'webp') {
       diffImageBuffer = await sharpImg.webp().toBuffer();
+    } else if (output_format === 'avif') {
+      diffImageBuffer = await sharpImg.avif().toBuffer();
     } else {
       diffImageBuffer = await sharpImg.png().toBuffer();
     }

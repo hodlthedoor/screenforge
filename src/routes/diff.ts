@@ -177,10 +177,16 @@ export async function diffRoutes(
       }
 
       const storage = getStorageBackend();
-      [imageA, imageB] = await Promise.all([
-        storage.download(jobA.rows[0].result_path),
-        storage.download(jobB.rows[0].result_path),
-      ]);
+      try {
+        [imageA, imageB] = await Promise.all([
+          storage.download(jobA.rows[0].result_path),
+          storage.download(jobB.rows[0].result_path),
+        ]);
+      } catch (e) {
+        req.log.error({ err: e }, 'Failed to download job images from storage');
+        sendError(reply, req, 'INTERNAL_ERROR', { message: 'Failed to retrieve job images' });
+        return;
+      }
     } else {
       // Should not reach here — schema refine catches it
       sendError(reply, req, 'VALIDATION_ERROR', { message: 'Invalid input mode' });
@@ -382,7 +388,11 @@ export async function diffRoutes(
 
     // Delete from storage and DB
     const storage = getStorageBackend();
-    try { await storage.delete(baseline.storagePath); } catch { /* storage cleanup is best-effort */ }
+    try {
+      await storage.delete(baseline.storagePath);
+    } catch (e) {
+      req.log.warn({ err: e, storagePath: baseline.storagePath }, 'Failed to delete baseline image from storage');
+    }
     await deleteBaseline(apiKeyId, name);
 
     return reply.status(204).send();
@@ -509,7 +519,14 @@ export async function diffRoutes(
 
     // Download baseline image
     const storage = getStorageBackend();
-    const baselineImage = await storage.download(baseline.storagePath);
+    let baselineImage: Buffer;
+    try {
+      baselineImage = await storage.download(baseline.storagePath);
+    } catch (e) {
+      req.log.error({ err: e, storagePath: baseline.storagePath }, 'Failed to download baseline image');
+      sendError(reply, req, 'INTERNAL_ERROR', { message: 'Failed to retrieve baseline image' });
+      return;
+    }
 
     // Compare
     const start = performance.now();
@@ -566,7 +583,7 @@ export async function diffRoutes(
           }, webhookConfig.secret);
         }
       } catch (e) {
-        req.log.warn({ err: e }, 'Failed to fire diff regression webhook');
+        req.log.warn({ err: e, apiKeyId, baseline_name, url }, 'Failed to fire diff regression webhook');
       }
     }
 
