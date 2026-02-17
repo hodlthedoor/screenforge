@@ -148,9 +148,12 @@ describe('landing page', () => {
   });
 
   describe('CTA and social proof', () => {
-    it('has Get Started Free CTA above the fold', async () => {
+    it('has primary CTA above the fold (variant A or B)', async () => {
       const res = await app.inject({ method: 'GET', url: '/' });
-      expect(res.body).toContain('Get Started Free');
+      // A/B test: variant A = "Get Started Free", variant B = "Start Building Free"
+      const hasCtaA = res.body.includes('Get Started Free');
+      const hasCtaB = res.body.includes('Start Building Free');
+      expect(hasCtaA || hasCtaB).toBe(true);
     });
 
     it('has social proof section', async () => {

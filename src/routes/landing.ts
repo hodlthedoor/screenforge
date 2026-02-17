@@ -4,6 +4,34 @@ import { getConfig } from '../config/index.js';
 import { getPool } from '../db/index.js';
 import { escapeHtml } from '../utils/html.js';
 
+const AB_VARIANTS = ['A', 'B'] as const;
+type AbVariant = (typeof AB_VARIANTS)[number];
+
+const AB_CTA: Record<AbVariant, { text: string; color: string }> = {
+  A: { text: 'Get Started Free', color: 'btn-primary' },
+  B: { text: 'Start Building Free', color: 'btn-primary btn-variant-b' },
+};
+
+function getOrAssignVariant(req: FastifyRequest): AbVariant {
+  const cookie = (req.headers.cookie ?? '')
+    .split(';')
+    .map((c) => c.trim())
+    .find((c) => c.startsWith('ab_variant='));
+  const existing = cookie?.split('=')?.[1]?.trim();
+  if (existing === 'A' || existing === 'B') return existing;
+  // Assign randomly 50/50
+  return Math.random() < 0.5 ? 'A' : 'B';
+}
+
+async function trackAbEvent(variant: AbVariant, eventType: 'view' | 'signup'): Promise<void> {
+  try {
+    const pool = getPool();
+    await pool.query('INSERT INTO ab_test_events (variant, event_type) VALUES ($1, $2)', [variant, eventType]);
+  } catch {
+    // Non-critical — never block the response
+  }
+}
+
 const SOCIAL_PROOF_CACHE_KEY = 'screenforge:social_proof:total_renders';
 const SOCIAL_PROOF_TTL = 300; // 5 minutes
 
@@ -44,6 +72,7 @@ interface LandingOptions {
   baseUrl: string;
   analyticsScript?: string;
   socialProofCount: number;
+  abVariant: AbVariant;
 }
 
 function sanitizeAnalyticsScript(raw: string): string {
@@ -56,6 +85,7 @@ function landingHtml(opts: LandingOptions): string {
   const safeBaseUrl = escapeHtml(opts.baseUrl);
   const analyticsTag = opts.analyticsScript ? sanitizeAnalyticsScript(opts.analyticsScript) : '';
   const renderCount = formatNumber(opts.socialProofCount);
+  const cta = AB_CTA[opts.abVariant];
 
   const faqItems = [
     { q: 'Can I self-host ScreenForge?', a: 'Yes! ScreenForge is fully open source and self-hostable. Run it on your own infrastructure with a single docker compose up command. Your data never leaves your servers.' },
@@ -254,7 +284,7 @@ function landingHtml(opts: LandingOptions): string {
       <h1><span>ScreenForge</span><br>Screenshot &amp; Render API</h1>
       <p>Capture screenshots, generate PDFs, and create OG cards with a single API call. Self-hostable, fast, and developer-friendly.</p>
       <div class="cta-group">
-        <a href="/register" class="btn btn-primary">Get Started Free</a>
+        <a href="/register" class="btn ${cta.color}" data-ab-variant="${opts.abVariant}">${cta.text}</a>
         <a href="/docs" class="btn btn-secondary">View Docs</a>
       </div>
       <div class="social-proof-counter" id="social-proof-counter">
@@ -714,7 +744,7 @@ ${faqItems.map((item) => `        <div class="faq-item">
 }
 
 export async function landingRoutes(app: FastifyInstance): Promise<void> {
-  const handler = async (_req: FastifyRequest, reply: FastifyReply) => {
+  const handler = async (req: FastifyRequest, reply: FastifyReply) => {
     const config = getConfig();
     let socialProofCount = 0;
     try {
@@ -722,6 +752,22 @@ export async function landingRoutes(app: FastifyInstance): Promise<void> {
     } catch {
       // Graceful fallback — show 0
     }
+
+    const variant = getOrAssignVariant(req);
+
+    // Set cookie if not already set
+    const existingCookie = (req.headers.cookie ?? '')
+      .split(';')
+      .some((c) => c.trim().startsWith('ab_variant='));
+    if (!existingCookie) {
+      reply.header(
+        'Set-Cookie',
+        `ab_variant=${variant}; Path=/; Max-Age=2592000; SameSite=Lax; HttpOnly`,
+      );
+    }
+
+    void trackAbEvent(variant, 'view');
+
     return reply
       .type('text/html')
       .header('Cache-Control', 'public, max-age=3600')
@@ -729,6 +775,7 @@ export async function landingRoutes(app: FastifyInstance): Promise<void> {
         baseUrl: config.BASE_URL,
         analyticsScript: config.ANALYTICS_SCRIPT,
         socialProofCount,
+        abVariant: variant,
       }));
   };
 
