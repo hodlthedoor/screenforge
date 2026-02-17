@@ -4,12 +4,19 @@ ScreenForge is fully self-hostable. This guide covers the two main deployment op
 
 ## Prerequisites
 
+**Docker Compose (recommended):**
+
 | Requirement | Version |
 |-------------|---------|
 | Docker + Docker Compose | 24+ |
-| **or** Node.js | 22+ |
-| **or** PostgreSQL | 16+ |
-| **or** Redis | 7+ |
+
+**Bare metal:**
+
+| Requirement | Version |
+|-------------|---------|
+| Node.js | 22+ |
+| PostgreSQL | 16+ |
+| Redis | 7+ |
 
 ---
 

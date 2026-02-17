@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker)](docker-compose.yml)
 [![GitHub Stars](https://img.shields.io/github/stars/hodlthedoor/screenforge?style=flat&logo=github)](https://github.com/hodlthedoor/screenforge/stargazers)
-[![npm downloads](https://img.shields.io/npm/dm/@screenforge/cli?logo=npm)](https://www.npmjs.com/package/@screenforge/cli)
+[![npm downloads](https://img.shields.io/npm/dm/@screenforge/sdk?logo=npm)](https://www.npmjs.com/package/@screenforge/sdk)
 
 **Self-hostable screenshot, PDF, and OG image API.** Open-source alternative to ScreenshotOne, Urlbox, and similar services.
 
@@ -406,6 +406,8 @@ openssl rand -hex 32
 ---
 
 ## Self-Hosting Guide
+
+For the full deployment guide (environment variables, SSL, troubleshooting), see [docs/self-hosting.md](docs/self-hosting.md).
 
 ### Docker Compose (Recommended)
 
