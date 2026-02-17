@@ -17,6 +17,7 @@ import { sanitizeUrl, sanitizeSelector, sanitizeWaitFor, sanitizeTemplate, sanit
 import { sendError } from '../security/errors.js';
 import type { RenderMetadata } from '../renderer/schemas.js';
 import { computeFingerprint, checkDedup } from '../queue/dedup.js';
+import { validateFonts, FontValidationError } from '../renderer/fonts.js';
 
 import { FORMAT_EXT, getFormatFromContentType } from '../utils/format.js';
 import sharp from 'sharp';
@@ -517,6 +518,17 @@ export async function renderRoutes(
       }
     }
 
+    // Validate font URLs upfront so invalid URLs return 400, not 500
+    try {
+      validateFonts(options.fonts);
+    } catch (e) {
+      if (e instanceof FontValidationError) {
+        sendError(reply, req, 'VALIDATION_ERROR', { message: e.message });
+        return;
+      }
+      throw e;
+    }
+
     const blocked = await checkRateAndQuota(req, reply);
     if (blocked) return;
 
@@ -855,6 +867,17 @@ export async function renderRoutes(
         sendError(reply, req, 'SSRF_BLOCKED');
         return;
       }
+    }
+
+    // Validate font URLs upfront so invalid URLs return 400, not 500
+    try {
+      validateFonts(options.fonts);
+    } catch (e) {
+      if (e instanceof FontValidationError) {
+        sendError(reply, req, 'VALIDATION_ERROR', { message: e.message });
+        return;
+      }
+      throw e;
     }
 
     const blocked = await checkRateAndQuota(req, reply);

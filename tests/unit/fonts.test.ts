@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { screenshotOptionsSchema, pdfOptionsSchema } from '../../src/renderer/schemas.js';
-import { validateFontUrl, buildGoogleFontUrl } from '../../src/renderer/fonts.js';
+import { validateFontUrl, buildGoogleFontUrl, validateFonts, FontValidationError } from '../../src/renderer/fonts.js';
 
 describe('font schema validation', () => {
   describe('screenshotOptionsSchema with fonts', () => {
@@ -141,19 +141,61 @@ describe('validateFontUrl', () => {
   });
 
   it('rejects arbitrary domains', () => {
-    expect(() => validateFontUrl('https://evil.com/font.css')).toThrow(/not allowed/i);
+    expect(() => validateFontUrl('https://evil.com/font.css')).toThrow(FontValidationError);
   });
 
   it('rejects localhost URLs', () => {
-    expect(() => validateFontUrl('https://localhost/font.css')).toThrow(/not allowed/i);
+    expect(() => validateFontUrl('https://localhost/font.css')).toThrow(FontValidationError);
   });
 
   it('rejects private IP addresses', () => {
-    expect(() => validateFontUrl('https://192.168.1.1/font.css')).toThrow(/not allowed/i);
+    expect(() => validateFontUrl('https://192.168.1.1/font.css')).toThrow(FontValidationError);
   });
 
   it('rejects non-HTTPS URLs', () => {
-    expect(() => validateFontUrl('http://fonts.googleapis.com/css')).toThrow(/must use HTTPS/i);
+    expect(() => validateFontUrl('http://fonts.googleapis.com/css')).toThrow(FontValidationError);
+  });
+
+  it('rejects malformed URLs', () => {
+    expect(() => validateFontUrl('not-a-url')).toThrow(FontValidationError);
+  });
+});
+
+describe('validateFonts', () => {
+  it('passes with no fonts', () => {
+    expect(() => validateFonts()).not.toThrow();
+    expect(() => validateFonts([])).not.toThrow();
+  });
+
+  it('passes with valid google fonts', () => {
+    expect(() => validateFonts([
+      { type: 'google', family: 'Roboto', weights: [400] },
+    ])).not.toThrow();
+  });
+
+  it('passes with valid URL fonts', () => {
+    expect(() => validateFonts([
+      { type: 'url', url: 'https://fonts.googleapis.com/css2?family=Inter' },
+    ])).not.toThrow();
+  });
+
+  it('throws FontValidationError for disallowed URL domain', () => {
+    expect(() => validateFonts([
+      { type: 'url', url: 'https://evil.com/font.css' },
+    ])).toThrow(FontValidationError);
+  });
+
+  it('throws FontValidationError for non-HTTPS URL', () => {
+    expect(() => validateFonts([
+      { type: 'url', url: 'http://fonts.googleapis.com/css' },
+    ])).toThrow(FontValidationError);
+  });
+
+  it('skips validation for google font type (no URL to validate)', () => {
+    expect(() => validateFonts([
+      { type: 'google', family: 'Roboto' },
+      { type: 'url', url: 'https://fonts.googleapis.com/css2?family=Inter' },
+    ])).not.toThrow();
   });
 });
 

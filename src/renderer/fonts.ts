@@ -16,26 +16,34 @@ const ALLOWED_FONT_DOMAINS = new Set([
   'unpkg.com',
 ]);
 
+/** Error thrown when font URL validation fails */
+export class FontValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'FontValidationError';
+  }
+}
+
 /**
  * Validates that a font URL is from an allowed domain and uses HTTPS
- * @throws Error if URL is not allowed
+ * @throws FontValidationError if URL is not allowed
  */
 export function validateFontUrl(fontUrl: string): void {
   let parsedUrl: URL;
   try {
     parsedUrl = new URL(fontUrl);
   } catch {
-    throw new Error(`Invalid font URL: ${fontUrl}`);
+    throw new FontValidationError(`Invalid font URL: ${fontUrl}`);
   }
 
   // Must use HTTPS
   if (parsedUrl.protocol !== 'https:') {
-    throw new Error(`Font URLs must use HTTPS protocol. Rejected: ${fontUrl}`);
+    throw new FontValidationError(`Font URLs must use HTTPS protocol. Rejected: ${fontUrl}`);
   }
 
   // Must be from an allowed domain
   if (!ALLOWED_FONT_DOMAINS.has(parsedUrl.hostname)) {
-    throw new Error(
+    throw new FontValidationError(
       `Font URL domain not allowed. Allowed domains: ${Array.from(ALLOWED_FONT_DOMAINS).join(', ')}. Rejected: ${fontUrl}`
     );
   }
@@ -54,6 +62,19 @@ export function buildGoogleFontUrl(family: string, weights?: number[]): string {
   }
 
   return `${baseUrl}&display=swap`;
+}
+
+/**
+ * Validates all font specs upfront (call before rendering to catch errors early)
+ * @throws FontValidationError if any font URL is invalid
+ */
+export function validateFonts(fonts?: FontSpec[]): void {
+  if (!fonts || fonts.length === 0) return;
+  for (const font of fonts) {
+    if (font.type === 'url') {
+      validateFontUrl(font.url);
+    }
+  }
 }
 
 /**

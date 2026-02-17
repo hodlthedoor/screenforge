@@ -59,15 +59,15 @@ export async function renderPdf(pool: BrowserPool, options: PdfOptions, timeoutM
 
     await applyPreNavigationFilters(page, options);
 
-    // Load custom fonts before navigation
-    await loadFonts(page, options.fonts);
-
     let response;
     if ('html' in options && options.html) {
       await page.setContent(options.html, { waitUntil: 'networkidle', timeout: timeoutMs });
     } else if ('url' in options && options.url) {
       response = await page.goto(options.url, { waitUntil: 'networkidle', timeout: timeoutMs });
     }
+
+    // Load custom fonts after navigation so styles survive page load
+    await loadFonts(page, options.fonts);
 
     await applyPostNavigationFilters(page, options);
 
