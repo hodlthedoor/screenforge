@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { getUserById, listAllUsers, toggleUserActive, changeUserTier, getAdminUserDetail } from '../db/users.js';
 import { getPool } from '../db/index.js';
+import { getAnalyticsMetrics } from '../db/analytics.js';
 import { getQueueMetrics, getQueue } from '../queue/render-queue.js';
 import { getConfig } from '../config/index.js';
 import { getStorageBackend } from '../storage/index.js';
@@ -100,6 +101,8 @@ function adminLayout(title: string, nav: string, content: string, csrfToken: str
   .pagination a,.pagination span{padding:6px 14px;border-radius:6px;font-size:.9rem}
   .pagination a{background:var(--surface);border:1px solid var(--border);color:var(--text)}
   .pagination span{background:var(--accent);color:#fff}
+  .chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px}
+  @media(max-width:1000px){.chart-grid{grid-template-columns:1fr}}
   @media(max-width:768px){.layout{flex-direction:column}.sidebar{width:100%;display:flex;overflow-x:auto;padding:12px 0}.sidebar a{white-space:nowrap}.sidebar .sep{display:none}}
 </style></head><body>
 <div class="layout">
@@ -486,144 +489,41 @@ export async function adminPanelRoutes(app: FastifyInstance): Promise<void> {
   // Analytics dashboard
   app.get('/admin/analytics', { preHandler: requireAdmin }, async (req, reply) => {
     const csrfToken = ensureCsrfToken(req);
-    const pool = getPool();
 
-    // DAU / WAU / MAU
-    const dauResult = await pool.query<{ dau: number; wau: number; mau: number }>(`
-      SELECT
-        COUNT(DISTINCT api_key_id) FILTER (WHERE created_at >= CURRENT_DATE)::int AS dau,
-        COUNT(DISTINCT api_key_id) FILTER (WHERE created_at >= CURRENT_DATE - INTERVAL '7 days')::int AS wau,
-        COUNT(DISTINCT api_key_id) FILTER (WHERE created_at >= CURRENT_DATE - INTERVAL '30 days')::int AS mau
-      FROM render_jobs
-    `);
-    const { dau, wau, mau } = dauResult.rows[0] ?? { dau: 0, wau: 0, mau: 0 };
+    const metrics = await getAnalyticsMetrics();
 
-    // Daily trend (last 30 days)
-    const trendResult = await pool.query<{ date: string; count: number }>(`
-      SELECT created_at::date::text AS date, COUNT(*)::int AS count
-      FROM render_jobs
-      WHERE created_at >= NOW() - INTERVAL '30 days'
-      GROUP BY 1
-      ORDER BY 1
-    `);
-
-    // Renders by type (last 30 days)
-    const byTypeResult = await pool.query<{ type: string; count: number }>(`
-      SELECT type, COUNT(*)::int AS count
-      FROM render_jobs
-      WHERE created_at >= NOW() - INTERVAL '30 days'
-      GROUP BY type
-      ORDER BY count DESC
-    `);
-
-    // Success/failure rates
-    const rateResult = await pool.query<{ total: number; success: number; failed: number }>(`
-      SELECT
-        COUNT(*)::int AS total,
-        COUNT(*) FILTER (WHERE status = 'completed')::int AS success,
-        COUNT(*) FILTER (WHERE status = 'failed')::int AS failed
-      FROM render_jobs
-      WHERE created_at >= NOW() - INTERVAL '30 days'
-    `);
-    const { total, success, failed } = rateResult.rows[0] ?? { total: 0, success: 0, failed: 0 };
-    const successRate = total > 0 ? ((success / total) * 100).toFixed(1) : '0.0';
-    const failureRate = total > 0 ? ((failed / total) * 100).toFixed(1) : '0.0';
-
-    // Tier distribution
-    const tierResult = await pool.query<{ tier: string; count: number }>(`
-      SELECT tier, COUNT(*)::int AS count
-      FROM api_keys
-      WHERE active = true
-      GROUP BY tier
-      ORDER BY tier
-    `);
-
-    // Conversion rate
-    const convResult = await pool.query<{ total_users: number; paid_users: number }>(`
-      SELECT
-        COUNT(DISTINCT u.id)::int AS total_users,
-        COUNT(DISTINCT s.user_id)::int AS paid_users
-      FROM users u
-      LEFT JOIN subscriptions s ON s.user_id = u.id AND s.status = 'active'
-    `);
-    const { total_users, paid_users } = convResult.rows[0] ?? { total_users: 0, paid_users: 0 };
-    const conversionRate = total_users > 0 ? ((paid_users / total_users) * 100).toFixed(1) : '0.0';
-
-    // Funnel: signups → verified → first render → paid
-    const funnelResult = await pool.query<{
-      signups: number;
-      verified: number;
-      first_render: number;
-      paid: number;
-    }>(`
-      SELECT
-        COUNT(*)::int AS signups,
-        COUNT(*) FILTER (WHERE email_verified = true)::int AS verified,
-        (SELECT COUNT(DISTINCT u2.id)::int FROM users u2 WHERE EXISTS (
-          SELECT 1 FROM user_api_keys uak JOIN render_jobs rj ON rj.api_key_id = uak.api_key_id
-          WHERE uak.user_id = u2.id
-        )) AS first_render,
-        (SELECT COUNT(DISTINCT s.user_id)::int FROM subscriptions s WHERE s.status = 'active') AS paid
-      FROM users
-    `);
-    const funnel = funnelResult.rows[0] ?? { signups: 0, verified: 0, first_render: 0, paid: 0 };
-
-    // Top 10 API keys
-    const topKeysResult = await pool.query<{ name: string; count: number }>(`
-      SELECT ak.name, COUNT(rj.id)::int AS count
-      FROM render_jobs rj
-      JOIN api_keys ak ON ak.id = rj.api_key_id
-      WHERE rj.created_at >= NOW() - INTERVAL '30 days'
-      GROUP BY ak.id, ak.name
-      ORDER BY count DESC
-      LIMIT 10
-    `);
-
-    // Churn rate
-    const churnResult = await pool.query<{ churned: number; total_prev: number }>(`
-      SELECT
-        COUNT(DISTINCT prev.api_key_id) FILTER (
-          WHERE NOT EXISTS (
-            SELECT 1 FROM render_jobs curr
-            WHERE curr.api_key_id = prev.api_key_id
-              AND curr.created_at >= NOW() - INTERVAL '30 days'
-          )
-        )::int AS churned,
-        COUNT(DISTINCT prev.api_key_id)::int AS total_prev
-      FROM render_jobs prev
-      WHERE prev.created_at < NOW() - INTERVAL '30 days'
-        AND prev.created_at >= NOW() - INTERVAL '60 days'
-    `);
-    const { churned, total_prev } = churnResult.rows[0] ?? { churned: 0, total_prev: 0 };
-    const churnRate = total_prev > 0 ? ((churned / total_prev) * 100).toFixed(1) : '0.0';
+    const successRate = metrics.successRate.toFixed(1);
+    const failureRate = metrics.failureRate.toFixed(1);
+    const conversionRate = metrics.conversionRate.toFixed(1);
+    const churnRate = metrics.churnRate.toFixed(1);
 
     // Serialize data for JS
-    const trendLabels = JSON.stringify(trendResult.rows.map((r) => r.date));
-    const trendData = JSON.stringify(trendResult.rows.map((r) => r.count));
-    const typeLabels = JSON.stringify(byTypeResult.rows.map((r) => r.type));
-    const typeData = JSON.stringify(byTypeResult.rows.map((r) => r.count));
-    const tierLabels = JSON.stringify(tierResult.rows.map((r) => r.tier));
-    const tierData = JSON.stringify(tierResult.rows.map((r) => r.count));
+    const trendLabels = JSON.stringify(metrics.dailyTrend.map((r) => r.date));
+    const trendData = JSON.stringify(metrics.dailyTrend.map((r) => r.count));
+    const typeLabels = JSON.stringify(metrics.rendersByType.map((r) => r.type));
+    const typeData = JSON.stringify(metrics.rendersByType.map((r) => r.count));
+    const tierLabels = JSON.stringify(metrics.tierDistribution.map((r) => r.tier));
+    const tierData = JSON.stringify(metrics.tierDistribution.map((r) => r.count));
     const funnelLabels = JSON.stringify(['Signups', 'Verified', 'First Render', 'Paid']);
-    const funnelData = JSON.stringify([funnel.signups, funnel.verified, funnel.first_render, funnel.paid]);
+    const funnelData = JSON.stringify([metrics.funnel.signups, metrics.funnel.verified, metrics.funnel.first_render, metrics.funnel.paid]);
 
-    const topKeysRows = topKeysResult.rows.map((r) =>
+    const topKeysRows = metrics.topApiKeys.map((r) =>
       `<tr><td>${escapeHtml(r.name)}</td><td>${r.count}</td></tr>`,
     ).join('');
 
     const html = `
       <h1>Analytics</h1>
       <div class="stats">
-        <div class="stat"><div class="label">DAU (Today)</div><div class="value">${dau ?? 0}</div></div>
-        <div class="stat"><div class="label">WAU (7d)</div><div class="value">${wau ?? 0}</div></div>
-        <div class="stat"><div class="label">MAU (30d)</div><div class="value">${mau ?? 0}</div></div>
+        <div class="stat"><div class="label">DAU (Today)</div><div class="value">${metrics.dau}</div></div>
+        <div class="stat"><div class="label">WAU (7d)</div><div class="value">${metrics.wau}</div></div>
+        <div class="stat"><div class="label">MAU (30d)</div><div class="value">${metrics.mau}</div></div>
         <div class="stat"><div class="label">Success Rate</div><div class="value" style="color:var(--accent2)">${successRate}%</div></div>
         <div class="stat"><div class="label">Failure Rate</div><div class="value" style="color:var(--err)">${failureRate}%</div></div>
         <div class="stat"><div class="label">Conversion</div><div class="value" style="color:var(--accent)">${conversionRate}%</div></div>
         <div class="stat"><div class="label">Churn Rate</div><div class="value" style="color:var(--warn)">${churnRate}%</div></div>
       </div>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
+      <div class="chart-grid">
         <div class="card">
           <h2 style="margin-bottom:16px">Daily Active Users (30d)</h2>
           <canvas id="dauChart" height="200"></canvas>
@@ -634,7 +534,7 @@ export async function adminPanelRoutes(app: FastifyInstance): Promise<void> {
         </div>
       </div>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
+      <div class="chart-grid">
         <div class="card">
           <h2 style="margin-bottom:16px">Tier Distribution</h2>
           <canvas id="tierChart" height="200"></canvas>
@@ -647,7 +547,7 @@ export async function adminPanelRoutes(app: FastifyInstance): Promise<void> {
 
       <div class="card">
         <h2 style="margin-bottom:16px">Top 10 API Keys (30d)</h2>
-        ${topKeysResult.rows.length > 0
+        ${metrics.topApiKeys.length > 0
     ? `<table><thead><tr><th>Key Name</th><th>Renders</th></tr></thead><tbody>${topKeysRows}</tbody></table>`
     : '<p style="color:var(--muted)">No render activity in the last 30 days.</p>'}
       </div>
