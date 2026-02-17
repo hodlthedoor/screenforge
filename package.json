@@ -1,7 +1,7 @@
 {
   "name": "screenforge",
   "version": "1.4.0",
-  "description": "Self-hostable screenshot & render API \u2014 open-source alternative to ScreenshotOne",
+  "description": "Self-hostable screenshot & render API — open-source alternative to ScreenshotOne",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {

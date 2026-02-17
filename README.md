@@ -36,6 +36,10 @@ The API is available at `http://localhost:3100`, Swagger docs at `http://localho
 - **Element blurring** *(v1.2.0)* -- blur sensitive content with configurable radius for privacy-safe screenshots
 - **Content validation** *(v1.2.0)* -- fail renders if specific text is present or missing from the page
 - **Ad blocking** *(v1.2.0)* -- block 40+ ad/tracker domains for cleaner screenshots
+- **Visual diff** *(v1.4.0)* -- compare two screenshots pixel-by-pixel; returns a diff image, mismatch %, and pixel counts
+- **Visual diff baselines** *(v1.4.0)* -- store reference screenshots and detect regressions automatically with webhook notifications
+- **Custom font loading** *(v1.4.0)* -- render pages with custom fonts via Google Fonts, jsDelivr, or unpkg CDN URLs
+- **CLI tool** *(v1.4.0)* -- `screenforge` command-line interface for taking screenshots, PDFs, and OG cards without writing code
 - **Batch rendering** -- submit up to 50 mixed render jobs (screenshot, PDF, OG) in a single request
 - **Async rendering** -- queue any render job and poll for results, ideal for long-running captures
 - **Signed URLs** -- generate HMAC-signed GET URLs for screenshots and PDFs, perfect for embedding in HTML without exposing API keys
@@ -79,6 +83,10 @@ The API is available at `http://localhost:3100`, Swagger docs at `http://localho
 | `POST` | `/v1/billing/webhook` | Stripe sig | Stripe webhook |
 | `GET` | `/v1/health` | None | Detailed health check |
 | `GET` | `/v1/analytics` | API key | Render analytics & history |
+| `POST` | `/v1/diff` | API key | Visual diff — compare two screenshots |
+| `POST` | `/v1/diff/baseline` | API key | Store a baseline screenshot |
+| `GET` | `/v1/diff/baseline` | API key | List baselines |
+| `DELETE` | `/v1/diff/baseline/:id` | API key | Delete a baseline |
 | `GET` | `/v1/errors` | None | Error code reference |
 | `GET` | `/health` | None | Simple health check |
 | `GET` | `/docs` | None | Swagger UI |
@@ -180,6 +188,39 @@ curl "http://localhost:3100/v1/signed/screenshot?url=https://example.com&width=1
 
 curl "http://localhost:3100/v1/signed/pdf?url=https://example.com&format=A4&signature=HMAC_SIG&expires=1700000000" \
   --output page.pdf
+```
+
+#### Visual Diff (v1.4.0)
+
+Compare two screenshots pixel-by-pixel and detect regressions:
+
+```bash
+# Compare two URLs
+curl -X POST http://localhost:3100/v1/diff \
+  -H "Authorization: Bearer sf_live_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url_a": "https://example.com",
+    "url_b": "https://staging.example.com",
+    "threshold": 0.1
+  }' \
+  --output diff.png
+# Returns: diff image (PNG) with mismatch overlay
+
+# Store a baseline for regression detection
+curl -X POST http://localhost:3100/v1/diff/baseline \
+  -H "Authorization: Bearer sf_live_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://example.com",
+    "name": "Homepage v1.4.0",
+    "threshold": 0.05
+  }'
+# Returns: { "id": "...", "name": "Homepage v1.4.0", "url": "..." }
+
+# List baselines
+curl http://localhost:3100/v1/diff/baseline \
+  -H "Authorization: Bearer sf_live_..."
 ```
 
 #### Advanced Capture Controls (v1.2.0)
@@ -396,6 +437,7 @@ All configuration is done via environment variables. Copy `.env.example` to `.en
 | `SMTP_USER` | string | -- | SMTP username |
 | `SMTP_PASS` | string | -- | SMTP password or API key |
 | `SMTP_FROM` | string | `noreply@screenforge.dev` | From address for outgoing emails |
+| `ANTHROPIC_API_KEY` | string | -- | Anthropic API key for AI content extraction (`/v1/extract`) |
 
 Generate secrets with:
 

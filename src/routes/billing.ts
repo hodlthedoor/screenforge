@@ -88,6 +88,7 @@ export async function billingRoutes(app: FastifyInstance): Promise<void> {
   app.get('/dashboard/billing', { preHandler: requireAuth }, async (req, reply) => {
     const user = req.dashboardUser!;
     const csrfToken = ensureCsrfToken(req);
+    const query = req.query as Record<string, string>;
     const currentPlan = await getUserCurrentPlan(user.id);
     const plan = PLANS[currentPlan] ?? PLANS.free;
 
@@ -151,6 +152,9 @@ export async function billingRoutes(app: FastifyInstance): Promise<void> {
         </div>
         ${currentPlan !== 'free' ? `<div style="margin-top:16px"><a href="/v1/billing/portal" class="btn btn-sm" style="background:var(--border);color:var(--text)">Manage Subscription</a></div>` : ''}
       </div>
+      ${query.success ? `<div style="background:#d1fae5;color:#065f46;border:1px solid #6ee7b7;border-radius:8px;padding:12px 16px;margin-bottom:16px">Subscription activated! Your plan has been upgraded.</div>` : ''}
+      ${query.canceled ? `<div style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:8px;padding:12px 16px;margin-bottom:16px">Checkout canceled. No changes were made.</div>` : ''}
+      ${query.error === 'checkout_failed' ? `<div style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;border-radius:8px;padding:12px 16px;margin-bottom:16px">Billing is not configured on this instance. Contact the administrator to enable Stripe.</div>` : ''}
       <h2 style="margin-bottom:16px">Plans</h2>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px">
         ${planCards}
@@ -202,7 +206,7 @@ export async function billingRoutes(app: FastifyInstance): Promise<void> {
       return reply.redirect(session.url!);
     } catch (err) {
       app.log.error(err, 'Failed to create checkout session');
-      return reply.status(500).type('application/json').send({ error: 'Failed to create checkout session' });
+      return reply.redirect('/dashboard/billing?error=checkout_failed');
     }
   });
 

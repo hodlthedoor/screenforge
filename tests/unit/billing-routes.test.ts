@@ -260,7 +260,7 @@ describe('billing routes', () => {
       expect(body.error).toBe('Invalid form submission');
     });
 
-    it('returns 500 when checkout session creation fails', async () => {
+    it('redirects to billing page with error when checkout session creation fails', async () => {
       mockCustomersCreate.mockResolvedValueOnce({ id: 'cus_test_fail' });
       mockCheckoutSessionsCreate.mockRejectedValueOnce(new Error('Stripe API error'));
 
@@ -279,9 +279,8 @@ describe('billing routes', () => {
         headers: { cookie: billingCookie },
         payload: { plan: 'pro', _csrf: csrf },
       });
-      expect(res.statusCode).toBe(500);
-      const body = JSON.parse(res.body);
-      expect(body.error).toBe('Failed to create checkout session');
+      expect(res.statusCode).toBe(302);
+      expect(res.headers.location).toBe('/dashboard/billing?error=checkout_failed');
     });
 
     it('creates checkout session and redirects for valid plan', async () => {
