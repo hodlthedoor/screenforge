@@ -8,7 +8,7 @@ We take security vulnerabilities seriously. If you discover a security issue in 
 
 **DO NOT** open a public GitHub issue for security vulnerabilities. Instead, please email us directly at:
 
-**security@screenforge.dev**
+**[security@screenforge.dev](mailto:security@screenforge.dev)**
 
 ### What to Include
 

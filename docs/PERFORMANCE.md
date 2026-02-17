@@ -93,6 +93,7 @@ NAVIGATION_TIMEOUT_MS=30000
 ```
 
 Conservative estimate for actual render throughput with these settings:
+
 - Simple pages (example.com): ~8 renders/sec (1s per render, 8 concurrent)
 - Complex SPAs: ~1-2 renders/sec (4-8s per render, 8 concurrent)
 

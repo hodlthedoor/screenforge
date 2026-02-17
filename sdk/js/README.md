@@ -894,7 +894,7 @@ import type {
 | `GifOptions` | Options for `gif()` and `gifAsync()` |
 | `DiffOptions` | Options for `diff()` — URL or job ID pairs for comparison |
 | `DiffScreenshotOptions` | Screenshot options specific to `diff()` |
-| `ScheduleRenderType` | Schedule render type: `'screenshot' | 'pdf' | 'og'` |
+| `ScheduleRenderType` | Schedule render type: `'screenshot'`, `'pdf'`, or `'og'` |
 | `CreateScheduleOptions` | Options for `createSchedule()` |
 | `UpdateScheduleOptions` | Options for `updateSchedule()` |
 | `Schedule` | Schedule object with cron and render config |

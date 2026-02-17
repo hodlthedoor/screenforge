@@ -44,7 +44,7 @@ The API runs at `http://localhost:3100`. Swagger docs are at `/docs`.
 
 ## Project Structure
 
-```
+```text
 src/
   index.ts          # App entry point, plugin registration
   config.ts         # Environment variable parsing (Zod)
@@ -96,7 +96,7 @@ Tests require a `screenforge_test` database with all migrations applied.
 
 Migrations are plain SQL files in `sql/`, numbered sequentially:
 
-```
+```text
 sql/001_init.sql
 sql/002_auth_queue.sql
 ...
@@ -109,6 +109,7 @@ To add a migration:
 2. Create `sql/NNN_description.sql`
 3. Write idempotent SQL (`CREATE TABLE IF NOT EXISTS`, etc.)
 4. Apply to both databases:
+
    ```bash
    psql screenforge < sql/NNN_description.sql
    psql screenforge_test < sql/NNN_description.sql
@@ -128,7 +129,7 @@ Use descriptive branch names with a prefix:
 
 Follow [Conventional Commits](https://www.conventionalcommits.org/):
 
-```
+```text
 feat: add webhook retry with exponential backoff
 fix: prevent SSRF bypass via DNS rebinding
 refactor: extract browser pool into standalone service
@@ -142,9 +143,11 @@ docs: update API reference with analytics endpoint
 2. Create a feature branch from `main`
 3. Write tests first, then implement
 4. Ensure all checks pass:
+
    ```bash
    npm test && npm run lint && npm run typecheck && npm run build
    ```
+
 5. Push your branch and open a PR against `main`
 6. Describe what changed and why in the PR description
 7. Link any related issues

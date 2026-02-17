@@ -137,6 +137,7 @@ screenshot = client.screenshot("https://example.com", {
 ```
 
 **Options:**
+
 - `url` (str): URL to screenshot
 - `html` (str): Raw HTML to screenshot (alternative to `url`)
 - `viewport` (dict): `{"width": int, "height": int}`
@@ -175,6 +176,7 @@ pdf = client.pdf({
 ```
 
 **Options:**
+
 - `url` (str): URL to convert to PDF
 - `html` (str): Raw HTML to convert (alternative to `url`)
 - `format` (str): `"a4"`, `"letter"`, or `"legal"` (default: `"a4"`)
@@ -209,6 +211,7 @@ og_image = client.og("https://example.com", {
 ```
 
 **Options:**
+
 - `title` (str): Title text
 - `description` (str): Description text
 - `siteName` (str): Site name
@@ -363,6 +366,7 @@ async with AsyncScreenForgeClient(api_key="your-api-key") as client:
 ```
 
 **Options:**
+
 - `url` (str): URL to render
 - `duration` (int): Animation duration in ms (default: 5000)
 - `fps` (int): Frames per second (default: 30)
@@ -412,6 +416,7 @@ async with AsyncScreenForgeClient(api_key="your-api-key") as client:
 ```
 
 **Options:**
+
 - `url_a` (str): First URL to compare
 - `url_b` (str): Second URL to compare
 - `job_id_a` (str): First job ID to compare (alternative to `url_a`)
@@ -473,6 +478,7 @@ client.delete_schedule("sched_123")
 ```
 
 **Schedule object properties:**
+
 - `id` (str): Schedule ID
 - `name` (str): Schedule name
 - `cron_expression` (str): Unix cron format

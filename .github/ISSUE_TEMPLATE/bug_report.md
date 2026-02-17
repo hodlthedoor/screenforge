@@ -26,6 +26,7 @@ What you expected to happen.
 What actually happened. Include error messages, status codes, or response bodies.
 
 **Environment**
+
 - ScreenForge version: [e.g. v1.0.0]
 - Deployment: [Docker / Bare metal]
 - Node.js version: [e.g. 22.x]

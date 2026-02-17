@@ -29,10 +29,12 @@ The spec is also served live by the running server at `/docs/swagger/json` and `
 Import the pre-built collection into Postman for instant API testing.
 
 **Files:**
+
 - `docs/postman-collection.json` — the collection
 - `docs/postman-environment.json` — environment variables (`baseUrl`, `apiKey`)
 
 **To import:**
+
 1. Open Postman → **Import**
 2. Select `docs/postman-collection.json`
 3. Import `docs/postman-environment.json` as an Environment
