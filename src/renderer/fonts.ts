@@ -53,7 +53,7 @@ export function validateFontUrl(fontUrl: string): void {
  * Builds a Google Fonts CSS URL from family name and optional weights
  */
 export function buildGoogleFontUrl(family: string, weights?: number[]): string {
-  const encodedFamily = family.replace(/ /g, '+');
+  const encodedFamily = encodeURIComponent(family).replace(/%20/g, '+');
   const baseUrl = `https://fonts.googleapis.com/css2?family=${encodedFamily}`;
 
   if (weights && weights.length > 0) {
@@ -78,14 +78,26 @@ export function validateFonts(fonts?: FontSpec[]): void {
 }
 
 /**
+ * Validates fonts and returns an error message string if invalid, or null if valid.
+ * Use in route handlers to avoid duplicating try/catch logic.
+ */
+export function getFontValidationError(fonts?: FontSpec[]): string | null {
+  try {
+    validateFonts(fonts);
+    return null;
+  } catch (e) {
+    if (e instanceof FontValidationError) return e.message;
+    throw e;
+  }
+}
+
+/**
  * Resolves a FontSpec to a CSS URL
  */
 function resolveFontUrl(font: FontSpec): string {
   if (font.type === 'url') {
-    validateFontUrl(font.url);
     return font.url;
   } else {
-    // type === 'google'
     return buildGoogleFontUrl(font.family, font.weights);
   }
 }
@@ -113,8 +125,10 @@ async function getCachedFontCss(fontUrl: string): Promise<string> {
     // Cache miss, will download below
   }
 
-  // Download font CSS
-  const response = await fetch(fontUrl);
+  // Download font CSS (send modern UA so Google Fonts returns woff2 format)
+  const response = await fetch(fontUrl, {
+    headers: { 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
+  });
   if (!response.ok) {
     throw new Error(`Failed to fetch font CSS from ${fontUrl}: ${response.statusText}`);
   }
@@ -146,19 +160,10 @@ export async function loadFonts(page: Page, fonts?: FontSpec[]): Promise<void> {
 
   // Wait for fonts to load with timeout
   try {
-    await page.evaluate(
-      `(async (timeoutMs) => {
-        const start = Date.now();
-        while (Date.now() - start < timeoutMs) {
-          if (document.fonts.status === 'loaded') {
-            return;
-          }
-          await document.fonts.ready;
-          return;
-        }
-        // Timeout — continue anyway (fonts may still load in background)
-      })(${FONT_LOADING_TIMEOUT_MS})`
-    );
+    await page.evaluate(`Promise.race([
+      document.fonts.ready,
+      new Promise(resolve => setTimeout(resolve, ${FONT_LOADING_TIMEOUT_MS}))
+    ])`);
   } catch {
     // If fonts.ready fails or times out, continue rendering anyway
   }

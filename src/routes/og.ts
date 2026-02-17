@@ -8,7 +8,7 @@ import { isPrivateUrl, cookieSchema, geolocationSchema, timezoneSchema, localeSc
 import { applyWaitStrategy } from '../renderer/wait.js';
 import { sendError } from '../security/errors.js';
 import { sanitizeHeaders, sanitizeCookies, toPlaywrightCookies, SanitizeError } from '../security/sanitize.js';
-import { loadFonts, validateFonts, FontValidationError } from '../renderer/fonts.js';
+import { loadFonts, getFontValidationError } from '../renderer/fonts.js';
 const ogRequestSchema = z.object({
   url: z.string().url().optional(),
   title: z.string().max(200).optional(),
@@ -285,14 +285,10 @@ export async function ogRoutes(app: FastifyInstance, pool: BrowserPool, cache: R
     }
 
     // Validate font URLs upfront so invalid URLs return 400, not 500
-    try {
-      validateFonts(data.fonts);
-    } catch (e) {
-      if (e instanceof FontValidationError) {
-        sendError(reply, req, 'VALIDATION_ERROR', { message: e.message });
-        return;
-      }
-      throw e;
+    const fontError = getFontValidationError(data.fonts);
+    if (fontError) {
+      sendError(reply, req, 'VALIDATION_ERROR', { message: fontError });
+      return;
     }
 
     // Fetch OG metadata from URL if provided

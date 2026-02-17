@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { screenshotOptionsSchema, pdfOptionsSchema } from '../../src/renderer/schemas.js';
-import { validateFontUrl, buildGoogleFontUrl, validateFonts, FontValidationError } from '../../src/renderer/fonts.js';
+import { validateFontUrl, buildGoogleFontUrl, validateFonts, getFontValidationError, FontValidationError } from '../../src/renderer/fonts.js';
 
 describe('font schema validation', () => {
   describe('screenshotOptionsSchema with fonts', () => {
@@ -223,5 +223,67 @@ describe('buildGoogleFontUrl', () => {
   it('handles complex font family names', () => {
     const url = buildGoogleFontUrl('Libre Baskerville', [400, 700]);
     expect(url).toContain('Libre+Baskerville');
+  });
+
+  it('encodes special characters in family name to prevent URL injection', () => {
+    const url = buildGoogleFontUrl('Roboto&inject=evil', [400]);
+    expect(url).not.toContain('&inject=evil');
+    expect(url).toContain('Roboto%26inject%3Devil');
+  });
+
+  it('encodes hash and question mark in family name', () => {
+    const url = buildGoogleFontUrl('Font#name?bad', [400]);
+    expect(url).not.toContain('#name');
+    expect(url).not.toContain('?bad');
+  });
+});
+
+describe('getFontValidationError', () => {
+  it('returns null for valid fonts', () => {
+    expect(getFontValidationError([
+      { type: 'url', url: 'https://fonts.googleapis.com/css2?family=Roboto' },
+    ])).toBeNull();
+  });
+
+  it('returns null for undefined or empty fonts', () => {
+    expect(getFontValidationError()).toBeNull();
+    expect(getFontValidationError([])).toBeNull();
+  });
+
+  it('returns error message for disallowed domain', () => {
+    const err = getFontValidationError([
+      { type: 'url', url: 'https://evil.com/font.css' },
+    ]);
+    expect(err).toContain('domain not allowed');
+  });
+
+  it('returns error message for non-HTTPS URL', () => {
+    const err = getFontValidationError([
+      { type: 'url', url: 'http://fonts.googleapis.com/css' },
+    ]);
+    expect(err).toContain('HTTPS');
+  });
+
+  it('returns null for google font specs (no URL validation needed)', () => {
+    expect(getFontValidationError([
+      { type: 'google', family: 'Roboto', weights: [400] },
+    ])).toBeNull();
+  });
+});
+
+describe('font schema edge cases', () => {
+  it('drops weights field for url-type fonts', () => {
+    const result = screenshotOptionsSchema.safeParse({
+      url: 'https://example.com',
+      fonts: [{ url: 'https://fonts.googleapis.com/css2?family=Roboto', weights: [400, 700] }],
+    });
+    // Should fail because url and weights together implies both url and family intent
+    // Actually the schema accepts this — weights is just ignored for url type
+    expect(result.success).toBe(true);
+    if (result.success) {
+      const font = result.data.fonts![0];
+      expect(font.type).toBe('url');
+      expect('weights' in font).toBe(false);
+    }
   });
 });

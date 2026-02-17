@@ -17,7 +17,7 @@ import { sanitizeUrl, sanitizeSelector, sanitizeWaitFor, sanitizeTemplate, sanit
 import { sendError } from '../security/errors.js';
 import type { RenderMetadata } from '../renderer/schemas.js';
 import { computeFingerprint, checkDedup } from '../queue/dedup.js';
-import { validateFonts, FontValidationError } from '../renderer/fonts.js';
+import { getFontValidationError } from '../renderer/fonts.js';
 
 import { FORMAT_EXT, getFormatFromContentType } from '../utils/format.js';
 import sharp from 'sharp';
@@ -519,14 +519,10 @@ export async function renderRoutes(
     }
 
     // Validate font URLs upfront so invalid URLs return 400, not 500
-    try {
-      validateFonts(options.fonts);
-    } catch (e) {
-      if (e instanceof FontValidationError) {
-        sendError(reply, req, 'VALIDATION_ERROR', { message: e.message });
-        return;
-      }
-      throw e;
+    const fontError = getFontValidationError(options.fonts);
+    if (fontError) {
+      sendError(reply, req, 'VALIDATION_ERROR', { message: fontError });
+      return;
     }
 
     const blocked = await checkRateAndQuota(req, reply);
@@ -870,14 +866,10 @@ export async function renderRoutes(
     }
 
     // Validate font URLs upfront so invalid URLs return 400, not 500
-    try {
-      validateFonts(options.fonts);
-    } catch (e) {
-      if (e instanceof FontValidationError) {
-        sendError(reply, req, 'VALIDATION_ERROR', { message: e.message });
-        return;
-      }
-      throw e;
+    const fontError = getFontValidationError(options.fonts);
+    if (fontError) {
+      sendError(reply, req, 'VALIDATION_ERROR', { message: fontError });
+      return;
     }
 
     const blocked = await checkRateAndQuota(req, reply);
