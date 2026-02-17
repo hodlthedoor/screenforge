@@ -13,3 +13,10 @@ playwright-report/
 .DS_Store
 .venv/
 tests/load/results.json
+
+# Generated artifacts (run npm run generate to rebuild)
+docs/openapi.json
+docs/openapi.yaml
+docs/postman-collection.json
+docs/postman-environment.json
+packages/sdk-generated/
