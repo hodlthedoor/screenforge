@@ -47,7 +47,7 @@ import { schedulesRoutes } from './routes/schedules.js';
 import { extractRoutes } from './routes/extract.js';
 import { accessibilityRoutes } from './routes/accessibility.js';
 import { registerLoggers, getLogger } from './logging/index.js';
-import { startScheduler, stopScheduler } from './scheduler/index.js';
+import { startScheduler, stopScheduler, startAnalyticsRefresh, stopAnalyticsRefresh } from './scheduler/index.js';
 import { buildErrorResponse } from './security/errors.js';
 import { takeScreenshot } from './renderer/screenshot.js';
 import { renderPdf } from './renderer/pdf.js';
@@ -370,6 +370,7 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
       // Close resources (wrap each in try-catch so one failure doesn't block others)
       const closeResources = [
         { name: 'scheduler', fn: () => stopScheduler() },
+        { name: 'analytics refresh', fn: () => stopAnalyticsRefresh() },
         { name: 'storage lifecycle', fn: () => storageLifecycle.stop() },
         { name: 'browser pool', fn: () => pool.close() },
         { name: 'render cache', fn: () => cache.close() },
@@ -526,6 +527,9 @@ export async function start() {
 
   // Start schedule poller (recurring render jobs)
   startScheduler();
+
+  // Start daily analytics view refresh (runs at midnight)
+  startAnalyticsRefresh();
 
   // Start storage lifecycle manager (hourly cleanup)
   const lifecycle = (app as unknown as { storageLifecycle?: StorageLifecycleManager }).storageLifecycle;

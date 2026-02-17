@@ -131,3 +131,36 @@ export function stopScheduler(): void {
     pollTimer = null;
   }
 }
+
+/** Refresh analytics materialized views. Called daily at midnight. */
+export async function refreshAnalyticsViews(): Promise<void> {
+  const pool = getPool();
+  await pool.query('REFRESH MATERIALIZED VIEW CONCURRENTLY daily_render_stats');
+  await pool.query('REFRESH MATERIALIZED VIEW CONCURRENTLY monthly_user_stats');
+}
+
+let analyticsRefreshTimer: ReturnType<typeof setInterval> | null = null;
+
+export function startAnalyticsRefresh(): void {
+  const now = new Date();
+  // Schedule first refresh at next midnight
+  const nextMidnight = new Date(now);
+  nextMidnight.setDate(nextMidnight.getDate() + 1);
+  nextMidnight.setHours(0, 0, 0, 0);
+  const msUntilMidnight = nextMidnight.getTime() - now.getTime();
+
+  setTimeout(() => {
+    refreshAnalyticsViews().catch(() => { /* non-critical */ });
+    // Then refresh every 24 hours
+    analyticsRefreshTimer = setInterval(() => {
+      refreshAnalyticsViews().catch(() => { /* non-critical */ });
+    }, 24 * 60 * 60 * 1000);
+  }, msUntilMidnight);
+}
+
+export function stopAnalyticsRefresh(): void {
+  if (analyticsRefreshTimer) {
+    clearInterval(analyticsRefreshTimer);
+    analyticsRefreshTimer = null;
+  }
+}

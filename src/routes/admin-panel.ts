@@ -107,6 +107,7 @@ function adminLayout(title: string, nav: string, content: string, csrfToken: str
     <div class="logo">ScreenForge <span>Admin</span></div>
     <a href="/admin" class="${nav === 'dashboard' ? 'active' : ''}">Dashboard</a>
     <a href="/admin/users" class="${nav === 'users' ? 'active' : ''}">Users</a>
+    <a href="/admin/analytics" class="${nav === 'analytics' ? 'active' : ''}">Analytics</a>
     <a href="/admin/queue" class="${nav === 'queue' ? 'active' : ''}">Queue</a>
     <a href="/admin/storage" class="${nav === 'storage' ? 'active' : ''}">Storage</a>
     <div class="sep"></div>
@@ -480,6 +481,232 @@ export async function adminPanelRoutes(app: FastifyInstance): Promise<void> {
 
     await req.session.save();
     return reply.type('text/html').send(adminLayout('Storage', 'storage', html, csrfToken));
+  });
+
+  // Analytics dashboard
+  app.get('/admin/analytics', { preHandler: requireAdmin }, async (req, reply) => {
+    const csrfToken = ensureCsrfToken(req);
+    const pool = getPool();
+
+    // DAU / WAU / MAU
+    const dauResult = await pool.query<{ dau: number; wau: number; mau: number }>(`
+      SELECT
+        COUNT(DISTINCT api_key_id) FILTER (WHERE created_at >= CURRENT_DATE)::int AS dau,
+        COUNT(DISTINCT api_key_id) FILTER (WHERE created_at >= CURRENT_DATE - INTERVAL '7 days')::int AS wau,
+        COUNT(DISTINCT api_key_id) FILTER (WHERE created_at >= CURRENT_DATE - INTERVAL '30 days')::int AS mau
+      FROM render_jobs
+    `);
+    const { dau, wau, mau } = dauResult.rows[0] ?? { dau: 0, wau: 0, mau: 0 };
+
+    // Daily trend (last 30 days)
+    const trendResult = await pool.query<{ date: string; count: number }>(`
+      SELECT created_at::date::text AS date, COUNT(*)::int AS count
+      FROM render_jobs
+      WHERE created_at >= NOW() - INTERVAL '30 days'
+      GROUP BY 1
+      ORDER BY 1
+    `);
+
+    // Renders by type (last 30 days)
+    const byTypeResult = await pool.query<{ type: string; count: number }>(`
+      SELECT type, COUNT(*)::int AS count
+      FROM render_jobs
+      WHERE created_at >= NOW() - INTERVAL '30 days'
+      GROUP BY type
+      ORDER BY count DESC
+    `);
+
+    // Success/failure rates
+    const rateResult = await pool.query<{ total: number; success: number; failed: number }>(`
+      SELECT
+        COUNT(*)::int AS total,
+        COUNT(*) FILTER (WHERE status = 'completed')::int AS success,
+        COUNT(*) FILTER (WHERE status = 'failed')::int AS failed
+      FROM render_jobs
+      WHERE created_at >= NOW() - INTERVAL '30 days'
+    `);
+    const { total, success, failed } = rateResult.rows[0] ?? { total: 0, success: 0, failed: 0 };
+    const successRate = total > 0 ? ((success / total) * 100).toFixed(1) : '0.0';
+    const failureRate = total > 0 ? ((failed / total) * 100).toFixed(1) : '0.0';
+
+    // Tier distribution
+    const tierResult = await pool.query<{ tier: string; count: number }>(`
+      SELECT tier, COUNT(*)::int AS count
+      FROM api_keys
+      WHERE active = true
+      GROUP BY tier
+      ORDER BY tier
+    `);
+
+    // Conversion rate
+    const convResult = await pool.query<{ total_users: number; paid_users: number }>(`
+      SELECT
+        COUNT(DISTINCT u.id)::int AS total_users,
+        COUNT(DISTINCT s.user_id)::int AS paid_users
+      FROM users u
+      LEFT JOIN subscriptions s ON s.user_id = u.id AND s.status = 'active'
+    `);
+    const { total_users, paid_users } = convResult.rows[0] ?? { total_users: 0, paid_users: 0 };
+    const conversionRate = total_users > 0 ? ((paid_users / total_users) * 100).toFixed(1) : '0.0';
+
+    // Funnel: signups → verified → first render → paid
+    const funnelResult = await pool.query<{
+      signups: number;
+      verified: number;
+      first_render: number;
+      paid: number;
+    }>(`
+      SELECT
+        COUNT(*)::int AS signups,
+        COUNT(*) FILTER (WHERE email_verified = true)::int AS verified,
+        (SELECT COUNT(DISTINCT u2.id)::int FROM users u2 WHERE EXISTS (
+          SELECT 1 FROM user_api_keys uak JOIN render_jobs rj ON rj.api_key_id = uak.api_key_id
+          WHERE uak.user_id = u2.id
+        )) AS first_render,
+        (SELECT COUNT(DISTINCT s.user_id)::int FROM subscriptions s WHERE s.status = 'active') AS paid
+      FROM users
+    `);
+    const funnel = funnelResult.rows[0] ?? { signups: 0, verified: 0, first_render: 0, paid: 0 };
+
+    // Top 10 API keys
+    const topKeysResult = await pool.query<{ name: string; count: number }>(`
+      SELECT ak.name, COUNT(rj.id)::int AS count
+      FROM render_jobs rj
+      JOIN api_keys ak ON ak.id = rj.api_key_id
+      WHERE rj.created_at >= NOW() - INTERVAL '30 days'
+      GROUP BY ak.id, ak.name
+      ORDER BY count DESC
+      LIMIT 10
+    `);
+
+    // Churn rate
+    const churnResult = await pool.query<{ churned: number; total_prev: number }>(`
+      SELECT
+        COUNT(DISTINCT prev.api_key_id) FILTER (
+          WHERE NOT EXISTS (
+            SELECT 1 FROM render_jobs curr
+            WHERE curr.api_key_id = prev.api_key_id
+              AND curr.created_at >= NOW() - INTERVAL '30 days'
+          )
+        )::int AS churned,
+        COUNT(DISTINCT prev.api_key_id)::int AS total_prev
+      FROM render_jobs prev
+      WHERE prev.created_at < NOW() - INTERVAL '30 days'
+        AND prev.created_at >= NOW() - INTERVAL '60 days'
+    `);
+    const { churned, total_prev } = churnResult.rows[0] ?? { churned: 0, total_prev: 0 };
+    const churnRate = total_prev > 0 ? ((churned / total_prev) * 100).toFixed(1) : '0.0';
+
+    // Serialize data for JS
+    const trendLabels = JSON.stringify(trendResult.rows.map((r) => r.date));
+    const trendData = JSON.stringify(trendResult.rows.map((r) => r.count));
+    const typeLabels = JSON.stringify(byTypeResult.rows.map((r) => r.type));
+    const typeData = JSON.stringify(byTypeResult.rows.map((r) => r.count));
+    const tierLabels = JSON.stringify(tierResult.rows.map((r) => r.tier));
+    const tierData = JSON.stringify(tierResult.rows.map((r) => r.count));
+    const funnelLabels = JSON.stringify(['Signups', 'Verified', 'First Render', 'Paid']);
+    const funnelData = JSON.stringify([funnel.signups, funnel.verified, funnel.first_render, funnel.paid]);
+
+    const topKeysRows = topKeysResult.rows.map((r) =>
+      `<tr><td>${escapeHtml(r.name)}</td><td>${r.count}</td></tr>`,
+    ).join('');
+
+    const html = `
+      <h1>Analytics</h1>
+      <div class="stats">
+        <div class="stat"><div class="label">DAU (Today)</div><div class="value">${dau ?? 0}</div></div>
+        <div class="stat"><div class="label">WAU (7d)</div><div class="value">${wau ?? 0}</div></div>
+        <div class="stat"><div class="label">MAU (30d)</div><div class="value">${mau ?? 0}</div></div>
+        <div class="stat"><div class="label">Success Rate</div><div class="value" style="color:var(--accent2)">${successRate}%</div></div>
+        <div class="stat"><div class="label">Failure Rate</div><div class="value" style="color:var(--err)">${failureRate}%</div></div>
+        <div class="stat"><div class="label">Conversion</div><div class="value" style="color:var(--accent)">${conversionRate}%</div></div>
+        <div class="stat"><div class="label">Churn Rate</div><div class="value" style="color:var(--warn)">${churnRate}%</div></div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
+        <div class="card">
+          <h2 style="margin-bottom:16px">Daily Active Users (30d)</h2>
+          <canvas id="dauChart" height="200"></canvas>
+        </div>
+        <div class="card">
+          <h2 style="margin-bottom:16px">Renders by Type (30d)</h2>
+          <canvas id="typeChart" height="200"></canvas>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
+        <div class="card">
+          <h2 style="margin-bottom:16px">Tier Distribution</h2>
+          <canvas id="tierChart" height="200"></canvas>
+        </div>
+        <div class="card">
+          <h2 style="margin-bottom:16px">Conversion Funnel</h2>
+          <canvas id="funnelChart" height="200"></canvas>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 style="margin-bottom:16px">Top 10 API Keys (30d)</h2>
+        ${topKeysResult.rows.length > 0
+    ? `<table><thead><tr><th>Key Name</th><th>Renders</th></tr></thead><tbody>${topKeysRows}</tbody></table>`
+    : '<p style="color:var(--muted)">No render activity in the last 30 days.</p>'}
+      </div>
+
+      <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+      <script>
+        const accent = '#6c63ff', accent2 = '#00d4aa', warn = '#ffaa33', err = '#ff4466', muted = '#8888a0';
+        const COLORS = [accent, accent2, warn, err, muted, '#44aaff', '#ff66cc', '#66ffaa'];
+        Chart.defaults.color = '#e0e0e8';
+        Chart.defaults.borderColor = '#1e1e2e';
+
+        // DAU line chart
+        new Chart(document.getElementById('dauChart'), {
+          type: 'line',
+          data: {
+            labels: ${trendLabels},
+            datasets: [{ label: 'DAU', data: ${trendData}, borderColor: accent, backgroundColor: accent + '22', tension: 0.3, fill: true, pointRadius: 3 }]
+          },
+          options: { responsive: true, plugins: { legend: { display: false } }, scales: { x: { ticks: { maxTicksLimit: 8 } } } }
+        });
+
+        // Renders by type bar chart
+        new Chart(document.getElementById('typeChart'), {
+          type: 'bar',
+          data: {
+            labels: ${typeLabels},
+            datasets: [{ label: 'Renders', data: ${typeData}, backgroundColor: COLORS, borderRadius: 4 }]
+          },
+          options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+        });
+
+        // Tier distribution pie chart
+        new Chart(document.getElementById('tierChart'), {
+          type: 'pie',
+          data: {
+            labels: ${tierLabels},
+            datasets: [{ data: ${tierData}, backgroundColor: COLORS }]
+          },
+          options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+        });
+
+        // Funnel bar chart (horizontal)
+        new Chart(document.getElementById('funnelChart'), {
+          type: 'bar',
+          data: {
+            labels: ${funnelLabels},
+            datasets: [{ label: 'Users', data: ${funnelData}, backgroundColor: [accent, accent2, warn, err], borderRadius: 4 }]
+          },
+          options: {
+            indexAxis: 'y',
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: { x: { beginAtZero: true } }
+          }
+        });
+      </script>`;
+
+    await req.session.save();
+    return reply.type('text/html').send(adminLayout('Analytics', 'analytics', html, csrfToken));
   });
 
   // Storage cleanup
