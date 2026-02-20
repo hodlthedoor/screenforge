@@ -47,7 +47,7 @@ import { schedulesRoutes } from './routes/schedules.js';
 import { extractRoutes } from './routes/extract.js';
 import { accessibilityRoutes } from './routes/accessibility.js';
 import { registerLoggers, getLogger } from './logging/index.js';
-import { startScheduler, stopScheduler, startAnalyticsRefresh, stopAnalyticsRefresh } from './scheduler/index.js';
+import { startScheduler, stopScheduler, startAnalyticsRefresh, stopAnalyticsRefresh, startQueueCleanup, stopQueueCleanup } from './scheduler/index.js';
 import { buildErrorResponse } from './security/errors.js';
 import { takeScreenshot } from './renderer/screenshot.js';
 import { renderPdf } from './renderer/pdf.js';
@@ -371,6 +371,7 @@ export async function buildServer(opts?: { skipBrowserInit?: boolean }) {
       const closeResources = [
         { name: 'scheduler', fn: () => stopScheduler() },
         { name: 'analytics refresh', fn: () => stopAnalyticsRefresh() },
+        { name: 'queue cleanup', fn: () => stopQueueCleanup() },
         { name: 'storage lifecycle', fn: () => storageLifecycle.stop() },
         { name: 'browser pool', fn: () => pool.close() },
         { name: 'render cache', fn: () => cache.close() },
@@ -530,6 +531,9 @@ export async function start() {
 
   // Start daily analytics view refresh (runs at midnight)
   startAnalyticsRefresh();
+
+  // Start daily queue cleanup (removes completed/failed jobs older than 7 days, runs at 3am)
+  startQueueCleanup();
 
   // Start storage lifecycle manager (hourly cleanup)
   const lifecycle = (app as unknown as { storageLifecycle?: StorageLifecycleManager }).storageLifecycle;

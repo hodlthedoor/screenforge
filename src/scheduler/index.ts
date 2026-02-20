@@ -5,6 +5,11 @@ import { getNextRun } from './cron.js';
 import { randomUUID } from 'node:crypto';
 import { getLogger } from '../logging/index.js';
 
+/** Retention period for completed/failed BullMQ jobs (7 days in ms). */
+const QUEUE_CLEANUP_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
+/** Max jobs to clean per batch (avoids long-running Redis commands). */
+const QUEUE_CLEANUP_BATCH_SIZE = 5000;
+
 export interface ScheduleRow {
   id: string;
   api_key_id: string;
@@ -162,5 +167,41 @@ export function stopAnalyticsRefresh(): void {
   if (analyticsRefreshTimer) {
     clearInterval(analyticsRefreshTimer);
     analyticsRefreshTimer = null;
+  }
+}
+
+/** Remove completed and failed BullMQ jobs older than 7 days. */
+export async function cleanupQueueJobs(): Promise<void> {
+  const config = getConfig();
+  const queue = getQueue(config.REDIS_URL);
+
+  await queue.clean(QUEUE_CLEANUP_GRACE_MS, QUEUE_CLEANUP_BATCH_SIZE, 'completed');
+  await queue.clean(QUEUE_CLEANUP_GRACE_MS, QUEUE_CLEANUP_BATCH_SIZE, 'failed');
+}
+
+let queueCleanupTimer: ReturnType<typeof setInterval> | null = null;
+
+/** Start daily queue cleanup at 3am. */
+export function startQueueCleanup(): void {
+  const scheduleNext = (): number => {
+    const now = new Date();
+    const next3am = new Date(now);
+    next3am.setHours(3, 0, 0, 0);
+    if (next3am <= now) next3am.setDate(next3am.getDate() + 1);
+    return next3am.getTime() - now.getTime();
+  };
+
+  const runAndReschedule = (): void => {
+    cleanupQueueJobs().catch(() => { /* non-critical */ });
+    queueCleanupTimer = setInterval(runAndReschedule, 24 * 60 * 60 * 1000);
+  };
+
+  setTimeout(runAndReschedule, scheduleNext());
+}
+
+export function stopQueueCleanup(): void {
+  if (queueCleanupTimer) {
+    clearInterval(queueCleanupTimer);
+    queueCleanupTimer = null;
   }
 }
