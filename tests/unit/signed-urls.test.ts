@@ -783,32 +783,32 @@ describe('signed URLs', () => {
     });
 
     it('rejects signed URL with private/SSRF URL when ALLOW_PRIVATE_URLS is false', async () => {
-      // Temporarily set ALLOW_PRIVATE_URLS to "no"
-      const originalValue = process.env.ALLOW_PRIVATE_URLS;
-      delete process.env.ALLOW_PRIVATE_URLS;
-      loadConfig();
+      // Mutate the live config object directly so the route handler's captured
+      // reference sees the change (loadConfig() creates a new object that the
+      // handler's closure won't pick up).
+      const { getConfig } = await import('../../src/config/index.js');
+      const origAllow = getConfig().ALLOW_PRIVATE_URLS;
+      getConfig().ALLOW_PRIVATE_URLS = false;
 
-      const options: SignedUrlOptions = {
-        type: 'screenshot',
-        url: 'http://192.168.1.1',
-      };
+      try {
+        const options: SignedUrlOptions = {
+          type: 'screenshot',
+          url: 'http://192.168.1.1',
+        };
 
-      const signedUrl = generateSignedUrl(testApiKeyId, testSigningSecret, options);
+        const signedUrl = generateSignedUrl(testApiKeyId, testSigningSecret, options);
 
-      const res = await app.inject({
-        method: 'GET',
-        url: signedUrl,
-      });
+        const res = await app.inject({
+          method: 'GET',
+          url: signedUrl,
+        });
 
-      expect(res.statusCode).toBe(400);
-      const body = JSON.parse(res.body);
-      expect(body.error).toHaveProperty('code', 'SSRF_BLOCKED');
-
-      // Restore original value
-      if (originalValue) {
-        process.env.ALLOW_PRIVATE_URLS = originalValue;
+        expect(res.statusCode).toBe(400);
+        const body = JSON.parse(res.body);
+        expect(body.error).toHaveProperty('code', 'SSRF_BLOCKED');
+      } finally {
+        getConfig().ALLOW_PRIVATE_URLS = origAllow;
       }
-      loadConfig();
     });
   });
 });
