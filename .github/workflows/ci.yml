@@ -66,7 +66,11 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: packages/mcp-server/package-lock.json
+          cache-dependency-path: |
+            sdk/js/package-lock.json
+            packages/mcp-server/package-lock.json
+      - name: Build @screenforge/sdk (workspace dependency)
+        run: npm ci --prefix sdk/js && npm run --prefix sdk/js build
       - run: npm ci --prefix packages/mcp-server
       - name: Verify sequential session reconnect contract
         run: npm --prefix packages/mcp-server run test:sequential-session
