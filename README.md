@@ -2,7 +2,8 @@
 
 [![CI](https://github.com/hodlthedoor/screenforge/actions/workflows/ci.yml/badge.svg)](https://github.com/hodlthedoor/screenforge/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker)](docker-compose.yml)
+[![Docker Hub](https://img.shields.io/docker/v/hodlthedoor/screenforge?logo=docker&label=Docker+Hub)](https://hub.docker.com/r/hodlthedoor/screenforge)
+[![GHCR](https://img.shields.io/badge/GHCR-ghcr.io-2496ED?logo=github)](https://github.com/hodlthedoor/screenforge/pkgs/container/screenforge)
 [![GitHub Stars](https://img.shields.io/github/stars/hodlthedoor/screenforge?style=flat&logo=github)](https://github.com/hodlthedoor/screenforge/stargazers)
 [![npm downloads](https://img.shields.io/npm/dm/@screenforge/sdk?logo=npm)](https://www.npmjs.com/package/@screenforge/sdk)
 
