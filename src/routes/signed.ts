@@ -15,13 +15,12 @@ export async function signedRoutes(
   app: FastifyInstance,
   rateLimiter?: SlidingWindowRateLimiter | TokenBucketRateLimiter,
 ) {
-  const config = getConfig();
-
   async function handleSignedRequest(
     req: FastifyRequest,
     reply: FastifyReply,
     type: 'screenshot' | 'pdf',
   ) {
+    const config = getConfig();
     const queryParams = req.query as Record<string, string>;
 
     // Extract API key ID

@@ -81,13 +81,23 @@ function jsonSchemaToZodSchema(schema: JsonSchemaNode): z.ZodTypeAny {
 
   const type = typeof schema.type === 'string' ? schema.type : undefined;
   if (type === 'string') {
-    return z.string();
+    let s = z.string();
+    const format = typeof schema.format === 'string' ? schema.format : undefined;
+    if (format === 'uri' || format === 'url') s = s.url();
+    else if (format === 'email') s = s.email();
+    return s;
   }
   if (type === 'number' || type === 'integer') {
     return z.number();
   }
   if (type === 'boolean') {
     return z.boolean();
+  }
+  if (type === 'array') {
+    const items = schema.items && typeof schema.items === 'object' && !Array.isArray(schema.items)
+      ? jsonSchemaToZodSchema(schema.items as JsonSchemaNode)
+      : z.any();
+    return z.array(items);
   }
 
   if (type === 'object' || schema.properties || schema.additionalProperties !== undefined) {

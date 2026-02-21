@@ -23,12 +23,14 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
+# Install Playwright browsers to a fixed path accessible by the node user
+ENV PLAYWRIGHT_BROWSERS_PATH=/app/pw-browsers
 RUN npx playwright install chromium
 
 COPY --from=builder /app/dist ./dist
 COPY sql/ ./sql/
 
-RUN mkdir -p /app/storage
+RUN mkdir -p /app/storage && chown -R node:node /app/storage /app/pw-browsers
 
 ENV NODE_ENV=production
 ENV PORT=3100
