@@ -1,7 +1,8 @@
 services:
   screenforge:
-    build: .
-    # image: hodlthedoor/screenforge:latest  # Alternative: pull from Docker Hub instead of building
+    image: ghcr.io/hodlthedoor/screenforge:latest
+    # image: hodlthedoor/screenforge:latest  # Also available on Docker Hub (once DOCKERHUB_TOKEN secret is configured)
+    # build: .  # Uncomment to build locally instead of pulling from registry
     ports:
       - "3100:3100"
     environment:
